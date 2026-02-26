@@ -12,38 +12,23 @@
     button { cursor: pointer; }
     button:active { opacity: 0.82; transform: scale(0.97); }
 
-    /* ── Layout ── */
     #app { min-height: 100vh; padding-bottom: 60px; }
 
     /* ── Header ── */
-    .header {
-      background: #fff; border-bottom: 1px solid #e8e0d6;
-      position: sticky; top: 0; z-index: 40;
-      box-shadow: 0 1px 8px rgba(0,0,0,0.06);
-    }
-    .header-inner {
-      max-width: 680px; margin: 0 auto; padding: 12px 16px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
+    .header { background: #fff; border-bottom: 1px solid #e8e0d6; position: sticky; top: 0; z-index: 40; box-shadow: 0 1px 8px rgba(0,0,0,0.06); }
+    .header-inner { max-width: 680px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
     .logo-wrap { display: flex; align-items: center; gap: 10px; }
     .logo-icon { font-size: 28px; }
     .logo-text { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 20px; color: #2d2420; line-height: 1; }
     .logo-sub  { font-size: 11px; color: #a39688; margin-top: 2px; }
     .header-right { display: flex; align-items: center; gap: 8px; }
-    .sync-pip { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade8099; }
+    .sync-pip { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade8099; flex-shrink: 0; }
     .sync-pip.offline { background: #f87171; box-shadow: 0 0 6px #f8717199; }
     .session-name { font-size: 13px; color: #7c6c62; font-weight: 700; }
 
     /* ── Summary bar ── */
-    .summary-bar {
-      max-width: 680px; margin: 0 auto; padding: 10px 16px;
-      display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-    }
-    .chip {
-      display: flex; align-items: center; gap: 5px;
-      padding: 5px 10px; border-radius: 20px;
-      font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
-    }
+    .summary-bar { max-width: 680px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .chip { display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
     .chip-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .chip-count { font-size: 14px; font-weight: 900; }
 
@@ -57,68 +42,49 @@
     .card-stack { display: flex; flex-direction: column; gap: 8px; }
 
     /* ── Provider card ── */
-    .card {
-      background: #fff; border: 1.5px solid #e8e0d6;
-      border-radius: 14px; padding: 12px 14px;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-      transition: border-color 0.2s, background 0.2s;
-    }
+    .card { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.05); transition: border-color 0.2s, background 0.2s; }
     .card.hold       { border-color: #fca5a5; background: #fff5f5; }
     .card.requesting { border-color: #5eead4; background: #f0fdfa; }
-    .card.hold.requesting { border-color: #fca5a5; background: #fff5f5; } /* hold wins visually */
-
-    .requesting-banner {
-      background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4;
-      border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 800;
-      margin-bottom: 10px;
-    }
+    .card.hold.requesting { border-color: #fca5a5; background: #fff5f5; }
+    .requesting-banner { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 800; margin-bottom: 10px; }
     .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
     .name-block { flex: 1; min-width: 0; }
-    .room-btn {
-      background: none; border: none;
-      font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 16px;
-      color: #2d2420; padding: 0; text-align: left; display: block;
-      margin-bottom: 3px; line-height: 1.2;
-    }
+    .room-btn { background: none; border: none; font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 16px; color: #2d2420; padding: 0; text-align: left; display: block; margin-bottom: 3px; line-height: 1.2; }
     .provider-name { font-size: 13px; color: #7c6c62; font-weight: 600; }
-    .location-select {
-      font-size: 15px; color: #2d2420; border: 1px solid #e8e0d6;
-      border-radius: 6px; padding: 3px 6px; background: #faf7f4;
-      width: 100%; font-weight: 700; margin-bottom: 3px; font-family: inherit;
-    }
+    .location-select { font-size: 15px; color: #2d2420; border: 1px solid #e8e0d6; border-radius: 6px; padding: 3px 6px; background: #faf7f4; width: 100%; font-weight: 700; margin-bottom: 3px; font-family: inherit; }
     .side-btns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-    .side-btn {
-      border: 1.5px solid #e8e0d6; border-radius: 8px;
-      padding: 5px 10px; font-size: 12px; font-weight: 800;
-      white-space: nowrap; background: #f1ede8; color: #a39688;
-      transition: none;
-    }
+    .side-btn { border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; background: #f1ede8; color: #a39688; transition: none; }
     .side-btn.hold-on    { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
     .side-btn.request-on { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
-
     .pill-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .pill {
-      border-radius: 8px; padding: 7px 14px; font-size: 13px;
-      border: 1.5px solid #e8e0d6; background: #f1ede8; color: #c4b8ad;
-      font-family: inherit; font-weight: 400; transition: none;
-    }
-    .pill.next        { background: #fef9f0; color: #92400e; border-color: #fcd34d; font-weight: 700; cursor: pointer; }
-    .pill.next.hold   { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
-    .pill.next.req    { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
-    .pill.done        { background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 700; }
+    .pill { border-radius: 8px; padding: 7px 14px; font-size: 13px; border: 1.5px solid #e8e0d6; background: #f1ede8; color: #c4b8ad; font-family: inherit; font-weight: 400; transition: none; }
+    .pill.next      { background: #fef9f0; color: #92400e; border-color: #fcd34d; font-weight: 700; cursor: pointer; }
+    .pill.next.hold { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .pill.next.req  { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
+    .pill.done      { background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 700; }
 
     /* ── Add provider ── */
     .add-panel { margin-top: 28px; border-top: 1px dashed #d4ccc6; padding-top: 20px; }
-    .add-toggle-btn {
-      width: 100%; background: #fff; border: 1.5px dashed #c4b8ad;
-      border-radius: 12px; padding: 14px; font-size: 14px; color: #a39688; font-weight: 800;
-    }
-    .add-form {
-      background: #fff; border: 1.5px solid #e8e0d6;
-      border-radius: 14px; padding: 16px;
-      display: flex; flex-direction: column; gap: 10px;
-    }
+    .add-toggle-btn { width: 100%; background: #fff; border: 1.5px dashed #c4b8ad; border-radius: 12px; padding: 14px; font-size: 14px; color: #a39688; font-weight: 800; }
+    .add-form { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
     .add-form-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; }
+
+    /* ── Name input with roster dropdown ── */
+    .name-input-wrap { position: relative; }
+    .roster-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+      background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto;
+      margin-top: 4px;
+    }
+    .roster-option {
+      padding: 10px 14px; font-size: 14px; font-weight: 700; color: #2d2420;
+      cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+      border-bottom: 1px solid #f1ede8;
+    }
+    .roster-option:last-child { border-bottom: none; }
+    .roster-option:hover, .roster-option:focus { background: #f8f4ef; outline: none; }
+    .roster-option.manual { color: #7c6c62; font-style: italic; }
 
     /* ── Empty state ── */
     .empty-state { text-align: center; padding: 60px 0 40px; }
@@ -126,68 +92,42 @@
     .empty-sub   { font-size: 14px; color: #a39688; margin-top: 6px; }
 
     /* ── Auth screens ── */
-    .auth-root {
-      min-height: 100vh; background: #f8f4ef;
-      display: flex; align-items: center; justify-content: center; padding: 20px;
-    }
-    .auth-card {
-      background: #fff; border: 1.5px solid #e8e0d6; border-radius: 20px;
-      padding: 32px 28px; width: 100%; max-width: 380px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.07); text-align: center;
-    }
+    .auth-root { min-height: 100vh; background: #f8f4ef; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .auth-card { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 20px; padding: 32px 28px; width: 100%; max-width: 380px; box-shadow: 0 4px 24px rgba(0,0,0,0.07); text-align: center; }
     .auth-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 26px; color: #2d2420; margin-bottom: 4px; }
     .auth-sub   { font-size: 14px; color: #a39688; }
     .auth-divider { height: 1px; background: #e8e0d6; margin: 20px 0; }
     .auth-hint  { font-size: 11px; color: #c4b8ad; text-align: center; margin-top: 12px; }
+    .btn-view-only { background: none; border: none; color: #a39688; font-size: 13px; font-weight: 700; margin-top: 8px; text-decoration: underline; padding: 4px; display: block; width: 100%; text-align: center; }
 
     /* ── Form elements ── */
-    label.field-label {
-      display: block; font-size: 12px; font-weight: 800; color: #7c6c62;
-      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left;
-    }
+    label.field-label { display: block; font-size: 12px; font-weight: 800; color: #7c6c62; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
     .field-label.mt { margin-top: 14px; }
-    input.text-input, select.text-input {
-      width: 100%; background: #faf7f4; border: 1.5px solid #e8e0d6;
-      border-radius: 10px; padding: 11px 13px; font-size: 14px; color: #2d2420;
-      outline: none; font-family: inherit; font-weight: 700;
-    }
-    input.text-input.code-input {
-      text-transform: uppercase; letter-spacing: 3px;
-      text-align: center; font-size: 18px; font-weight: 800;
-    }
-    .error-msg {
-      font-size: 12px; color: #dc2626; background: #fee2e2;
-      border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left;
-    }
-    .btn-primary {
-      background: #2d2420; color: #fff; border: none;
-      border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800;
-    }
+    .field-hint { font-size: 11px; color: #a39688; text-align: left; margin-top: -4px; }
+    input.text-input, select.text-input { width: 100%; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 11px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; }
+    input.text-input.code-input { text-transform: uppercase; letter-spacing: 3px; text-align: center; font-size: 18px; font-weight: 800; }
+    .error-msg { font-size: 12px; color: #dc2626; background: #fee2e2; border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left; }
+    .success-msg { font-size: 12px; color: #15803d; background: #dcfce7; border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left; }
+    .btn-primary { background: #2d2420; color: #fff; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; }
     .btn-primary.full { width: 100%; padding: 14px; font-size: 16px; margin-top: 20px; }
     .btn-primary.mt   { margin-top: 16px; width: 100%; padding: 14px; font-size: 16px; }
-    .btn-ghost {
-      background: #f1ede8; color: #7c6c62; border: none;
-      border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800;
-    }
+    .btn-ghost { background: #f1ede8; color: #7c6c62; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; }
+    .btn-danger { background: #fee2e2; color: #dc2626; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 800; }
     .btn-row { display: flex; gap: 8px; }
 
-    /* ── Toast ── */
-    .btn-view-only {
-      background: none; border: none; color: #a39688;
-      font-size: 13px; font-weight: 700; margin-top: 8px;
-      text-decoration: underline; padding: 4px;
-      display: block; width: 100%; text-align: center;
-    }
-    .btn-view-only:hover { color: #7c6c62; }
+    /* ── Admin page ── */
+    .admin-root { max-width: 680px; margin: 0 auto; padding: 20px 16px 60px; }
+    .admin-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 16px; padding: 20px; margin-bottom: 20px; }
+    .admin-section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 17px; color: #2d2420; margin-bottom: 4px; }
+    .admin-section-sub   { font-size: 12px; color: #a39688; margin-bottom: 16px; }
+    .admin-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .admin-list-item { display: flex; align-items: center; justify-content: space-between; background: #f8f4ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #2d2420; }
+    .admin-add-row { display: flex; gap: 8px; }
+    .admin-add-input { flex: 1; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 10px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; }
+    .admin-back-btn { background: none; border: none; color: #7c6c62; font-size: 13px; font-weight: 800; padding: 0; display: flex; align-items: center; gap: 4px; }
 
-    #toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px;
-      font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-      z-index: 100; white-space: nowrap; opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-    }
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
     #toast.show { opacity: 1; }
   </style>
 </head>
@@ -196,10 +136,10 @@
 <div id="toast"></div>
 
 <script type="module">
-// ─── Firebase setup ─────────────────────────────────────────────────────────
-import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, set, get }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { initializeApp }                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, get, remove, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
+// ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey:            "AIzaSyBzSQU4RoSGGoPgbcMDUHIDxAl3PAqBqsk",
   authDomain:        "gas-breaker.firebaseapp.com",
@@ -209,20 +149,20 @@ const firebaseConfig = {
   messagingSenderId: "502120571871",
   appId:             "1:502120571871:web:710d607cbc4bb0fb52da6a"
 };
-
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
 
-// ─── Department codes ───────────────────────────────────────────────────────
-// Add more sites here as you expand: "CODE": "Site Name"
+// ─── Config ──────────────────────────────────────────────────────────────────
 const DEPARTMENT_CODES = {
   "GASPASS": "Demo Department",
   "MAINOR":  "Main OR",
   "WALTERS": "Walters OR",
 };
 
-// ─── Locations ──────────────────────────────────────────────────────────────
-const LOCATIONS = [
+// Admin code — change this to something private
+const ADMIN_CODE = "GBADMIN";
+
+const DEFAULT_LOCATIONS = [
   "Main OR 1","Main OR 2","Main OR 3","Main OR 4","Main OR 5",
   "Main OR 6","Main OR 7","Main OR 8","Main OR 9","Main OR 10","Main OR 11",
   "Walters OR 1","Walters OR 2","Walters OR 3","Walters OR 4","Walters OR 5",
@@ -245,9 +185,9 @@ const SECTION_META = [
 
 const SESSION_KEY = "gasbreaker-session-v2";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-const uid    = () => Math.random().toString(36).slice(2, 9);
-const tsDay  = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const uid   = () => Math.random().toString(36).slice(2, 9);
+const tsDay = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
 
 function locationSortKey(loc) {
   if (!loc) return 9999;
@@ -265,85 +205,110 @@ function getSection(provider) {
 // ─── Toast ───────────────────────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg) {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.classList.add("show");
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let board   = null;   // live board data from Firebase
-let session = null;   // { id, name, deptCode }
-let unsubscribe = null;
+let board     = null;
+let session   = null;
+let locations = [...DEFAULT_LOCATIONS];
+let roster    = [];       // array of name strings from Firebase
+let unsubBoard    = null;
+let unsubConfig   = null;
 
-// ─── Firebase helpers ────────────────────────────────────────────────────────
-function boardRef(deptCode) {
-  // Each department gets its own node, keyed by code + today's date
-  return ref(db, `boards/${deptCode}/${tsDay()}`);
-}
+// ─── Firebase refs ────────────────────────────────────────────────────────────
+const boardRef     = (code) => ref(db, `boards/${code}/${tsDay()}`);
+const locationsRef = (code) => ref(db, `config/${code}/locations`);
+const rosterRef    = (code) => ref(db, `config/${code}/roster`);
 
+// ─── Subscribe to board + config ─────────────────────────────────────────────
 function subscribeToBoard(deptCode) {
-  if (unsubscribe) unsubscribe();
-  const r = boardRef(deptCode);
-  const unsub = onValue(r, snap => {
-    const data = snap.val();
-    if (data) {
-      board = data;
-    } else {
-      board = { providers: {} };
-    }
-    renderBoard();
+  if (unsubBoard)  unsubBoard();
+  if (unsubConfig) unsubConfig();
+
+  unsubBoard = onValue(boardRef(deptCode), snap => {
+    board = snap.val() || { providers: {} };
+    if (document.querySelector(".main")) renderBoard();
   }, err => {
-    console.error("Firebase error:", err);
+    console.error("Board error:", err);
     document.querySelector(".sync-pip")?.classList.add("offline");
   });
-  unsubscribe = () => unsub(); // onValue returns unsubscribe fn directly in v10
-  // Actually in v10, onValue returns the unsubscribe function
-  unsubscribe = unsub;
+
+  // Subscribe to config (locations + roster) for this dept code
+  unsubConfig = onValue(ref(db, `config/${deptCode}`), snap => {
+    const cfg = snap.val() || {};
+    locations = cfg.locations ? Object.values(cfg.locations) : [...DEFAULT_LOCATIONS];
+    roster    = cfg.roster    ? Object.values(cfg.roster).sort() : [];
+  });
 }
 
+// ─── Write helpers ────────────────────────────────────────────────────────────
 async function writeBoard(updater) {
-  if (!session) return;
-  const r   = boardRef(session.deptCode);
-  const snap = await get(r);
+  if (!session?.deptCode) return;
+  const r       = boardRef(session.deptCode);
+  const snap    = await get(r);
   const current = snap.val() || { providers: {} };
-  const next    = updater(current);
-  await set(r, next);
+  await set(r, updater(current));
 }
 
-// ─── Actions ─────────────────────────────────────────────────────────────────
+async function saveLocations(locs) {
+  const obj = {};
+  locs.forEach((l, i) => { obj[i] = l; });
+  await set(locationsRef(session.deptCode), obj);
+}
+
+async function saveRosterEntry(name) {
+  await push(rosterRef(session.deptCode), name);
+}
+
+async function deleteRosterEntry(name) {
+  const snap = await get(rosterRef(session.deptCode));
+  const data = snap.val() || {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v === name) { await remove(ref(db, `config/${session.deptCode}/roster/${k}`)); break; }
+  }
+}
+
+async function deleteLocation(loc) {
+  const snap = await get(locationsRef(session.deptCode));
+  const data = snap.val() || {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v === loc) { await remove(ref(db, `config/${session.deptCode}/locations/${k}`)); break; }
+  }
+  // If no locations stored yet in Firebase, work from DEFAULT_LOCATIONS
+  if (!snap.val()) {
+    const updated = DEFAULT_LOCATIONS.filter(l => l !== loc);
+    await saveLocations(updated);
+  }
+}
+
+// ─── Board actions ────────────────────────────────────────────────────────────
 async function joinBoard(name, location) {
   const id = uid();
   session.id   = id;
   session.name = name;
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
   await writeBoard(b => ({
     ...b,
-    providers: {
-      ...(b.providers || {}),
-      [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() }
-    }
+    providers: { ...(b.providers||{}), [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() } }
   }));
-  renderBoard();
 }
 
 async function addProvider(name, location) {
   const id = uid();
   await writeBoard(b => ({
     ...b,
-    providers: {
-      ...(b.providers || {}),
-      [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() }
-    }
+    providers: { ...(b.providers||{}), [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() } }
   }));
 }
 
 async function giveBreak(providerId, breakId) {
   await writeBoard(b => {
-    const p = (b.providers || {})[providerId];
-    if (!p) return b;
+    const p = (b.providers||{})[providerId]; if (!p) return b;
     return { ...b, providers: { ...b.providers, [providerId]: { ...p, requesting: false, breaks: { ...(p.breaks||{}), [breakId]: true } } } };
   });
   showToast(`${BREAKS.find(br => br.id === breakId)?.label} break marked ✓`);
@@ -351,10 +316,8 @@ async function giveBreak(providerId, breakId) {
 
 async function undoBreak(providerId, breakId) {
   await writeBoard(b => {
-    const p = (b.providers || {})[providerId];
-    if (!p) return b;
-    const nb = { ...(p.breaks||{}) };
-    delete nb[breakId];
+    const p = (b.providers||{})[providerId]; if (!p) return b;
+    const nb = { ...(p.breaks||{}) }; delete nb[breakId];
     return { ...b, providers: { ...b.providers, [providerId]: { ...p, breaks: nb } } };
   });
   showToast("Break undone");
@@ -362,29 +325,26 @@ async function undoBreak(providerId, breakId) {
 
 async function toggleHold(providerId) {
   await writeBoard(b => {
-    const p = (b.providers || {})[providerId];
-    if (!p) return b;
+    const p = (b.providers||{})[providerId]; if (!p) return b;
     return { ...b, providers: { ...b.providers, [providerId]: { ...p, hold: !p.hold } } };
   });
 }
 
 async function toggleRequesting(providerId) {
   await writeBoard(b => {
-    const p = (b.providers || {})[providerId];
-    if (!p) return b;
+    const p = (b.providers||{})[providerId]; if (!p) return b;
     return { ...b, providers: { ...b.providers, [providerId]: { ...p, requesting: !p.requesting } } };
   });
 }
 
 async function changeLocation(providerId, location) {
   await writeBoard(b => {
-    const p = (b.providers || {})[providerId];
-    if (!p) return b;
+    const p = (b.providers||{})[providerId]; if (!p) return b;
     return { ...b, providers: { ...b.providers, [providerId]: { ...p, location } } };
   });
 }
 
-// ─── Render helpers ──────────────────────────────────────────────────────────
+// ─── DOM helper ──────────────────────────────────────────────────────────────
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -403,12 +363,63 @@ function el(tag, attrs, ...children) {
 }
 
 function locationOptions(selected) {
-  return LOCATIONS.map(l => {
+  return locations.map(l => {
     const o = document.createElement("option");
     o.value = l; o.textContent = l;
     if (l === selected) o.selected = true;
     return o;
   });
+}
+
+// ─── Name input with roster dropdown ─────────────────────────────────────────
+function buildNameInput(placeholder) {
+  const wrap    = el("div", { class: "name-input-wrap" });
+  const input   = el("input", { class: "text-input", type: "text", placeholder, autocomplete: "off" });
+  let dropdown  = null;
+
+  function closeDropdown() {
+    if (dropdown) { dropdown.remove(); dropdown = null; }
+  }
+
+  function showDropdown(filter) {
+    closeDropdown();
+    const matches = filter
+      ? roster.filter(n => n.toLowerCase().includes(filter.toLowerCase()))
+      : roster;
+
+    if (!matches.length && filter) return; // no matches, let them type freely
+
+    dropdown = el("div", { class: "roster-dropdown" });
+
+    matches.slice(0, 10).forEach(name => {
+      const opt = el("button", { class: "roster-option", type: "button" }, name);
+      opt.addEventListener("mousedown", e => {
+        e.preventDefault();
+        input.value = name;
+        closeDropdown();
+      });
+      dropdown.appendChild(opt);
+    });
+
+    // Always show "Enter manually" if there's a typed value not in roster
+    if (filter && !roster.includes(filter)) {
+      const manual = el("button", { class: "roster-option manual", type: "button" }, `Use "${filter}"`);
+      manual.addEventListener("mousedown", e => {
+        e.preventDefault();
+        closeDropdown();
+      });
+      dropdown.appendChild(manual);
+    }
+
+    wrap.appendChild(dropdown);
+  }
+
+  input.addEventListener("focus", () => showDropdown(input.value));
+  input.addEventListener("input", () => showDropdown(input.value));
+  input.addEventListener("blur",  () => setTimeout(closeDropdown, 150));
+
+  wrap.appendChild(input);
+  return { wrap, input };
 }
 
 // ─── Render: Code screen ─────────────────────────────────────────────────────
@@ -418,6 +429,11 @@ function renderCodeScreen(errorMsg = "") {
 
   function tryCode() {
     const code = input.value.trim().toUpperCase();
+    if (code === ADMIN_CODE) {
+      session = { deptCode: "_admin", isAdmin: true };
+      renderAdminCodeSelect();
+      return;
+    }
     if (DEPARTMENT_CODES[code]) {
       session = { deptCode: code, deptName: DEPARTMENT_CODES[code] };
       subscribeToBoard(code);
@@ -433,7 +449,7 @@ function renderCodeScreen(errorMsg = "") {
       el("div", { class: "auth-card" },
         el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "💨"),
         el("div", { class: "auth-title" }, "Gas Breaker"),
-        el("div", { class: "auth-sub" },   "Anesthesia Break Coordination"),
+        el("div", { class: "auth-sub" }, "Anesthesia Break Coordination"),
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Department Code"),
         input,
@@ -445,10 +461,150 @@ function renderCodeScreen(errorMsg = "") {
   input.focus();
 }
 
+// ─── Render: Admin — pick which dept to configure ────────────────────────────
+function renderAdminCodeSelect(errorMsg = "") {
+  const select = el("select", { class: "text-input" },
+    ...Object.entries(DEPARTMENT_CODES).map(([code, name]) => {
+      const o = document.createElement("option");
+      o.value = code; o.textContent = `${name} (${code})`; return o;
+    })
+  );
+  document.getElementById("app").innerHTML = "";
+  document.getElementById("app").appendChild(
+    el("div", { class: "auth-root" },
+      el("div", { class: "auth-card" },
+        el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "⚙️"),
+        el("div", { class: "auth-title" }, "Admin"),
+        el("div", { class: "auth-sub" }, "Select a department to configure"),
+        el("div", { class: "auth-divider" }),
+        el("label", { class: "field-label" }, "Department"),
+        select,
+        el("button", { class: "btn-primary full", onClick: () => {
+          session.deptCode = select.value;
+          session.deptName = DEPARTMENT_CODES[select.value];
+          subscribeToBoard(select.value);
+          renderAdminPage();
+        }}, "Manage →"),
+        el("button", { class: "btn-view-only", onClick: () => renderCodeScreen() }, "← Back"),
+      )
+    )
+  );
+}
+
+// ─── Render: Admin page ───────────────────────────────────────────────────────
+function renderAdminPage() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  function rebuild() { renderAdminPage(); }
+
+  // ── Locations section ──
+  function buildLocationsSection() {
+    const items = locations.map(loc =>
+      el("div", { class: "admin-list-item" },
+        el("span", {}, loc),
+        el("button", { class: "btn-danger", onClick: async () => {
+          await deleteLocation(loc);
+          showToast(`${loc} removed`);
+          setTimeout(rebuild, 300);
+        }}, "Remove"),
+      )
+    );
+
+    const newLocInput = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Cardiac OR 1" });
+    newLocInput.addEventListener("keydown", async e => {
+      if (e.key !== "Enter") return;
+      const val = newLocInput.value.trim();
+      if (!val || locations.includes(val)) return;
+      const updated = [...locations, val];
+      await saveLocations(updated);
+      showToast(`${val} added`);
+      newLocInput.value = "";
+      setTimeout(rebuild, 300);
+    });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Locations"),
+      el("div", { class: "admin-section-sub" }, "These appear in the location dropdown for all users."),
+      el("div", { class: "admin-list" }, ...items),
+      el("div", { class: "admin-add-row" },
+        newLocInput,
+        el("button", { class: "btn-primary", onClick: async () => {
+          const val = newLocInput.value.trim();
+          if (!val || locations.includes(val)) return;
+          const updated = [...locations, val];
+          await saveLocations(updated);
+          showToast(`${val} added`);
+          newLocInput.value = "";
+          setTimeout(rebuild, 300);
+        }}, "Add"),
+      ),
+    );
+  }
+
+  // ── Roster section ──
+  function buildRosterSection() {
+    const items = roster.map(name =>
+      el("div", { class: "admin-list-item" },
+        el("span", {}, name),
+        el("button", { class: "btn-danger", onClick: async () => {
+          await deleteRosterEntry(name);
+          showToast(`${name} removed`);
+          setTimeout(rebuild, 300);
+        }}, "Remove"),
+      )
+    );
+
+    const newNameInput = el("input", { class: "admin-add-input", type: "text", placeholder: "Last, First (e.g. Smith, John)" });
+    async function addRosterEntry() {
+      const val = newNameInput.value.trim();
+      if (!val || roster.includes(val)) return;
+      await saveRosterEntry(val);
+      showToast(`${val} added to roster`);
+      newNameInput.value = "";
+      setTimeout(rebuild, 300);
+    }
+    newNameInput.addEventListener("keydown", e => { if (e.key === "Enter") addRosterEntry(); });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Provider Roster"),
+      el("div", { class: "admin-section-sub" }, "Names appear as suggestions when adding a provider to the board. Format: Last, First."),
+      roster.length === 0
+        ? el("div", { style: { color: "#a39688", fontSize: "13px", marginBottom: "14px" } }, "No providers in roster yet.")
+        : el("div", { class: "admin-list" }, ...items),
+      el("div", { class: "admin-add-row" },
+        newNameInput,
+        el("button", { class: "btn-primary", onClick: addRosterEntry }, "Add"),
+      ),
+    );
+  }
+
+  app.appendChild(
+    el("div", {},
+      el("header", { class: "header" },
+        el("div", { class: "header-inner" },
+          el("div", { class: "logo-wrap" },
+            el("button", { class: "admin-back-btn", onClick: () => renderCodeScreen() }, "← Back"),
+          ),
+          el("div", { class: "header-right" },
+            el("span", { class: "session-name" }, `Admin · ${session.deptName}`),
+          )
+        )
+      ),
+      el("div", { class: "admin-root" },
+        el("div", { style: { fontFamily: "'Libre Baskerville', serif", fontWeight: "700", fontSize: "22px", color: "#2d2420", marginBottom: "4px" } }, "⚙️ Admin Settings"),
+        el("div", { style: { fontSize: "13px", color: "#a39688", marginBottom: "20px" } }, session.deptName),
+        buildLocationsSection(),
+        buildRosterSection(),
+      )
+    )
+  );
+}
+
 // ─── Render: Join screen ─────────────────────────────────────────────────────
 function renderJoinScreen() {
-  const nameInput = el("input", { class: "text-input", placeholder: "Dr. Smith / CRNA Jones", type: "text" });
-  const locSelect = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
+  const { wrap: nameWrap, input: nameInput } = buildNameInput("Last, First (e.g. Smith, John)");
+  const locSelect = el("select", { class: "text-input" }, ...locationOptions(locations[0] || ""));
 
   nameInput.addEventListener("keydown", e => { if (e.key === "Enter") tryJoin(); });
 
@@ -467,7 +623,8 @@ function renderJoinScreen() {
         el("div", { class: "auth-sub" }, session?.deptName || "Join today's break board"),
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Your Name"),
-        nameInput,
+        el("div", { class: "field-hint", style: { marginBottom: "6px" } }, "Format: Last, First (e.g. Smith, John)"),
+        nameWrap,
         el("label", { class: "field-label mt" }, "Your Location"),
         locSelect,
         el("button", { class: "btn-primary full", onClick: tryJoin }, "Join Board →"),
@@ -484,45 +641,40 @@ function renderJoinScreen() {
   nameInput.focus();
 }
 
-// ─── Render: Provider card ───────────────────────────────────────────────────
+// ─── Render: Provider card ────────────────────────────────────────────────────
 function renderCard(provider) {
-  const breaks      = provider.breaks  || {};
-  const isHold      = !!provider.hold;
-  const isReq       = !!provider.requesting;
-  const section     = getSection(provider);
-  const allDone     = section === 3;
-  const nextBreak   = BREAKS.find(b => !breaks[b.id]);
-  const lastBreak   = [...BREAKS].reverse().find(b => breaks[b.id]);
+  const breaks    = provider.breaks || {};
+  const isHold    = !!provider.hold;
+  const isReq     = !!provider.requesting;
+  const section   = getSection(provider);
+  const allDone   = section === 3;
+  const nextBreak = BREAKS.find(b => !breaks[b.id]);
+  const lastBreak = [...BREAKS].reverse().find(b => breaks[b.id]);
 
-  // Card classes
   let cardClass = "card";
   if (isHold && isReq) cardClass += " hold requesting";
   else if (isHold)     cardClass += " hold";
   else if (isReq)      cardClass += " requesting";
 
-  // Requesting banner
-  const banner = isReq
-    ? el("div", { class: "requesting-banner" }, "🔔 Requesting a break")
-    : null;
+  const banner = isReq ? el("div", { class: "requesting-banner" }, "🔔 Requesting a break") : null;
 
-  // Room / location
-  let locationEl;
-  const roomBtn = el("button", { class: "room-btn" }, provider.location, " ", el("span", { style: { color: "#c4b8ad", fontSize: "12px", fontWeight: "400" } }, "▾"));
+  // Location button / select
+  const roomBtn = el("button", { class: "room-btn" },
+    provider.location, " ",
+    el("span", { style: { color: "#c4b8ad", fontSize: "12px", fontWeight: "400" } }, "▾")
+  );
   roomBtn.addEventListener("click", () => {
     const sel = el("select", { class: "location-select" }, ...locationOptions(provider.location));
-    sel.addEventListener("change", async () => {
-      await changeLocation(provider.id, sel.value);
-    });
-    sel.addEventListener("blur", () => { /* Firebase update already happened */ });
+    sel.addEventListener("change", async () => { await changeLocation(provider.id, sel.value); });
     roomBtn.replaceWith(sel);
     sel.focus();
   });
-  locationEl = roomBtn;
 
-  const nameEl = el("div", { class: "provider-name" }, provider.name);
-  const nameBlock = el("div", { class: "name-block" }, locationEl, nameEl);
+  const nameBlock = el("div", { class: "name-block" },
+    roomBtn,
+    el("div", { class: "provider-name" }, provider.name),
+  );
 
-  // Side buttons
   const holdBtn = el("button", {
     class: "side-btn" + (isHold ? " hold-on" : ""),
     onClick: () => toggleHold(provider.id)
@@ -538,11 +690,6 @@ function renderCard(provider) {
     onClick: () => undoBreak(provider.id, lastBreak.id)
   }, "↩ Undo") : null;
 
-  const sideBtns = el("div", { class: "side-btns" }, holdBtn, reqBtn, undoBtn);
-
-  const cardTop = el("div", { class: "card-top" }, nameBlock, sideBtns);
-
-  // Break pills
   const pills = BREAKS.map(b => {
     const done    = !!breaks[b.id];
     const isNext  = !allDone && nextBreak?.id === b.id;
@@ -554,78 +701,65 @@ function renderCard(provider) {
 
     const pill = el("button", { class: pillClass }, done ? `✓ ${b.label}` : b.label);
     if (blocked) pill.disabled = true;
-    if (isNext) pill.addEventListener("click", () => giveBreak(provider.id, b.id));
+    if (isNext)  pill.addEventListener("click", () => giveBreak(provider.id, b.id));
     return pill;
   });
 
-  const pillRow = el("div", { class: "pill-row" }, ...pills);
-
-  return el("div", { class: cardClass }, banner, cardTop, pillRow);
+  return el("div", { class: cardClass },
+    banner,
+    el("div", { class: "card-top" },
+      nameBlock,
+      el("div", { class: "side-btns" }, holdBtn, reqBtn, undoBtn),
+    ),
+    el("div", { class: "pill-row" }, ...pills),
+  );
 }
 
 // ─── Render: Add provider panel ───────────────────────────────────────────────
 function renderAddPanel() {
   const panel = el("div", { class: "add-panel" });
-  const toggleBtn = el("button", { class: "add-toggle-btn" }, "+ Add Provider to Board");
 
-  toggleBtn.addEventListener("click", () => {
-    panel.innerHTML = "";
-    const nameInput = el("input", { class: "text-input", placeholder: "Name (e.g. Dr. Smith / CRNA Jones)", type: "text" });
-    const locSelect = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
+  function buildToggleBtn() {
+    const b = el("button", { class: "add-toggle-btn" }, "+ Add Provider to Board");
+    b.addEventListener("click", () => { panel.innerHTML = ""; panel.appendChild(buildForm()); });
+    return b;
+  }
 
-    async function submit() {
+  function buildForm() {
+    const { wrap: nameWrap, input: nameInput } = buildNameInput("Last, First (e.g. Smith, John)");
+    const locSelect = el("select", { class: "text-input" }, ...locationOptions(locations[0] || ""));
+
+    async function doAdd() {
       const name = nameInput.value.trim();
       if (!name) { nameInput.focus(); return; }
       await addProvider(name, locSelect.value);
-      // Re-render add panel after adding
       panel.innerHTML = "";
-      panel.appendChild(toggleBtn2());
+      panel.appendChild(buildToggleBtn());
     }
+    nameInput.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
 
-    function toggleBtn2() {
-      const b2 = el("button", { class: "add-toggle-btn" }, "+ Add Provider to Board");
-      b2.addEventListener("click", () => {
-        panel.innerHTML = "";
-        panel.appendChild(buildForm());
-      });
-      return b2;
-    }
+    return el("div", { class: "add-form" },
+      el("div", { class: "add-form-title" }, "Add Provider"),
+      el("div", { class: "field-hint" }, "Format: Last, First (e.g. Smith, John)"),
+      nameWrap,
+      locSelect,
+      el("div", { class: "btn-row" },
+        el("button", { class: "btn-primary", onClick: doAdd }, "Add to Board"),
+        el("button", { class: "btn-ghost", onClick: () => { panel.innerHTML = ""; panel.appendChild(buildToggleBtn()); } }, "Cancel"),
+      ),
+    );
+  }
 
-    function buildForm() {
-      const ni = el("input", { class: "text-input", placeholder: "Name (e.g. Dr. Smith / CRNA Jones)", type: "text" });
-      const ls = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
-      ni.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
-      async function doAdd() {
-        const n = ni.value.trim(); if (!n) { ni.focus(); return; }
-        await addProvider(n, ls.value);
-        panel.innerHTML = ""; panel.appendChild(toggleBtn2());
-      }
-      const form = el("div", { class: "add-form" },
-        el("div", { class: "add-form-title" }, "Add Provider"),
-        ni, ls,
-        el("div", { class: "btn-row" },
-          el("button", { class: "btn-primary", onClick: doAdd }, "Add to Board"),
-          el("button", { class: "btn-ghost",   onClick: () => { panel.innerHTML=""; panel.appendChild(toggleBtn2()); } }, "Cancel"),
-        )
-      );
-      setTimeout(() => ni.focus(), 50);
-      return form;
-    }
-
-    panel.appendChild(buildForm());
-  });
-
-  panel.appendChild(toggleBtn);
+  panel.appendChild(buildToggleBtn());
   return panel;
 }
 
 // ─── Render: Full board ───────────────────────────────────────────────────────
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
-  // session.id is null for view-only users — that's fine, show the board anyway
 
   const providers = Object.values(board?.providers || {})
-    .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    .sort((a, b) => (a.joinedAt||0) - (b.joinedAt||0));
 
   const sections = [0,1,2,3].map(i => ({
     ...SECTION_META[i],
@@ -634,84 +768,70 @@ function renderBoard() {
       .sort((a, b) => locationSortKey(a.location) - locationSortKey(b.location))
   }));
 
-  // Summary chips
-  const chips = sections.map((sec, i) => {
-    const hasAny = sec.providers.length > 0;
-    return el("div", {
-      class: "chip",
-      style: { background: hasAny ? sec.light : "#f1ede8", color: hasAny ? sec.color : "#c4b8ad" }
-    },
-      el("span", { class: "chip-dot", style: { background: hasAny ? sec.dot : "#d4ccc6" } }),
+  const chips = sections.map(sec => {
+    const has = sec.providers.length > 0;
+    return el("div", { class: "chip", style: { background: has ? sec.light : "#f1ede8", color: has ? sec.color : "#c4b8ad" } },
+      el("span", { class: "chip-dot", style: { background: has ? sec.dot : "#d4ccc6" } }),
       el("span", { class: "chip-count" }, String(sec.providers.length)),
-      el("span", {}, sec.label.replace("Needs ","").replace("All ",""))
+      el("span", {}, sec.label.replace("Needs ","").replace("All ","")),
     );
   });
 
-  // Board sections
   const boardSections = sections
-    .filter(sec => sec.providers.length > 0)
-    .map(sec => {
-      const cards = sec.providers.map(p => renderCard(p));
-      return el("div", { class: "section" },
+    .filter(s => s.providers.length > 0)
+    .map(sec =>
+      el("div", { class: "section" },
         el("div", { class: "section-header" },
           el("span", { class: "section-dot", style: { background: sec.dot } }),
           el("span", { class: "section-title", style: { color: sec.color } }, sec.label),
           el("span", { class: "section-count" }, String(sec.providers.length)),
         ),
-        el("div", { class: "card-stack" }, ...cards)
-      );
-    });
+        el("div", { class: "card-stack" }, ...sec.providers.map(renderCard)),
+      )
+    );
 
   const emptyState = providers.length === 0
     ? el("div", { class: "empty-state" },
         el("div", { style: { fontSize: "40px", marginBottom: "12px" } }, "💨"),
         el("div", { class: "empty-title" }, "Board is empty"),
-        el("div", { class: "empty-sub"   }, "Add providers below to get started"),
+        el("div", { class: "empty-sub" }, "Add providers below to get started"),
       )
     : null;
 
-  // Full page
-  const page = el("div", { id: "app-inner" },
-    // Header
-    el("header", { class: "header" },
-      el("div", { class: "header-inner" },
-        el("div", { class: "logo-wrap" },
-          el("div", { class: "logo-icon" }, "💨"),
-          el("div", {},
-            el("div", { class: "logo-text" }, "Gas Breaker"),
-            el("div", { class: "logo-sub"  }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
-          )
-        ),
-        el("div", { class: "header-right" },
-          el("div", { class: "sync-pip" }),
-          el("span", { class: "session-name" }, session.id ? session.name : "Viewing"),
-        )
-      )
-    ),
-    // Summary bar
-    el("div", { class: "summary-bar" }, ...chips),
-    // Main
-    el("main", { class: "main" },
-      emptyState,
-      ...boardSections,
-      renderAddPanel(),
-    )
-  );
-
   const app = document.getElementById("app");
   app.innerHTML = "";
-  app.appendChild(page);
+  app.appendChild(
+    el("div", {},
+      el("header", { class: "header" },
+        el("div", { class: "header-inner" },
+          el("div", { class: "logo-wrap" },
+            el("div", { class: "logo-icon" }, "💨"),
+            el("div", {},
+              el("div", { class: "logo-text" }, "Gas Breaker"),
+              el("div", { class: "logo-sub" }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
+            ),
+          ),
+          el("div", { class: "header-right" },
+            el("div", { class: "sync-pip" }),
+            el("span", { class: "session-name" }, session.id ? session.name : "Viewing"),
+          ),
+        )
+      ),
+      el("div", { class: "summary-bar" }, ...chips),
+      el("main", { class: "main" }, emptyState, ...boardSections, renderAddPanel()),
+    )
+  );
 }
 
-// ─── Init ────────────────────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────────────────
 (function init() {
   try {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) {
       session = JSON.parse(stored);
-      if (session?.deptCode && DEPARTMENT_CODES[session.deptCode] && session.id) {
+      if (session?.deptCode && session.deptCode !== "_admin" && DEPARTMENT_CODES[session.deptCode]) {
         subscribeToBoard(session.deptCode);
-        return; // renderBoard() will be called by the Firebase listener
+        return;
       }
     }
   } catch {}
