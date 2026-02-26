@@ -539,11 +539,24 @@ function renderAdminDeptSelect() {
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Department"),
         select,
-        el("button", { class: "btn-primary full", onClick: () => {
-          session.deptCode = select.value;
-          session.deptName = departments[select.value];
-          subscribeToBoard(select.value);
-          renderAdminPage(select.value);
+        el("button", { class: "btn-primary full", onClick: async () => {
+          const code = select.value;
+          session.deptCode = code;
+          session.deptName = departments[code];
+          // Wait for config (locations + roster) to load before rendering admin page
+          await new Promise(resolve => {
+            if (unsubConfig) unsubConfig();
+            let settled = false;
+            unsubConfig = onValue(configRef(code), snap => {
+              const cfg = snap.val() || {};
+              locations = cfg.locations ? Object.values(cfg.locations) : [...DEFAULT_LOCATIONS];
+              roster    = cfg.roster    ? Object.values(cfg.roster).sort() : [];
+              if (!settled) { settled = true; resolve(); }
+            });
+            setTimeout(resolve, 3000); // fallback
+          });
+          subscribeToBoard(code);
+          renderAdminPage(code);
         }}, "Manage →"),
         el("button", { class: "btn-ghost", style: { width: "100%", marginTop: "10px" }, onClick: () => renderAdminPage(null) }, "Manage Departments →"),
         el("button", { class: "btn-view-only", onClick: () => renderCodeScreen() }, "← Back"),
