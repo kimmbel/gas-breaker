@@ -11,7 +11,6 @@
     button, select, input { font-family: inherit; }
     button { cursor: pointer; }
     button:active { opacity: 0.82; transform: scale(0.97); }
-
     #app { min-height: 100vh; padding-bottom: 60px; }
 
     /* ── Header ── */
@@ -69,21 +68,12 @@
     .add-form { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
     .add-form-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; }
 
-    /* ── Name input with roster dropdown ── */
+    /* ── Roster dropdown ── */
     .name-input-wrap { position: relative; }
-    .roster-dropdown {
-      position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
-      background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto;
-      margin-top: 4px;
-    }
-    .roster-option {
-      padding: 10px 14px; font-size: 14px; font-weight: 700; color: #2d2420;
-      cursor: pointer; border: none; background: none; width: 100%; text-align: left;
-      border-bottom: 1px solid #f1ede8;
-    }
+    .roster-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto; margin-top: 4px; }
+    .roster-option { padding: 10px 14px; font-size: 14px; font-weight: 700; color: #2d2420; cursor: pointer; border: none; background: none; width: 100%; text-align: left; border-bottom: 1px solid #f1ede8; }
     .roster-option:last-child { border-bottom: none; }
-    .roster-option:hover, .roster-option:focus { background: #f8f4ef; outline: none; }
+    .roster-option:hover { background: #f8f4ef; }
     .roster-option.manual { color: #7c6c62; font-style: italic; }
 
     /* ── Empty state ── */
@@ -103,16 +93,16 @@
     /* ── Form elements ── */
     label.field-label { display: block; font-size: 12px; font-weight: 800; color: #7c6c62; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
     .field-label.mt { margin-top: 14px; }
-    .field-hint { font-size: 11px; color: #a39688; text-align: left; margin-top: -4px; }
+    .field-hint { font-size: 11px; color: #a39688; text-align: left; margin-bottom: 6px; }
     input.text-input, select.text-input { width: 100%; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 11px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; }
     input.text-input.code-input { text-transform: uppercase; letter-spacing: 3px; text-align: center; font-size: 18px; font-weight: 800; }
     .error-msg { font-size: 12px; color: #dc2626; background: #fee2e2; border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left; }
-    .success-msg { font-size: 12px; color: #15803d; background: #dcfce7; border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left; }
     .btn-primary { background: #2d2420; color: #fff; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; }
     .btn-primary.full { width: 100%; padding: 14px; font-size: 16px; margin-top: 20px; }
     .btn-primary.mt   { margin-top: 16px; width: 100%; padding: 14px; font-size: 16px; }
-    .btn-ghost { background: #f1ede8; color: #7c6c62; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; }
+    .btn-ghost  { background: #f1ede8; color: #7c6c62; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; }
     .btn-danger { background: #fee2e2; color: #dc2626; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 800; }
+    .btn-warn   { background: #fef3c7; color: #b45309; border: 1.5px solid #fcd34d; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800; width: 100%; margin-top: 8px; }
     .btn-row { display: flex; gap: 8px; }
 
     /* ── Admin page ── */
@@ -120,11 +110,22 @@
     .admin-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 16px; padding: 20px; margin-bottom: 20px; }
     .admin-section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 17px; color: #2d2420; margin-bottom: 4px; }
     .admin-section-sub   { font-size: 12px; color: #a39688; margin-bottom: 16px; }
-    .admin-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-    .admin-list-item { display: flex; align-items: center; justify-content: space-between; background: #f8f4ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #2d2420; }
+    .admin-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .admin-list-item { display: flex; align-items: center; justify-content: space-between; background: #f8f4ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #2d2420; gap: 8px; }
+    .admin-list-item.dragging { opacity: 0.4; }
+    .admin-list-item.drag-over { border: 2px dashed #b45309; }
+    .drag-handle { color: #c4b8ad; font-size: 16px; cursor: grab; padding: 0 4px; user-select: none; flex-shrink: 0; }
+    .drag-handle:active { cursor: grabbing; }
     .admin-add-row { display: flex; gap: 8px; }
     .admin-add-input { flex: 1; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 10px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; }
     .admin-back-btn { background: none; border: none; color: #7c6c62; font-size: 13px; font-weight: 800; padding: 0; display: flex; align-items: center; gap: 4px; }
+    .dept-badge { font-size: 11px; font-weight: 800; background: #f1ede8; color: #a39688; border-radius: 6px; padding: 2px 7px; margin-left: 6px; }
+
+    /* ── Confirm dialog ── */
+    .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .confirm-box { background: #fff; border-radius: 16px; padding: 24px; max-width: 340px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    .confirm-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 17px; color: #2d2420; margin-bottom: 8px; }
+    .confirm-msg   { font-size: 13px; color: #7c6c62; margin-bottom: 20px; line-height: 1.5; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -134,24 +135,10 @@
 <body>
 <div id="app"></div>
 <div id="toast"></div>
-  <script>
-window.addEventListener('error', e => {
-  document.getElementById('app').innerHTML = 
-    '<div style="padding:20px;color:red;font-size:14px;font-family:sans-serif">' +
-    '<strong>Error:</strong> ' + e.message + '<br>File: ' + e.filename + '<br>Line: ' + e.lineno +
-    '</div>';
-});
-window.addEventListener('unhandledrejection', e => {
-  document.getElementById('app').innerHTML = 
-    '<div style="padding:20px;color:red;font-size:14px;font-family:sans-serif">' +
-    '<strong>Promise Error:</strong> ' + e.reason +
-    '</div>';
-});
-</script>
 
 <script type="module">
-import { initializeApp }                                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, set, get, remove, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { initializeApp }                                           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, get, remove, push, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -166,15 +153,8 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
 
-// ─── Config ──────────────────────────────────────────────────────────────────
-const DEPARTMENT_CODES = {
-  "GASPASS": "Demo Department",
-  "MAINOR":  "Main OR",
-  "WALTERS": "Walters OR",
-};
-
-// Admin code — change this to something private
-const ADMIN_CODE = "GBADMIN";
+// ─── Constants ───────────────────────────────────────────────────────────────
+const ADMIN_CODE = "GBADMIN"; // Change this to something private
 
 const DEFAULT_LOCATIONS = [
   "Main OR 1","Main OR 2","Main OR 3","Main OR 4","Main OR 5",
@@ -197,19 +177,25 @@ const SECTION_META = [
   { label: "All Breaks Done", color: "#15803d", light: "#dcfce7", dot: "#4ade80" },
 ];
 
-const SESSION_KEY = "gasbreaker-session-v2";
+const SESSION_KEY = "gasbreaker-session-v3";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const uid   = () => Math.random().toString(36).slice(2, 9);
 const tsDay = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
 
-function locationSortKey(loc) {
-  if (!loc) return 9999;
-  const m = loc.match(/^Main OR (\d+)$/);    if (m) return parseInt(m[1]);
-  const w = loc.match(/^Walters OR (\d+)$/); if (w) return 100 + parseInt(w[1]);
-  if (loc === "Radiology") return 200;
-  if (loc === "Floating")  return 300;
-  return 400;
+// Match from start of full string OR start of first name (after comma+space)
+function rosterMatches(name, query) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  const n = name.toLowerCase();
+  if (n.startsWith(q)) return true;
+  // also match start of first name: "Smith, John" — match "j" -> "john"
+  const commaIdx = n.indexOf(",");
+  if (commaIdx !== -1) {
+    const firstName = n.slice(commaIdx + 1).trimStart();
+    if (firstName.startsWith(q)) return true;
+  }
+  return false;
 }
 
 function getSection(provider) {
@@ -220,26 +206,50 @@ function getSection(provider) {
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
+  t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
 }
 
+// ─── Confirm dialog ───────────────────────────────────────────────────────────
+function showConfirm(title, msg, onConfirm) {
+  const overlay = el("div", { class: "confirm-overlay" },
+    el("div", { class: "confirm-box" },
+      el("div", { class: "confirm-title" }, title),
+      el("div", { class: "confirm-msg" }, msg),
+      el("div", { class: "btn-row" },
+        el("button", { class: "btn-danger", style: { flex: "1", padding: "10px" }, onClick: () => { overlay.remove(); onConfirm(); } }, "Yes, delete"),
+        el("button", { class: "btn-ghost",  style: { flex: "1" }, onClick: () => overlay.remove() }, "Cancel"),
+      ),
+    )
+  );
+  document.body.appendChild(overlay);
+}
+
 // ─── State ───────────────────────────────────────────────────────────────────
-let board     = null;
-let session   = null;
-let locations = [...DEFAULT_LOCATIONS];
-let roster    = [];       // array of name strings from Firebase
-let unsubBoard    = null;
-let unsubConfig   = null;
+let board       = null;
+let session     = null;
+let locations   = [...DEFAULT_LOCATIONS];
+let roster      = [];
+let departments = {}; // { CODE: "Name", ... } — loaded from Firebase
+let unsubBoard  = null;
+let unsubConfig = null;
+let unsubDepts  = null;
 
 // ─── Firebase refs ────────────────────────────────────────────────────────────
-const boardRef     = (code) => ref(db, `boards/${code}/${tsDay()}`);
-const locationsRef = (code) => ref(db, `config/${code}/locations`);
-const rosterRef    = (code) => ref(db, `config/${code}/roster`);
+const boardRef   = (code) => ref(db, `boards/${code}/${tsDay()}`);
+const configRef  = (code) => ref(db, `config/${code}`);
+const deptsRef   = ()     => ref(db, `departments`);
 
-// ─── Subscribe to board + config ─────────────────────────────────────────────
+// ─── Subscribe ────────────────────────────────────────────────────────────────
+function subscribeToDepartments(cb) {
+  if (unsubDepts) unsubDepts();
+  unsubDepts = onValue(deptsRef(), snap => {
+    departments = snap.val() || {};
+    if (cb) cb();
+  });
+}
+
 function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
@@ -252,8 +262,7 @@ function subscribeToBoard(deptCode) {
     document.querySelector(".sync-pip")?.classList.add("offline");
   });
 
-  // Subscribe to config (locations + roster) for this dept code
-  unsubConfig = onValue(ref(db, `config/${deptCode}`), snap => {
+  unsubConfig = onValue(configRef(deptCode), snap => {
     const cfg = snap.val() || {};
     locations = cfg.locations ? Object.values(cfg.locations) : [...DEFAULT_LOCATIONS];
     roster    = cfg.roster    ? Object.values(cfg.roster).sort() : [];
@@ -263,48 +272,46 @@ function subscribeToBoard(deptCode) {
 // ─── Write helpers ────────────────────────────────────────────────────────────
 async function writeBoard(updater) {
   if (!session?.deptCode) return;
-  const r       = boardRef(session.deptCode);
-  const snap    = await get(r);
-  const current = snap.val() || { providers: {} };
-  await set(r, updater(current));
+  const r = boardRef(session.deptCode);
+  const snap = await get(r);
+  await set(r, updater(snap.val() || { providers: {} }));
 }
 
 async function saveLocations(locs) {
-  const obj = {};
-  locs.forEach((l, i) => { obj[i] = l; });
-  await set(locationsRef(session.deptCode), obj);
+  const obj = {}; locs.forEach((l, i) => { obj[i] = l; });
+  await set(ref(db, `config/${session.deptCode}/locations`), obj);
 }
 
 async function saveRosterEntry(name) {
-  await push(rosterRef(session.deptCode), name);
+  await push(ref(db, `config/${session.deptCode}/roster`), name);
 }
 
 async function deleteRosterEntry(name) {
-  const snap = await get(rosterRef(session.deptCode));
+  const snap = await get(ref(db, `config/${session.deptCode}/roster`));
   const data = snap.val() || {};
   for (const [k, v] of Object.entries(data)) {
     if (v === name) { await remove(ref(db, `config/${session.deptCode}/roster/${k}`)); break; }
   }
 }
 
-async function deleteLocation(loc) {
-  const snap = await get(locationsRef(session.deptCode));
-  const data = snap.val() || {};
-  for (const [k, v] of Object.entries(data)) {
-    if (v === loc) { await remove(ref(db, `config/${session.deptCode}/locations/${k}`)); break; }
-  }
-  // If no locations stored yet in Firebase, work from DEFAULT_LOCATIONS
-  if (!snap.val()) {
-    const updated = DEFAULT_LOCATIONS.filter(l => l !== loc);
-    await saveLocations(updated);
-  }
+async function saveDepartment(code, name) {
+  await set(ref(db, `departments/${code}`), name);
+}
+
+async function deleteDepartment(code) {
+  await remove(ref(db, `departments/${code}`));
+  await remove(ref(db, `config/${code}`));
+  await remove(ref(db, `boards/${code}`));
+}
+
+async function clearBoard(deptCode) {
+  await remove(boardRef(deptCode));
 }
 
 // ─── Board actions ────────────────────────────────────────────────────────────
 async function joinBoard(name, location) {
   const id = uid();
-  session.id   = id;
-  session.name = name;
+  session.id = id; session.name = name;
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   await writeBoard(b => ({
     ...b,
@@ -385,26 +392,22 @@ function locationOptions(selected) {
   });
 }
 
-// ─── Name input with roster dropdown ─────────────────────────────────────────
+// ─── Name input with smart roster dropdown ────────────────────────────────────
 function buildNameInput(placeholder) {
-  const wrap    = el("div", { class: "name-input-wrap" });
-  const input   = el("input", { class: "text-input", type: "text", placeholder, autocomplete: "off" });
-  let dropdown  = null;
+  const wrap  = el("div", { class: "name-input-wrap" });
+  const input = el("input", { class: "text-input", type: "text", placeholder, autocomplete: "off" });
+  let dropdown = null;
 
   function closeDropdown() {
     if (dropdown) { dropdown.remove(); dropdown = null; }
   }
 
-  function showDropdown(filter) {
+  function showDropdown(query) {
     closeDropdown();
-    const matches = filter
-      ? roster.filter(n => n.toLowerCase().includes(filter.toLowerCase()))
-      : roster;
-
-    if (!matches.length && filter) return; // no matches, let them type freely
+    const matches = roster.filter(n => rosterMatches(n, query));
+    if (!matches.length && query) return;
 
     dropdown = el("div", { class: "roster-dropdown" });
-
     matches.slice(0, 10).forEach(name => {
       const opt = el("button", { class: "roster-option", type: "button" }, name);
       opt.addEventListener("mousedown", e => {
@@ -415,13 +418,9 @@ function buildNameInput(placeholder) {
       dropdown.appendChild(opt);
     });
 
-    // Always show "Enter manually" if there's a typed value not in roster
-    if (filter && !roster.includes(filter)) {
-      const manual = el("button", { class: "roster-option manual", type: "button" }, `Use "${filter}"`);
-      manual.addEventListener("mousedown", e => {
-        e.preventDefault();
-        closeDropdown();
-      });
+    if (query && !roster.includes(query)) {
+      const manual = el("button", { class: "roster-option manual", type: "button" }, `Use "${query}"`);
+      manual.addEventListener("mousedown", e => { e.preventDefault(); closeDropdown(); });
       dropdown.appendChild(manual);
     }
 
@@ -431,9 +430,52 @@ function buildNameInput(placeholder) {
   input.addEventListener("focus", () => showDropdown(input.value));
   input.addEventListener("input", () => showDropdown(input.value));
   input.addEventListener("blur",  () => setTimeout(closeDropdown, 150));
-
   wrap.appendChild(input);
   return { wrap, input };
+}
+
+// ─── Drag-to-reorder list builder ────────────────────────────────────────────
+function buildDraggableList(items, onReorder, renderItem) {
+  const list = el("div", { class: "admin-list" });
+  let dragSrc = null;
+
+  function rebuild(arr) {
+    list.innerHTML = "";
+    arr.forEach((item, i) => {
+      const row = el("div", { class: "admin-list-item" });
+      row.setAttribute("draggable", "true");
+      row.dataset.index = i;
+
+      const handle = el("span", { class: "drag-handle" }, "⠿");
+      row.appendChild(handle);
+      row.appendChild(renderItem(item, arr));
+
+      row.addEventListener("dragstart", e => {
+        dragSrc = i;
+        setTimeout(() => row.classList.add("dragging"), 0);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      row.addEventListener("dragend", () => row.classList.remove("dragging"));
+      row.addEventListener("dragover", e => { e.preventDefault(); row.classList.add("drag-over"); });
+      row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+      row.addEventListener("drop", e => {
+        e.preventDefault();
+        row.classList.remove("drag-over");
+        if (dragSrc === null || dragSrc === i) return;
+        const newArr = [...arr];
+        const [moved] = newArr.splice(dragSrc, 1);
+        newArr.splice(i, 0, moved);
+        dragSrc = null;
+        onReorder(newArr);
+        rebuild(newArr);
+      });
+
+      list.appendChild(row);
+    });
+  }
+
+  rebuild(items);
+  return { list, rebuild };
 }
 
 // ─── Render: Code screen ─────────────────────────────────────────────────────
@@ -444,12 +486,12 @@ function renderCodeScreen(errorMsg = "") {
   function tryCode() {
     const code = input.value.trim().toUpperCase();
     if (code === ADMIN_CODE) {
-      session = { deptCode: "_admin", isAdmin: true };
-      renderAdminCodeSelect();
+      session = { isAdmin: true };
+      subscribeToDepartments(() => renderAdminDeptSelect());
       return;
     }
-    if (DEPARTMENT_CODES[code]) {
-      session = { deptCode: code, deptName: DEPARTMENT_CODES[code] };
+    if (departments[code]) {
+      session = { deptCode: code, deptName: departments[code] };
       subscribeToBoard(code);
       renderJoinScreen();
     } else {
@@ -463,7 +505,7 @@ function renderCodeScreen(errorMsg = "") {
       el("div", { class: "auth-card" },
         el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "💨"),
         el("div", { class: "auth-title" }, "Gas Breaker"),
-        el("div", { class: "auth-sub" }, "Anesthesia Break Coordination"),
+        el("div", { class: "auth-sub"   }, "Anesthesia Break Coordination"),
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Department Code"),
         input,
@@ -475,30 +517,35 @@ function renderCodeScreen(errorMsg = "") {
   input.focus();
 }
 
-// ─── Render: Admin — pick which dept to configure ────────────────────────────
-function renderAdminCodeSelect(errorMsg = "") {
+// ─── Render: Admin — dept select ─────────────────────────────────────────────
+function renderAdminDeptSelect() {
+  const deptList = Object.entries(departments);
+  if (!deptList.length) { renderAdminPage(null); return; }
+
   const select = el("select", { class: "text-input" },
-    ...Object.entries(DEPARTMENT_CODES).map(([code, name]) => {
+    ...deptList.map(([code, name]) => {
       const o = document.createElement("option");
       o.value = code; o.textContent = `${name} (${code})`; return o;
     })
   );
+
   document.getElementById("app").innerHTML = "";
   document.getElementById("app").appendChild(
     el("div", { class: "auth-root" },
       el("div", { class: "auth-card" },
         el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "⚙️"),
         el("div", { class: "auth-title" }, "Admin"),
-        el("div", { class: "auth-sub" }, "Select a department to configure"),
+        el("div", { class: "auth-sub"   }, "Select a department to manage"),
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Department"),
         select,
         el("button", { class: "btn-primary full", onClick: () => {
           session.deptCode = select.value;
-          session.deptName = DEPARTMENT_CODES[select.value];
+          session.deptName = departments[select.value];
           subscribeToBoard(select.value);
-          renderAdminPage();
+          renderAdminPage(select.value);
         }}, "Manage →"),
+        el("button", { class: "btn-ghost", style: { width: "100%", marginTop: "10px" }, onClick: () => renderAdminPage(null) }, "Manage Departments →"),
         el("button", { class: "btn-view-only", onClick: () => renderCodeScreen() }, "← Back"),
       )
     )
@@ -506,90 +553,172 @@ function renderAdminCodeSelect(errorMsg = "") {
 }
 
 // ─── Render: Admin page ───────────────────────────────────────────────────────
-function renderAdminPage() {
+function renderAdminPage(deptCode) {
   const app = document.getElementById("app");
   app.innerHTML = "";
 
-  function rebuild() { renderAdminPage(); }
+  const isDeptAdmin = !!deptCode;
+
+  // ── Departments section ──
+  function buildDepartmentsSection() {
+    const deptEntries = Object.entries(departments);
+
+    const { list } = buildDraggableList(
+      deptEntries,
+      () => {}, // dept order doesn't need persisting
+      ([code, name], arr) => {
+        const row = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flex: "1", gap: "8px" } },
+          el("span", {}, name, el("span", { class: "dept-badge" }, code)),
+          el("button", { class: "btn-danger", onClick: () => {
+            showConfirm(
+              "Delete Department",
+              `This will permanently delete "${name}" (${code}) and ALL its board data and config. This cannot be undone.`,
+              async () => {
+                await deleteDepartment(code);
+                showToast(`${name} deleted`);
+                setTimeout(() => renderAdminPage(null), 300);
+              }
+            );
+          }}, "Delete"),
+        );
+        return row;
+      }
+    );
+
+    const newCodeInput = el("input", { class: "admin-add-input", type: "text", placeholder: "Code (e.g. CARDIAC)", style: { flex: "1" } });
+    const newNameInput = el("input", { class: "admin-add-input", type: "text", placeholder: "Name (e.g. Cardiac OR)", style: { flex: "2" } });
+
+    async function addDept() {
+      const code = newCodeInput.value.trim().toUpperCase();
+      const name = newNameInput.value.trim();
+      if (!code || !name) return;
+      if (departments[code]) { showToast("Code already exists"); return; }
+      await saveDepartment(code, name);
+      showToast(`${name} added`);
+      newCodeInput.value = ""; newNameInput.value = "";
+      setTimeout(() => renderAdminPage(null), 300);
+    }
+    newNameInput.addEventListener("keydown", e => { if (e.key === "Enter") addDept(); });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Departments"),
+      el("div", { class: "admin-section-sub" }, "Each department gets its own board and code. Share the code with that department's staff."),
+      deptEntries.length ? list : el("div", { style: { color: "#a39688", fontSize: "13px", marginBottom: "14px" } }, "No departments yet."),
+      el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } },
+        newCodeInput, newNameInput,
+        el("button", { class: "btn-primary", onClick: addDept }, "Add"),
+      ),
+    );
+  }
 
   // ── Locations section ──
   function buildLocationsSection() {
-    const items = locations.map(loc =>
-      el("div", { class: "admin-list-item" },
-        el("span", {}, loc),
-        el("button", { class: "btn-danger", onClick: async () => {
-          await deleteLocation(loc);
-          showToast(`${loc} removed`);
-          setTimeout(rebuild, 300);
-        }}, "Remove"),
-      )
+    let currentLocs = [...locations];
+
+    const { list, rebuild } = buildDraggableList(
+      currentLocs,
+      async (newOrder) => {
+        currentLocs = newOrder;
+        await saveLocations(newOrder);
+      },
+      (loc, arr) => {
+        return el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flex: "1", gap: "8px" } },
+          el("span", {}, loc),
+          el("button", { class: "btn-danger", onClick: async () => {
+            const newLocs = arr.filter(l => l !== loc);
+            await saveLocations(newLocs);
+            currentLocs = newLocs;
+            rebuild(newLocs);
+            showToast(`${loc} removed`);
+          }}, "Remove"),
+        );
+      }
     );
 
     const newLocInput = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Cardiac OR 1" });
-    newLocInput.addEventListener("keydown", async e => {
-      if (e.key !== "Enter") return;
+    async function addLoc() {
       const val = newLocInput.value.trim();
-      if (!val || locations.includes(val)) return;
-      const updated = [...locations, val];
-      await saveLocations(updated);
-      showToast(`${val} added`);
+      if (!val || currentLocs.includes(val)) return;
+      const newLocs = [...currentLocs, val];
+      await saveLocations(newLocs);
+      currentLocs = newLocs;
+      rebuild(newLocs);
       newLocInput.value = "";
-      setTimeout(rebuild, 300);
-    });
+      showToast(`${val} added`);
+    }
+    newLocInput.addEventListener("keydown", e => { if (e.key === "Enter") addLoc(); });
 
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Locations"),
-      el("div", { class: "admin-section-sub" }, "These appear in the location dropdown for all users."),
-      el("div", { class: "admin-list" }, ...items),
+      el("div", { class: "admin-section-sub" }, "Drag ⠿ to reorder. These appear in the location dropdown for all users."),
+      list,
       el("div", { class: "admin-add-row" },
         newLocInput,
-        el("button", { class: "btn-primary", onClick: async () => {
-          const val = newLocInput.value.trim();
-          if (!val || locations.includes(val)) return;
-          const updated = [...locations, val];
-          await saveLocations(updated);
-          showToast(`${val} added`);
-          newLocInput.value = "";
-          setTimeout(rebuild, 300);
-        }}, "Add"),
+        el("button", { class: "btn-primary", onClick: addLoc }, "Add"),
       ),
     );
   }
 
   // ── Roster section ──
   function buildRosterSection() {
-    const items = roster.map(name =>
-      el("div", { class: "admin-list-item" },
-        el("span", {}, name),
-        el("button", { class: "btn-danger", onClick: async () => {
-          await deleteRosterEntry(name);
-          showToast(`${name} removed`);
-          setTimeout(rebuild, 300);
-        }}, "Remove"),
-      )
+    let currentRoster = [...roster];
+
+    const { list, rebuild } = buildDraggableList(
+      currentRoster,
+      () => {},
+      (name, arr) => {
+        return el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flex: "1", gap: "8px" } },
+          el("span", {}, name),
+          el("button", { class: "btn-danger", onClick: async () => {
+            await deleteRosterEntry(name);
+            currentRoster = currentRoster.filter(n => n !== name);
+            rebuild(currentRoster);
+            showToast(`${name} removed`);
+          }}, "Remove"),
+        );
+      }
     );
 
     const newNameInput = el("input", { class: "admin-add-input", type: "text", placeholder: "Last, First (e.g. Smith, John)" });
-    async function addRosterEntry() {
+    async function addName() {
       const val = newNameInput.value.trim();
-      if (!val || roster.includes(val)) return;
+      if (!val || currentRoster.includes(val)) return;
       await saveRosterEntry(val);
-      showToast(`${val} added to roster`);
+      currentRoster = [...currentRoster, val].sort();
+      rebuild(currentRoster);
       newNameInput.value = "";
-      setTimeout(rebuild, 300);
+      showToast(`${val} added to roster`);
     }
-    newNameInput.addEventListener("keydown", e => { if (e.key === "Enter") addRosterEntry(); });
+    newNameInput.addEventListener("keydown", e => { if (e.key === "Enter") addName(); });
 
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Provider Roster"),
-      el("div", { class: "admin-section-sub" }, "Names appear as suggestions when adding a provider to the board. Format: Last, First."),
-      roster.length === 0
-        ? el("div", { style: { color: "#a39688", fontSize: "13px", marginBottom: "14px" } }, "No providers in roster yet.")
-        : el("div", { class: "admin-list" }, ...items),
+      el("div", { class: "admin-section-sub" }, "Names appear as suggestions when adding a provider. Format: Last, First."),
+      currentRoster.length
+        ? list
+        : el("div", { style: { color: "#a39688", fontSize: "13px", marginBottom: "14px" } }, "No providers in roster yet."),
       el("div", { class: "admin-add-row" },
         newNameInput,
-        el("button", { class: "btn-primary", onClick: addRosterEntry }, "Add"),
+        el("button", { class: "btn-primary", onClick: addName }, "Add"),
       ),
+    );
+  }
+
+  // ── Clear board section ──
+  function buildClearBoardSection() {
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Clear Board"),
+      el("div", { class: "admin-section-sub" }, "Removes all providers from today's board immediately. The board will auto-clear at midnight regardless."),
+      el("button", { class: "btn-warn", onClick: () => {
+        showConfirm(
+          "Clear Today's Board",
+          `This will remove all providers from the ${session.deptName} board right now. This cannot be undone.`,
+          async () => {
+            await clearBoard(session.deptCode);
+            showToast("Board cleared");
+          }
+        );
+      }}, "🗑 Clear Today's Board"),
     );
   }
 
@@ -597,19 +726,21 @@ function renderAdminPage() {
     el("div", {},
       el("header", { class: "header" },
         el("div", { class: "header-inner" },
-          el("div", { class: "logo-wrap" },
-            el("button", { class: "admin-back-btn", onClick: () => renderCodeScreen() }, "← Back"),
-          ),
+          el("button", { class: "admin-back-btn", onClick: () => {
+            if (isDeptAdmin) renderAdminDeptSelect();
+            else renderCodeScreen();
+          }}, isDeptAdmin ? "← Departments" : "← Back"),
           el("div", { class: "header-right" },
-            el("span", { class: "session-name" }, `Admin · ${session.deptName}`),
-          )
+            el("span", { class: "session-name" }, isDeptAdmin ? `Admin · ${session.deptName}` : "Admin · Departments"),
+          ),
         )
       ),
       el("div", { class: "admin-root" },
-        el("div", { style: { fontFamily: "'Libre Baskerville', serif", fontWeight: "700", fontSize: "22px", color: "#2d2420", marginBottom: "4px" } }, "⚙️ Admin Settings"),
-        el("div", { style: { fontSize: "13px", color: "#a39688", marginBottom: "20px" } }, session.deptName),
-        buildLocationsSection(),
-        buildRosterSection(),
+        el("div", { style: { fontFamily: "'Libre Baskerville', serif", fontWeight: "700", fontSize: "22px", color: "#2d2420", marginBottom: "4px" } }, "⚙️ " + (isDeptAdmin ? session.deptName : "Departments")),
+        el("div", { style: { fontSize: "13px", color: "#a39688", marginBottom: "20px" } }, isDeptAdmin ? "Department settings" : "Manage all departments"),
+        isDeptAdmin ? buildLocationsSection()     : buildDepartmentsSection(),
+        isDeptAdmin ? buildRosterSection()        : null,
+        isDeptAdmin ? buildClearBoardSection()    : null,
       )
     )
   );
@@ -619,7 +750,6 @@ function renderAdminPage() {
 function renderJoinScreen() {
   const { wrap: nameWrap, input: nameInput } = buildNameInput("Last, First (e.g. Smith, John)");
   const locSelect = el("select", { class: "text-input" }, ...locationOptions(locations[0] || ""));
-
   nameInput.addEventListener("keydown", e => { if (e.key === "Enter") tryJoin(); });
 
   function tryJoin() {
@@ -637,15 +767,14 @@ function renderJoinScreen() {
         el("div", { class: "auth-sub" }, session?.deptName || "Join today's break board"),
         el("div", { class: "auth-divider" }),
         el("label", { class: "field-label" }, "Your Name"),
-        el("div", { class: "field-hint", style: { marginBottom: "6px" } }, "Format: Last, First (e.g. Smith, John)"),
+        el("div", { class: "field-hint" }, "Format: Last, First (e.g. Smith, John)"),
         nameWrap,
         el("label", { class: "field-label mt" }, "Your Location"),
         locSelect,
         el("button", { class: "btn-primary full", onClick: tryJoin }, "Join Board →"),
         el("div", { class: "auth-hint" }, "Others can also add your name if you forget"),
         el("button", { class: "btn-view-only", onClick: () => {
-          session.id   = null;
-          session.name = "Viewer";
+          session.id = null; session.name = "Viewer";
           sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
           renderBoard();
         }}, "Just view the board →"),
@@ -672,7 +801,6 @@ function renderCard(provider) {
 
   const banner = isReq ? el("div", { class: "requesting-banner" }, "🔔 Requesting a break") : null;
 
-  // Location button / select
   const roomBtn = el("button", { class: "room-btn" },
     provider.location, " ",
     el("span", { style: { color: "#c4b8ad", fontSize: "12px", fontWeight: "400" } }, "▾")
@@ -680,49 +808,30 @@ function renderCard(provider) {
   roomBtn.addEventListener("click", () => {
     const sel = el("select", { class: "location-select" }, ...locationOptions(provider.location));
     sel.addEventListener("change", async () => { await changeLocation(provider.id, sel.value); });
-    roomBtn.replaceWith(sel);
-    sel.focus();
+    roomBtn.replaceWith(sel); sel.focus();
   });
-
-  const nameBlock = el("div", { class: "name-block" },
-    roomBtn,
-    el("div", { class: "provider-name" }, provider.name),
-  );
-
-  const holdBtn = el("button", {
-    class: "side-btn" + (isHold ? " hold-on" : ""),
-    onClick: () => toggleHold(provider.id)
-  }, isHold ? "✋ Hold" : "Hold");
-
-  const reqBtn = !allDone ? el("button", {
-    class: "side-btn" + (isReq ? " request-on" : ""),
-    onClick: () => toggleRequesting(provider.id)
-  }, isReq ? "🔔 Sent" : "Request") : null;
-
-  const undoBtn = lastBreak ? el("button", {
-    class: "side-btn",
-    onClick: () => undoBreak(provider.id, lastBreak.id)
-  }, "↩ Undo") : null;
 
   const pills = BREAKS.map(b => {
     const done    = !!breaks[b.id];
     const isNext  = !allDone && nextBreak?.id === b.id;
     const blocked = !done && !isNext;
-
     let pillClass = "pill";
     if (done)        pillClass += " done";
     else if (isNext) { pillClass += " next"; if (isHold) pillClass += " hold"; else if (isReq) pillClass += " req"; }
-
     const pill = el("button", { class: pillClass }, done ? `✓ ${b.label}` : b.label);
     if (blocked) pill.disabled = true;
     if (isNext)  pill.addEventListener("click", () => giveBreak(provider.id, b.id));
     return pill;
   });
 
+  const holdBtn = el("button", { class: "side-btn" + (isHold ? " hold-on" : ""), onClick: () => toggleHold(provider.id) }, isHold ? "✋ Hold" : "Hold");
+  const reqBtn  = !allDone ? el("button", { class: "side-btn" + (isReq ? " request-on" : ""), onClick: () => toggleRequesting(provider.id) }, isReq ? "🔔 Sent" : "Request") : null;
+  const undoBtn = lastBreak ? el("button", { class: "side-btn", onClick: () => undoBreak(provider.id, lastBreak.id) }, "↩ Undo") : null;
+
   return el("div", { class: cardClass },
     banner,
     el("div", { class: "card-top" },
-      nameBlock,
+      el("div", { class: "name-block" }, roomBtn, el("div", { class: "provider-name" }, provider.name)),
       el("div", { class: "side-btns" }, holdBtn, reqBtn, undoBtn),
     ),
     el("div", { class: "pill-row" }, ...pills),
@@ -747,19 +856,17 @@ function renderAddPanel() {
       const name = nameInput.value.trim();
       if (!name) { nameInput.focus(); return; }
       await addProvider(name, locSelect.value);
-      panel.innerHTML = "";
-      panel.appendChild(buildToggleBtn());
+      panel.innerHTML = ""; panel.appendChild(buildToggleBtn());
     }
     nameInput.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
 
     return el("div", { class: "add-form" },
       el("div", { class: "add-form-title" }, "Add Provider"),
       el("div", { class: "field-hint" }, "Format: Last, First (e.g. Smith, John)"),
-      nameWrap,
-      locSelect,
+      nameWrap, locSelect,
       el("div", { class: "btn-row" },
         el("button", { class: "btn-primary", onClick: doAdd }, "Add to Board"),
-        el("button", { class: "btn-ghost", onClick: () => { panel.innerHTML = ""; panel.appendChild(buildToggleBtn()); } }, "Cancel"),
+        el("button", { class: "btn-ghost",   onClick: () => { panel.innerHTML = ""; panel.appendChild(buildToggleBtn()); } }, "Cancel"),
       ),
     );
   }
@@ -768,9 +875,12 @@ function renderAddPanel() {
   return panel;
 }
 
-// ─── Render: Full board ───────────────────────────────────────────────────────
+// ─── Render: Board ────────────────────────────────────────────────────────────
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
+
+  // location sort key uses the live locations array order
+  const locOrder = (loc) => { const i = locations.indexOf(loc); return i === -1 ? 999 : i; };
 
   const providers = Object.values(board?.providers || {})
     .sort((a, b) => (a.joinedAt||0) - (b.joinedAt||0));
@@ -779,7 +889,7 @@ function renderBoard() {
     ...SECTION_META[i],
     providers: providers
       .filter(p => getSection(p) === i)
-      .sort((a, b) => locationSortKey(a.location) - locationSortKey(b.location))
+      .sort((a, b) => locOrder(a.location) - locOrder(b.location))
   }));
 
   const chips = sections.map(sec => {
@@ -791,24 +901,22 @@ function renderBoard() {
     );
   });
 
-  const boardSections = sections
-    .filter(s => s.providers.length > 0)
-    .map(sec =>
-      el("div", { class: "section" },
-        el("div", { class: "section-header" },
-          el("span", { class: "section-dot", style: { background: sec.dot } }),
-          el("span", { class: "section-title", style: { color: sec.color } }, sec.label),
-          el("span", { class: "section-count" }, String(sec.providers.length)),
-        ),
-        el("div", { class: "card-stack" }, ...sec.providers.map(renderCard)),
-      )
-    );
+  const boardSections = sections.filter(s => s.providers.length > 0).map(sec =>
+    el("div", { class: "section" },
+      el("div", { class: "section-header" },
+        el("span", { class: "section-dot", style: { background: sec.dot } }),
+        el("span", { class: "section-title", style: { color: sec.color } }, sec.label),
+        el("span", { class: "section-count" }, String(sec.providers.length)),
+      ),
+      el("div", { class: "card-stack" }, ...sec.providers.map(renderCard)),
+    )
+  );
 
   const emptyState = providers.length === 0
     ? el("div", { class: "empty-state" },
         el("div", { style: { fontSize: "40px", marginBottom: "12px" } }, "💨"),
         el("div", { class: "empty-title" }, "Board is empty"),
-        el("div", { class: "empty-sub" }, "Add providers below to get started"),
+        el("div", { class: "empty-sub"   }, "Add providers below to get started"),
       )
     : null;
 
@@ -822,7 +930,7 @@ function renderBoard() {
             el("div", { class: "logo-icon" }, "💨"),
             el("div", {},
               el("div", { class: "logo-text" }, "Gas Breaker"),
-              el("div", { class: "logo-sub" }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
+              el("div", { class: "logo-sub"  }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
             ),
           ),
           el("div", { class: "header-right" },
@@ -838,12 +946,18 @@ function renderBoard() {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-(function init() {
+(async function init() {
+  // Load departments from Firebase first, then check session
+  await new Promise(resolve => {
+    subscribeToDepartments(resolve);
+    setTimeout(resolve, 3000); // fallback timeout
+  });
+
   try {
     const stored = sessionStorage.getItem(SESSION_KEY);
     if (stored) {
       session = JSON.parse(stored);
-      if (session?.deptCode && session.deptCode !== "_admin" && DEPARTMENT_CODES[session.deptCode]) {
+      if (session?.deptCode && departments[session.deptCode]) {
         subscribeToBoard(session.deptCode);
         return;
       }
