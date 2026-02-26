@@ -172,6 +172,14 @@
     .btn-row { display: flex; gap: 8px; }
 
     /* ── Toast ── */
+    .btn-view-only {
+      background: none; border: none; color: #a39688;
+      font-size: 13px; font-weight: 700; margin-top: 8px;
+      text-decoration: underline; padding: 4px;
+      display: block; width: 100%; text-align: center;
+    }
+    .btn-view-only:hover { color: #7c6c62; }
+
     #toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
       background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px;
@@ -464,6 +472,12 @@ function renderJoinScreen() {
         locSelect,
         el("button", { class: "btn-primary full", onClick: tryJoin }, "Join Board →"),
         el("div", { class: "auth-hint" }, "Others can also add your name if you forget"),
+        el("button", { class: "btn-view-only", onClick: () => {
+          session.id   = null;
+          session.name = "Viewer";
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+          renderBoard();
+        }}, "Just view the board →"),
       )
     )
   );
@@ -608,7 +622,7 @@ function renderAddPanel() {
 // ─── Render: Full board ───────────────────────────────────────────────────────
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
-  if (!session?.id)       { renderJoinScreen(); return; }
+  // session.id is null for view-only users — that's fine, show the board anyway
 
   const providers = Object.values(board?.providers || {})
     .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
@@ -670,7 +684,7 @@ function renderBoard() {
         ),
         el("div", { class: "header-right" },
           el("div", { class: "sync-pip" }),
-          el("span", { class: "session-name" }, session.name),
+          el("span", { class: "session-name" }, session.id ? session.name : "Viewing"),
         )
       )
     ),
