@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gas Breaker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #f8f4ef; font-family: 'Nunito', sans-serif; color: #2d2420; -webkit-tap-highlight-color: transparent; }
+    button, select, input { font-family: inherit; }
+    button { cursor: pointer; }
+    button:active { opacity: 0.82; transform: scale(0.97); }
+
+    /* ── Layout ── */
+    #app { min-height: 100vh; padding-bottom: 60px; }
+
+    /* ── Header ── */
+    .header {
+      background: #fff; border-bottom: 1px solid #e8e0d6;
+      position: sticky; top: 0; z-index: 40;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .header-inner {
+      max-width: 680px; margin: 0 auto; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo-wrap { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { font-size: 28px; }
+    .logo-text { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 20px; color: #2d2420; line-height: 1; }
+    .logo-sub  { font-size: 11px; color: #a39688; margin-top: 2px; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .sync-pip { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade8099; }
+    .sync-pip.offline { background: #f87171; box-shadow: 0 0 6px #f8717199; }
+    .session-name { font-size: 13px; color: #7c6c62; font-weight: 700; }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      max-width: 680px; margin: 0 auto; padding: 10px 16px;
+      display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    }
+    .chip {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+    }
+    .chip-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .chip-count { font-size: 14px; font-weight: 900; }
+
+    /* ── Main board ── */
+    .main { max-width: 680px; margin: 0 auto; padding: 8px 16px; }
+    .section { margin-bottom: 24px; }
+    .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .section-dot   { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; }
+    .section-count { background: #f1ede8; color: #a39688; border-radius: 12px; padding: 1px 8px; font-size: 12px; font-weight: 800; }
+    .card-stack { display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── Provider card ── */
+    .card {
+      background: #fff; border: 1.5px solid #e8e0d6;
+      border-radius: 14px; padding: 12px 14px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .card.hold       { border-color: #fca5a5; background: #fff5f5; }
+    .card.requesting { border-color: #5eead4; background: #f0fdfa; }
+    .card.hold.requesting { border-color: #fca5a5; background: #fff5f5; } /* hold wins visually */
+
+    .requesting-banner {
+      background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4;
+      border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+    .name-block { flex: 1; min-width: 0; }
+    .room-btn {
+      background: none; border: none;
+      font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 16px;
+      color: #2d2420; padding: 0; text-align: left; display: block;
+      margin-bottom: 3px; line-height: 1.2;
+    }
+    .provider-name { font-size: 13px; color: #7c6c62; font-weight: 600; }
+    .location-select {
+      font-size: 15px; color: #2d2420; border: 1px solid #e8e0d6;
+      border-radius: 6px; padding: 3px 6px; background: #faf7f4;
+      width: 100%; font-weight: 700; margin-bottom: 3px; font-family: inherit;
+    }
+    .side-btns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+    .side-btn {
+      border: 1.5px solid #e8e0d6; border-radius: 8px;
+      padding: 5px 10px; font-size: 12px; font-weight: 800;
+      white-space: nowrap; background: #f1ede8; color: #a39688;
+      transition: none;
+    }
+    .side-btn.hold-on    { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .side-btn.request-on { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
+
+    .pill-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill {
+      border-radius: 8px; padding: 7px 14px; font-size: 13px;
+      border: 1.5px solid #e8e0d6; background: #f1ede8; color: #c4b8ad;
+      font-family: inherit; font-weight: 400; transition: none;
+    }
+    .pill.next        { background: #fef9f0; color: #92400e; border-color: #fcd34d; font-weight: 700; cursor: pointer; }
+    .pill.next.hold   { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .pill.next.req    { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
+    .pill.done        { background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 700; }
+
+    /* ── Add provider ── */
+    .add-panel { margin-top: 28px; border-top: 1px dashed #d4ccc6; padding-top: 20px; }
+    .add-toggle-btn {
+      width: 100%; background: #fff; border: 1.5px dashed #c4b8ad;
+      border-radius: 12px; padding: 14px; font-size: 14px; color: #a39688; font-weight: 800;
+    }
+    .add-form {
+      background: #fff; border: 1.5px solid #e8e0d6;
+      border-radius: 14px; padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .add-form-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 60px 0 40px; }
+    .empty-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 18px; color: #7c6c62; }
+    .empty-sub   { font-size: 14px; color: #a39688; margin-top: 6px; }
+
+    /* ── Auth screens ── */
+    .auth-root {
+      min-height: 100vh; background: #f8f4ef;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .auth-card {
+      background: #fff; border: 1.5px solid #e8e0d6; border-radius: 20px;
+      padding: 32px 28px; width: 100%; max-width: 380px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07); text-align: center;
+    }
+    .auth-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 26px; color: #2d2420; margin-bottom: 4px; }
+    .auth-sub   { font-size: 14px; color: #a39688; }
+    .auth-divider { height: 1px; background: #e8e0d6; margin: 20px 0; }
+    .auth-hint  { font-size: 11px; color: #c4b8ad; text-align: center; margin-top: 12px; }
+
+    /* ── Form elements ── */
+    label.field-label {
+      display: block; font-size: 12px; font-weight: 800; color: #7c6c62;
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left;
+    }
+    .field-label.mt { margin-top: 14px; }
+    input.text-input, select.text-input {
+      width: 100%; background: #faf7f4; border: 1.5px solid #e8e0d6;
+      border-radius: 10px; padding: 11px 13px; font-size: 14px; color: #2d2420;
+      outline: none; font-family: inherit; font-weight: 700;
+    }
+    input.text-input.code-input {
+      text-transform: uppercase; letter-spacing: 3px;
+      text-align: center; font-size: 18px; font-weight: 800;
+    }
+    .error-msg {
+      font-size: 12px; color: #dc2626; background: #fee2e2;
+      border-radius: 8px; padding: 8px 12px; margin-top: 4px; font-weight: 700; text-align: left;
+    }
+    .btn-primary {
+      background: #2d2420; color: #fff; border: none;
+      border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800;
+    }
+    .btn-primary.full { width: 100%; padding: 14px; font-size: 16px; margin-top: 20px; }
+    .btn-primary.mt   { margin-top: 16px; width: 100%; padding: 14px; font-size: 16px; }
+    .btn-ghost {
+      background: #f1ede8; color: #7c6c62; border: none;
+      border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 800;
+    }
+    .btn-row { display: flex; gap: 8px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px;
+      font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      z-index: 100; white-space: nowrap; opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script type="module">
+// ─── Firebase setup ─────────────────────────────────────────────────────────
+import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue, set, get }   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey:            "AIzaSyBzSQU4RoSGGoPgbcMDUHIDxAl3PAqBqsk",
+  authDomain:        "gas-breaker.firebaseapp.com",
+  databaseURL:       "https://gas-breaker-default-rtdb.firebaseio.com",
+  projectId:         "gas-breaker",
+  storageBucket:     "gas-breaker.firebasestorage.app",
+  messagingSenderId: "502120571871",
+  appId:             "1:502120571871:web:710d607cbc4bb0fb52da6a"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db          = getDatabase(firebaseApp);
+
+// ─── Department codes ───────────────────────────────────────────────────────
+// Add more sites here as you expand: "CODE": "Site Name"
+const DEPARTMENT_CODES = {
+  "GASPASS": "Demo Department",
+  "MAINOR":  "Main OR",
+  "WALTERS": "Walters OR",
+};
+
+// ─── Locations ──────────────────────────────────────────────────────────────
+const LOCATIONS = [
+  "Main OR 1","Main OR 2","Main OR 3","Main OR 4","Main OR 5",
+  "Main OR 6","Main OR 7","Main OR 8","Main OR 9","Main OR 10","Main OR 11",
+  "Walters OR 1","Walters OR 2","Walters OR 3","Walters OR 4","Walters OR 5",
+  "Walters OR 6","Walters OR 7","Walters OR 8","Walters OR 9",
+  "Radiology","Floating",
+];
+
+const BREAKS = [
+  { id: "am",    label: "AM"    },
+  { id: "lunch", label: "Lunch" },
+  { id: "pm",    label: "PM"    },
+];
+
+const SECTION_META = [
+  { label: "Needs AM Break",  color: "#b45309", light: "#fef3c7", dot: "#f59e0b" },
+  { label: "Needs Lunch",     color: "#0369a1", light: "#e0f2fe", dot: "#38bdf8" },
+  { label: "Needs PM Break",  color: "#7c3aed", light: "#ede9fe", dot: "#a78bfa" },
+  { label: "All Breaks Done", color: "#15803d", light: "#dcfce7", dot: "#4ade80" },
+];
+
+const SESSION_KEY = "gasbreaker-session-v2";
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+const uid    = () => Math.random().toString(36).slice(2, 9);
+const tsDay  = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+
+function locationSortKey(loc) {
+  if (!loc) return 9999;
+  const m = loc.match(/^Main OR (\d+)$/);    if (m) return parseInt(m[1]);
+  const w = loc.match(/^Walters OR (\d+)$/); if (w) return 100 + parseInt(w[1]);
+  if (loc === "Radiology") return 200;
+  if (loc === "Floating")  return 300;
+  return 400;
+}
+
+function getSection(provider) {
+  return Math.min(BREAKS.filter(b => (provider.breaks || {})[b.id]).length, 3);
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let board   = null;   // live board data from Firebase
+let session = null;   // { id, name, deptCode }
+let unsubscribe = null;
+
+// ─── Firebase helpers ────────────────────────────────────────────────────────
+function boardRef(deptCode) {
+  // Each department gets its own node, keyed by code + today's date
+  return ref(db, `boards/${deptCode}/${tsDay()}`);
+}
+
+function subscribeToBoard(deptCode) {
+  if (unsubscribe) unsubscribe();
+  const r = boardRef(deptCode);
+  const unsub = onValue(r, snap => {
+    const data = snap.val();
+    if (data) {
+      board = data;
+    } else {
+      board = { providers: {} };
+    }
+    renderBoard();
+  }, err => {
+    console.error("Firebase error:", err);
+    document.querySelector(".sync-pip")?.classList.add("offline");
+  });
+  unsubscribe = () => unsub(); // onValue returns unsubscribe fn directly in v10
+  // Actually in v10, onValue returns the unsubscribe function
+  unsubscribe = unsub;
+}
+
+async function writeBoard(updater) {
+  if (!session) return;
+  const r   = boardRef(session.deptCode);
+  const snap = await get(r);
+  const current = snap.val() || { providers: {} };
+  const next    = updater(current);
+  await set(r, next);
+}
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+async function joinBoard(name, location) {
+  const id = uid();
+  session.id   = id;
+  session.name = name;
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+  await writeBoard(b => ({
+    ...b,
+    providers: {
+      ...(b.providers || {}),
+      [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() }
+    }
+  }));
+  renderBoard();
+}
+
+async function addProvider(name, location) {
+  const id = uid();
+  await writeBoard(b => ({
+    ...b,
+    providers: {
+      ...(b.providers || {}),
+      [id]: { id, name, location, breaks: {}, hold: false, requesting: false, joinedAt: Date.now() }
+    }
+  }));
+}
+
+async function giveBreak(providerId, breakId) {
+  await writeBoard(b => {
+    const p = (b.providers || {})[providerId];
+    if (!p) return b;
+    return { ...b, providers: { ...b.providers, [providerId]: { ...p, requesting: false, breaks: { ...(p.breaks||{}), [breakId]: true } } } };
+  });
+  showToast(`${BREAKS.find(br => br.id === breakId)?.label} break marked ✓`);
+}
+
+async function undoBreak(providerId, breakId) {
+  await writeBoard(b => {
+    const p = (b.providers || {})[providerId];
+    if (!p) return b;
+    const nb = { ...(p.breaks||{}) };
+    delete nb[breakId];
+    return { ...b, providers: { ...b.providers, [providerId]: { ...p, breaks: nb } } };
+  });
+  showToast("Break undone");
+}
+
+async function toggleHold(providerId) {
+  await writeBoard(b => {
+    const p = (b.providers || {})[providerId];
+    if (!p) return b;
+    return { ...b, providers: { ...b.providers, [providerId]: { ...p, hold: !p.hold } } };
+  });
+}
+
+async function toggleRequesting(providerId) {
+  await writeBoard(b => {
+    const p = (b.providers || {})[providerId];
+    if (!p) return b;
+    return { ...b, providers: { ...b.providers, [providerId]: { ...p, requesting: !p.requesting } } };
+  });
+}
+
+async function changeLocation(providerId, location) {
+  await writeBoard(b => {
+    const p = (b.providers || {})[providerId];
+    if (!p) return b;
+    return { ...b, providers: { ...b.providers, [providerId]: { ...p, location } } };
+  });
+}
+
+// ─── Render helpers ──────────────────────────────────────────────────────────
+function el(tag, attrs, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class")       e.className = v;
+    else if (k === "style")  Object.assign(e.style, v);
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function locationOptions(selected) {
+  return LOCATIONS.map(l => {
+    const o = document.createElement("option");
+    o.value = l; o.textContent = l;
+    if (l === selected) o.selected = true;
+    return o;
+  });
+}
+
+// ─── Render: Code screen ─────────────────────────────────────────────────────
+function renderCodeScreen(errorMsg = "") {
+  const input = el("input", { class: "text-input code-input", placeholder: "Enter code", type: "text", autocomplete: "off" });
+  input.addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
+
+  function tryCode() {
+    const code = input.value.trim().toUpperCase();
+    if (DEPARTMENT_CODES[code]) {
+      session = { deptCode: code, deptName: DEPARTMENT_CODES[code] };
+      subscribeToBoard(code);
+      renderJoinScreen();
+    } else {
+      renderCodeScreen("Incorrect code. Check the department board.");
+    }
+  }
+
+  document.getElementById("app").innerHTML = "";
+  document.getElementById("app").appendChild(
+    el("div", { class: "auth-root" },
+      el("div", { class: "auth-card" },
+        el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "💨"),
+        el("div", { class: "auth-title" }, "Gas Breaker"),
+        el("div", { class: "auth-sub" },   "Anesthesia Break Coordination"),
+        el("div", { class: "auth-divider" }),
+        el("label", { class: "field-label" }, "Department Code"),
+        input,
+        errorMsg ? el("div", { class: "error-msg" }, errorMsg) : null,
+        el("button", { class: "btn-primary mt", onClick: tryCode }, "Enter →"),
+      )
+    )
+  );
+  input.focus();
+}
+
+// ─── Render: Join screen ─────────────────────────────────────────────────────
+function renderJoinScreen() {
+  const nameInput = el("input", { class: "text-input", placeholder: "Dr. Smith / CRNA Jones", type: "text" });
+  const locSelect = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
+
+  nameInput.addEventListener("keydown", e => { if (e.key === "Enter") tryJoin(); });
+
+  function tryJoin() {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    joinBoard(name, locSelect.value).then(() => renderBoard());
+  }
+
+  document.getElementById("app").innerHTML = "";
+  document.getElementById("app").appendChild(
+    el("div", { class: "auth-root" },
+      el("div", { class: "auth-card" },
+        el("div", { style: { fontSize: "48px", marginBottom: "8px" } }, "💨"),
+        el("div", { class: "auth-title" }, "Good morning"),
+        el("div", { class: "auth-sub" }, session?.deptName || "Join today's break board"),
+        el("div", { class: "auth-divider" }),
+        el("label", { class: "field-label" }, "Your Name"),
+        nameInput,
+        el("label", { class: "field-label mt" }, "Your Location"),
+        locSelect,
+        el("button", { class: "btn-primary full", onClick: tryJoin }, "Join Board →"),
+        el("div", { class: "auth-hint" }, "Others can also add your name if you forget"),
+      )
+    )
+  );
+  nameInput.focus();
+}
+
+// ─── Render: Provider card ───────────────────────────────────────────────────
+function renderCard(provider) {
+  const breaks      = provider.breaks  || {};
+  const isHold      = !!provider.hold;
+  const isReq       = !!provider.requesting;
+  const section     = getSection(provider);
+  const allDone     = section === 3;
+  const nextBreak   = BREAKS.find(b => !breaks[b.id]);
+  const lastBreak   = [...BREAKS].reverse().find(b => breaks[b.id]);
+
+  // Card classes
+  let cardClass = "card";
+  if (isHold && isReq) cardClass += " hold requesting";
+  else if (isHold)     cardClass += " hold";
+  else if (isReq)      cardClass += " requesting";
+
+  // Requesting banner
+  const banner = isReq
+    ? el("div", { class: "requesting-banner" }, "🔔 Requesting a break")
+    : null;
+
+  // Room / location
+  let locationEl;
+  const roomBtn = el("button", { class: "room-btn" }, provider.location, " ", el("span", { style: { color: "#c4b8ad", fontSize: "12px", fontWeight: "400" } }, "▾"));
+  roomBtn.addEventListener("click", () => {
+    const sel = el("select", { class: "location-select" }, ...locationOptions(provider.location));
+    sel.addEventListener("change", async () => {
+      await changeLocation(provider.id, sel.value);
+    });
+    sel.addEventListener("blur", () => { /* Firebase update already happened */ });
+    roomBtn.replaceWith(sel);
+    sel.focus();
+  });
+  locationEl = roomBtn;
+
+  const nameEl = el("div", { class: "provider-name" }, provider.name);
+  const nameBlock = el("div", { class: "name-block" }, locationEl, nameEl);
+
+  // Side buttons
+  const holdBtn = el("button", {
+    class: "side-btn" + (isHold ? " hold-on" : ""),
+    onClick: () => toggleHold(provider.id)
+  }, isHold ? "✋ Hold" : "Hold");
+
+  const reqBtn = !allDone ? el("button", {
+    class: "side-btn" + (isReq ? " request-on" : ""),
+    onClick: () => toggleRequesting(provider.id)
+  }, isReq ? "🔔 Sent" : "Request") : null;
+
+  const undoBtn = lastBreak ? el("button", {
+    class: "side-btn",
+    onClick: () => undoBreak(provider.id, lastBreak.id)
+  }, "↩ Undo") : null;
+
+  const sideBtns = el("div", { class: "side-btns" }, holdBtn, reqBtn, undoBtn);
+
+  const cardTop = el("div", { class: "card-top" }, nameBlock, sideBtns);
+
+  // Break pills
+  const pills = BREAKS.map(b => {
+    const done    = !!breaks[b.id];
+    const isNext  = !allDone && nextBreak?.id === b.id;
+    const blocked = !done && !isNext;
+
+    let pillClass = "pill";
+    if (done)        pillClass += " done";
+    else if (isNext) { pillClass += " next"; if (isHold) pillClass += " hold"; else if (isReq) pillClass += " req"; }
+
+    const pill = el("button", { class: pillClass, disabled: blocked }, done ? `✓ ${b.label}` : b.label);
+    if (isNext) pill.addEventListener("click", () => giveBreak(provider.id, b.id));
+    return pill;
+  });
+
+  const pillRow = el("div", { class: "pill-row" }, ...pills);
+
+  return el("div", { class: cardClass }, banner, cardTop, pillRow);
+}
+
+// ─── Render: Add provider panel ───────────────────────────────────────────────
+function renderAddPanel() {
+  const panel = el("div", { class: "add-panel" });
+  const toggleBtn = el("button", { class: "add-toggle-btn" }, "+ Add Provider to Board");
+
+  toggleBtn.addEventListener("click", () => {
+    panel.innerHTML = "";
+    const nameInput = el("input", { class: "text-input", placeholder: "Name (e.g. Dr. Smith / CRNA Jones)", type: "text" });
+    const locSelect = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
+
+    async function submit() {
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      await addProvider(name, locSelect.value);
+      // Re-render add panel after adding
+      panel.innerHTML = "";
+      panel.appendChild(toggleBtn2());
+    }
+
+    function toggleBtn2() {
+      const b2 = el("button", { class: "add-toggle-btn" }, "+ Add Provider to Board");
+      b2.addEventListener("click", () => {
+        panel.innerHTML = "";
+        panel.appendChild(buildForm());
+      });
+      return b2;
+    }
+
+    function buildForm() {
+      const ni = el("input", { class: "text-input", placeholder: "Name (e.g. Dr. Smith / CRNA Jones)", type: "text" });
+      const ls = el("select", { class: "text-input" }, ...locationOptions("Main OR 1"));
+      ni.addEventListener("keydown", e => { if (e.key === "Enter") doAdd(); });
+      async function doAdd() {
+        const n = ni.value.trim(); if (!n) { ni.focus(); return; }
+        await addProvider(n, ls.value);
+        panel.innerHTML = ""; panel.appendChild(toggleBtn2());
+      }
+      const form = el("div", { class: "add-form" },
+        el("div", { class: "add-form-title" }, "Add Provider"),
+        ni, ls,
+        el("div", { class: "btn-row" },
+          el("button", { class: "btn-primary", onClick: doAdd }, "Add to Board"),
+          el("button", { class: "btn-ghost",   onClick: () => { panel.innerHTML=""; panel.appendChild(toggleBtn2()); } }, "Cancel"),
+        )
+      );
+      setTimeout(() => ni.focus(), 50);
+      return form;
+    }
+
+    panel.appendChild(buildForm());
+  });
+
+  panel.appendChild(toggleBtn);
+  return panel;
+}
+
+// ─── Render: Full board ───────────────────────────────────────────────────────
+function renderBoard() {
+  if (!session?.deptCode) { renderCodeScreen(); return; }
+  if (!session?.id)       { renderJoinScreen(); return; }
+
+  const providers = Object.values(board?.providers || {})
+    .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+
+  const sections = [0,1,2,3].map(i => ({
+    ...SECTION_META[i],
+    providers: providers
+      .filter(p => getSection(p) === i)
+      .sort((a, b) => locationSortKey(a.location) - locationSortKey(b.location))
+  }));
+
+  // Summary chips
+  const chips = sections.map((sec, i) => {
+    const hasAny = sec.providers.length > 0;
+    return el("div", {
+      class: "chip",
+      style: { background: hasAny ? sec.light : "#f1ede8", color: hasAny ? sec.color : "#c4b8ad" }
+    },
+      el("span", { class: "chip-dot", style: { background: hasAny ? sec.dot : "#d4ccc6" } }),
+      el("span", { class: "chip-count" }, String(sec.providers.length)),
+      el("span", {}, sec.label.replace("Needs ","").replace("All ",""))
+    );
+  });
+
+  // Board sections
+  const boardSections = sections
+    .filter(sec => sec.providers.length > 0)
+    .map(sec => {
+      const cards = sec.providers.map(p => renderCard(p));
+      return el("div", { class: "section" },
+        el("div", { class: "section-header" },
+          el("span", { class: "section-dot", style: { background: sec.dot } }),
+          el("span", { class: "section-title", style: { color: sec.color } }, sec.label),
+          el("span", { class: "section-count" }, String(sec.providers.length)),
+        ),
+        el("div", { class: "card-stack" }, ...cards)
+      );
+    });
+
+  const emptyState = providers.length === 0
+    ? el("div", { class: "empty-state" },
+        el("div", { style: { fontSize: "40px", marginBottom: "12px" } }, "💨"),
+        el("div", { class: "empty-title" }, "Board is empty"),
+        el("div", { class: "empty-sub"   }, "Add providers below to get started"),
+      )
+    : null;
+
+  // Full page
+  const page = el("div", { id: "app-inner" },
+    // Header
+    el("header", { class: "header" },
+      el("div", { class: "header-inner" },
+        el("div", { class: "logo-wrap" },
+          el("div", { class: "logo-icon" }, "💨"),
+          el("div", {},
+            el("div", { class: "logo-text" }, "Gas Breaker"),
+            el("div", { class: "logo-sub"  }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
+          )
+        ),
+        el("div", { class: "header-right" },
+          el("div", { class: "sync-pip" }),
+          el("span", { class: "session-name" }, session.name),
+        )
+      )
+    ),
+    // Summary bar
+    el("div", { class: "summary-bar" }, ...chips),
+    // Main
+    el("main", { class: "main" },
+      emptyState,
+      ...boardSections,
+      renderAddPanel(),
+    )
+  );
+
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  app.appendChild(page);
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+(function init() {
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (stored) {
+      session = JSON.parse(stored);
+      if (session?.deptCode && DEPARTMENT_CODES[session.deptCode] && session.id) {
+        subscribeToBoard(session.deptCode);
+        return; // renderBoard() will be called by the Firebase listener
+      }
+    }
+  } catch {}
+  renderCodeScreen();
+})();
+</script>
+</body>
+</html>
