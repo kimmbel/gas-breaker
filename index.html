@@ -380,8 +380,10 @@ async function changeLocation(providerId, location) {
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === "class")       e.className = v;
-    else if (k === "style")  Object.assign(e.style, v);
+    if (k === "class")           e.className = v;
+    else if (k === "style")      Object.assign(e.style, v);
+    else if (k === "disabled")   e.disabled = !!v;
+    else if (k === "selected")   e.selected = !!v;
     else if (k.startsWith("on")) e.addEventListener(k.slice(2).toLowerCase(), v);
     else e.setAttribute(k, v);
   }
@@ -536,7 +538,8 @@ function renderCard(provider) {
     if (done)        pillClass += " done";
     else if (isNext) { pillClass += " next"; if (isHold) pillClass += " hold"; else if (isReq) pillClass += " req"; }
 
-    const pill = el("button", { class: pillClass, disabled: blocked }, done ? `✓ ${b.label}` : b.label);
+    const pill = el("button", { class: pillClass }, done ? `✓ ${b.label}` : b.label);
+    if (blocked) pill.disabled = true;
     if (isNext) pill.addEventListener("click", () => giveBreak(provider.id, b.id));
     return pill;
   });
