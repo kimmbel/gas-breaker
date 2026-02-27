@@ -35,7 +35,6 @@
 
     /* ── Main board ── */
     .main { max-width: 780px; margin: 0 auto; padding: 10px 16px; }
-    .show-hidden-btn { background: none; border: none; color: #a39688; font-size: 12px; font-weight: 800; padding: 6px 0; text-decoration: underline; display: block; margin: 0 auto 8px; }
 
     /* ── OR Card ── */
     .or-card {
@@ -50,7 +49,7 @@
     .or-card.hold.requesting      { border-color: #fca5a5; background: #fff5f5; }
     .or-card.hold-warn.requesting { border-color: #fcd34d; background: #fffbeb; }
     .or-card.empty   { background: #faf8f6; border-color: #ede8e3; }
-    .or-card.hidden  { opacity: 0.45; background: #f5f2ef; border-color: #e2dcd6; border-style: dashed; }
+    .or-card.empty   { opacity: 0.5; background: #f5f2ef; border-color: #e2dcd6; }
 
     /* Card layout — vertical stack */
     .card-inner { display: flex; align-items: flex-start; gap: 8px; }
@@ -84,7 +83,6 @@
     .side-btn.hold-on    { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
     .side-btn.hold-warn  { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
     .side-btn.request-on { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
-    .side-btn.hide-btn   { color: #c4b8ad; font-size: 10px; }
 
     /* Requesting banner */
     .requesting-banner { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 800; margin-bottom: 8px; }
@@ -220,7 +218,6 @@ let locations   = [...DEFAULT_LOCATIONS];
 let roster      = [];
 let departments = {};
 let isDisplayMode = false;
-let showHidden    = false;
 
 let unsubBoard  = null;
 let unsubConfig = null;
@@ -417,11 +414,6 @@ async function toggleRequesting(loc) {
   await writeRoom(id, r => ({ ...r, requesting: !r.requesting }));
 }
 
-async function toggleHidden(loc) {
-  const id = roomId(loc);
-  await writeRoom(id, r => ({ ...r, location: loc, hidden: !r.hidden }));
-}
-
 async function clearBoard() {
   await set(boardRef(session.deptCode), {});
 }
@@ -490,7 +482,6 @@ function renderCard(loc, isDisplay = false) {
   const provider = room.provider || null;
   const breaks   = room.breaks   || {};
   const isHold   = !!room.hold;
-  const isHidden = !!room.hidden;
   const isReq    = !!room.requesting;
   const holdAt   = room.holdAt || null;
   const now      = Date.now();
@@ -507,7 +498,6 @@ function renderCard(loc, isDisplay = false) {
 
   let cardClass = "or-card" + (isDisplay ? " display-card" : "");
   if (!provider)                      cardClass += " empty";
-  else if (isHidden)                  cardClass += " hidden";
   else if (isHold && isWarn && isReq) cardClass += " hold-warn requesting";
   else if (isHold && isWarn)          cardClass += " hold-warn";
   else if (isHold && isReq)           cardClass += " hold requesting";
@@ -538,13 +528,6 @@ function renderCard(loc, isDisplay = false) {
       onClick: () => toggleRequesting(loc)
     }, isReq ? "🔔 Sent" : "Request");
     side.appendChild(reqBtn);
-  } else {
-    // Hide button only on empty rooms
-    const hideBtn = el("button", {
-      class: "side-btn hide-btn",
-      onClick: () => toggleHidden(loc)
-    }, isHidden ? "Show" : "Hide");
-    side.appendChild(hideBtn);
   }
 
   // ── Card body — vertical stack: room → provider → pills ──
@@ -626,39 +609,34 @@ function renderBoard() {
 
   checkRequestNotifications();
 
-  const visibleLocs = locations.filter(loc => {
-    const room = boardData[roomId(loc)] || {};
-    return showHidden || !room.hidden;
-  });
-  const hiddenCount = locations.length - visibleLocs.length;
+  const visibleLocs = locations;
 
   // Summary counts
-  const allRooms   = locations.map(l => boardData[roomId(l)] || {});
-  const occupied   = allRooms.filter(r => r.provider).length;
-  const onHold     = allRooms.filter(r => r.provider && r.hold).length;
-  const requesting = allRooms.filter(r => r.provider && r.requesting).length;
-  const allDone    = allRooms.filter(r => r.provider && BREAKS.every(b => (r.breaks||{})[b.id])).length;
+  const allRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const occupied  = allRooms.filter(r => r.provider).length;
+  const amLeft    = allRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
+  const lunchLeft = allRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
+  const pmLeft    = allRooms.filter(r => r.provider && !(r.breaks||{}).pm).length;
+
+  function makeChip(count, label, bg, color, dot) {
+    const has = count > 0;
+    return el("div", { class: "chip", style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" } },
+      el("span", { class: "chip-dot", style: { background: has ? dot : "#d4ccc6" } }),
+      el("span", { class: "chip-count" }, String(count)),
+      el("span", {}, label),
+    );
+  }
 
   const chips = [
-    { label: "Occupied",    count: occupied,   bg: "#fef3c7", color: "#b45309", dot: "#f59e0b" },
-    { label: "All done",    count: allDone,    bg: "#dcfce7", color: "#15803d", dot: "#4ade80" },
-    { label: "On hold",     count: onHold,     bg: "#fee2e2", color: "#dc2626", dot: "#f87171" },
-    { label: "Requesting",  count: requesting, bg: "#f0fdfa", color: "#0f766e", dot: "#5eead4" },
-  ].map(c => {
-    const has = c.count > 0;
-    return el("div", { class: "chip", style: { background: has ? c.bg : "#f1ede8", color: has ? c.color : "#c4b8ad" } },
-      el("span", { class: "chip-dot", style: { background: has ? c.dot : "#d4ccc6" } }),
-      el("span", { class: "chip-count" }, String(c.count)),
-      el("span", {}, c.label),
-    );
-  });
+    makeChip(occupied,  "Rooms",          "#fef3c7", "#b45309", "#f59e0b"),
+    makeChip(amLeft,    "AM remaining",   "#fee2e2", "#dc2626", "#f87171"),
+    makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8"),
+    makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa"),
+  ];
 
   const cards = visibleLocs.map(loc => renderCard(loc, false));
 
-  const showHiddenBtn = hiddenCount > 0
-    ? el("button", { class: "show-hidden-btn", onClick: () => { showHidden = !showHidden; renderBoard(); } },
-        showHidden ? "Hide unused ORs" : `Show ${hiddenCount} hidden OR${hiddenCount > 1 ? "s" : ""}`)
-    : null;
+
 
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -669,7 +647,7 @@ function renderBoard() {
           el("div", { class: "logo-icon" }, "💨"),
           el("div", {},
             el("div", { class: "logo-text" }, "Gas Breaker"),
-            el("div", { class: "logo-sub"  }, new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
+            el("div", { class: "logo-sub"  }, session.deptName + " · " + new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
           ),
         ),
         el("div", { class: "header-right" },
@@ -681,7 +659,6 @@ function renderBoard() {
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
-      showHiddenBtn,
       ...cards,
     ),
   ));
@@ -696,13 +673,15 @@ function renderDisplay() {
   isDisplayMode = true;
   checkRequestNotifications();
 
-  const visibleLocs = locations.filter(loc => {
-    const room = boardData[roomId(loc)] || {};
-    return showHidden || !room.hidden;
-  });
-  const hiddenCount = locations.length - visibleLocs.length;
+  const visibleLocs = locations;
 
   const cards = visibleLocs.map(loc => renderCard(loc, true));
+
+  const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const dOccupied  = dAllRooms.filter(r => r.provider).length;
+  const dAmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
+  const dLunchLeft = dAllRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
+  const dPmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).pm).length;
 
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -718,17 +697,30 @@ function renderDisplay() {
         ),
         el("div", { class: "header-right" },
           el("div", { class: "sync-pip" }),
-          hiddenCount > 0
-            ? el("button", { class: "display-link", style: { border: "none", cursor: "pointer" }, onClick: () => { showHidden = !showHidden; renderDisplay(); } }, showHidden ? "Hide unused ORs" : `+${hiddenCount} hidden ORs`)
-            : null,
+
         ),
       )
+    ),
+    el("div", { class: "summary-bar", style: { maxWidth: "none" } },
+      ...[
+        [dOccupied,  "Rooms",           "#fef3c7", "#b45309", "#f59e0b"],
+        [dAmLeft,    "AM remaining",    "#fee2e2", "#dc2626", "#f87171"],
+        [dLunchLeft, "Lunch remaining", "#e0f2fe", "#0369a1", "#38bdf8"],
+        [dPmLeft,    "PM remaining",    "#ede9fe", "#7c3aed", "#a78bfa"],
+      ].map(([count, label, bg, color, dot]) => {
+        const has = count > 0;
+        return el("div", { class: "chip", style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" } },
+          el("span", { class: "chip-dot", style: { background: has ? dot : "#d4ccc6" } }),
+          el("span", { class: "chip-count" }, String(count)),
+          el("span", {}, label),
+        );
+      })
     ),
     el("div", { class: "display-wrap" }, ...cards),
   ));
 
   clearTimeout(window._holdRefreshTimer);
-  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-grid")) renderDisplay(); }, 30000);
+  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-wrap")) renderDisplay(); }, 30000);
 }
 
 // ─── Render: Code screen ─────────────────────────────────────────────────────
