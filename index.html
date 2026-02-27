@@ -50,6 +50,7 @@
     .or-card.hold-warn.requesting { border-color: #fcd34d; background: #fffbeb; }
     .or-card.empty   { background: #faf8f6; border-color: #ede8e3; }
     .or-card.empty   { opacity: 0.5; background: #f5f2ef; border-color: #e2dcd6; }
+    .or-card.empty.editing { opacity: 1; background: #fff; border-color: #b45309; }
 
     /* Card layout — vertical stack */
     .card-inner { display: flex; align-items: flex-start; gap: 8px; }
@@ -142,6 +143,7 @@
     .request-notification .notif-room { font-size: 18px; font-family: 'Libre Baskerville', serif; }
     .request-notification .notif-sub  { font-size: 12px; font-weight: 600; opacity: 0.85; margin-top: 2px; }
     .request-notification .notif-dismiss { margin-top: 10px; background: rgba(255,255,255,0.2); border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 800; padding: 4px 10px; cursor: pointer; }
+    .request-notification .notif-timer-bar { height: 3px; background: rgba(255,255,255,0.5); border-radius: 2px; width: 100%; margin-top: 8px; }
 
     /* ── Coordinator display layout — newspaper columns ── */
     .display-wrap {
@@ -158,6 +160,7 @@
       break-inside: avoid;
       margin-bottom: 8px;
       padding: 10px 12px;
+      min-height: 110px;
     }
     .display-card .room-label { font-size: 13px; }
     .display-card .provider-name-btn { font-size: 12px; margin-bottom: 5px; }
@@ -372,15 +375,42 @@ function roomId(loc) {
 
 // ─── Board actions ────────────────────────────────────────────────────────────
 async function assignProvider(loc, name) {
-  const id = roomId(loc);
-  await writeRoom(id, r => ({
-    ...r,
-    location: loc,
-    provider: name,
-    // Keep existing breaks if same provider, reset if new
-    breaks: (r.provider === name) ? (r.breaks || {}) : {},
-    hold: false, holdAt: null, requesting: false,
-  }));
+  const targetId = roomId(loc);
+  
+  // Check if this provider is already in another room
+  const existingEntry = Object.entries(boardData).find(
+    ([id, room]) => room.provider === name && id !== targetId
+  );
+
+  if (existingEntry) {
+    // Provider is moving from another room — carry their breaks, clear old room
+    const [oldId, oldRoom] = existingEntry;
+    const carriedBreaks = oldRoom.breaks || {};
+    
+    // Write both rooms in sequence
+    const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${oldId}`);
+    const oldSnap = await get(oldRef);
+    const oldData = oldSnap.val() || {};
+    await set(oldRef, { ...oldData, provider: null, breaks: {}, hold: false, holdAt: null, requesting: false });
+    
+    await writeRoom(targetId, r => ({
+      ...r,
+      location: loc,
+      provider: name,
+      breaks: carriedBreaks,
+      hold: false, holdAt: null, requesting: false,
+    }));
+  } else {
+    // New provider or same provider — reset breaks if different
+    const currentRoom = boardData[targetId] || {};
+    await writeRoom(targetId, r => ({
+      ...r,
+      location: loc,
+      provider: name,
+      breaks: (currentRoom.provider === name) ? (r.breaks || {}) : {},
+      hold: false, holdAt: null, requesting: false,
+    }));
+  }
 }
 
 async function clearProvider(loc) {
@@ -419,21 +449,22 @@ async function clearBoard() {
 }
 
 // ─── Roster dropdown ──────────────────────────────────────────────────────────
-function buildProviderInput(currentName, loc, onDone) {
+function buildProviderInput(currentName, loc, card, onDone) {
   const wrap  = el("div", { class: "provider-input-wrap" });
-  const input = el("input", { class: "provider-input", type: "text", value: currentName || "", placeholder: "Last, First", autocomplete: "off" });
+  const input = el("input", { class: "provider-input", type: "text", value: "", placeholder: "Search roster...", autocomplete: "off" });
   let dropdown = null;
+
+  // Immediately make card look active/normal (remove grayed out empty state)
+  if (card) { card.classList.remove("empty"); card.classList.add("editing"); }
 
   function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
 
   function showDropdown(query) {
     closeDropdown();
-    const matches = roster.filter(n => rosterMatches(n, query));
-    if (!matches.length && query && !currentName) return;
-
+    const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
     dropdown = el("div", { class: "roster-dropdown" });
 
-    // Clear option if room is occupied
+    // Remove provider option at top if room is occupied
     if (currentName) {
       const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove provider");
       clearOpt.addEventListener("mousedown", async e => {
@@ -445,7 +476,7 @@ function buildProviderInput(currentName, loc, onDone) {
       dropdown.appendChild(clearOpt);
     }
 
-    matches.slice(0, 10).forEach(name => {
+    matches.slice(0, 12).forEach(name => {
       const opt = el("button", { class: "roster-option", type: "button" }, name);
       opt.addEventListener("mousedown", async e => {
         e.preventDefault();
@@ -456,22 +487,31 @@ function buildProviderInput(currentName, loc, onDone) {
       dropdown.appendChild(opt);
     });
 
+    if (!matches.length) {
+      const none = el("div", { style: { padding: "10px 12px", fontSize: "12px", color: "#a39688" } },
+        currentName ? "No matches in roster." : "No matches. Add providers in Admin.");
+      dropdown.appendChild(none);
+    }
+
     wrap.appendChild(dropdown);
   }
 
-  input.addEventListener("focus",   () => showDropdown(input.value));
-  input.addEventListener("input",   () => showDropdown(input.value));
-  input.addEventListener("blur",    () => setTimeout(() => { closeDropdown(); onDone(); }, 150));
-  input.addEventListener("keydown", async e => {
-    if (e.key === "Enter") {
-      const val = input.value.trim();
-      if (val) { closeDropdown(); await assignProvider(loc, val); onDone(); }
+  input.addEventListener("focus", () => showDropdown(input.value));
+  input.addEventListener("input", () => showDropdown(input.value));
+  input.addEventListener("blur",  () => setTimeout(() => {
+    closeDropdown();
+    // Restore empty state if no provider assigned
+    if (card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
+      card.classList.add("empty"); card.classList.remove("editing");
     }
+    onDone();
+  }, 150));
+  input.addEventListener("keydown", e => {
     if (e.key === "Escape") { closeDropdown(); onDone(); }
   });
 
   wrap.appendChild(input);
-  setTimeout(() => { input.focus(); input.select(); showDropdown(""); }, 30);
+  setTimeout(() => { input.focus(); showDropdown(""); }, 30);
   return wrap;
 }
 
@@ -547,7 +587,7 @@ function renderCard(loc, isDisplay = false) {
     if (existingPills) existingPills.remove();
 
     if (editingProvider) {
-      body.appendChild(buildProviderInput(provider, loc, () => {
+      body.appendChild(buildProviderInput(provider, loc, card, () => {
         editingProvider = false;
         renderProviderArea();
       }));
@@ -594,13 +634,21 @@ function checkRequestNotifications() {
 }
 
 function showRequestNotification(loc, providerName) {
+  const DURATION = 15000; // 15 seconds
   const notif = el("div", { class: "request-notification" },
     el("div", { class: "notif-room" }, "🔔 " + loc),
     el("div", { class: "notif-sub"  }, providerName + " is requesting a break"),
-    el("button", { class: "notif-dismiss", onClick: () => notif.remove() }, "Dismiss"),
+    el("div", { class: "notif-timer-bar" }),
+    el("button", { class: "notif-dismiss", onClick: () => { clearTimeout(autoTimer); notif.remove(); } }, "Dismiss"),
   );
   document.body.appendChild(notif);
-  setTimeout(() => { if (notif.parentNode) notif.remove(); }, 30000);
+
+  // Animate the timer bar shrinking
+  const bar = notif.querySelector(".notif-timer-bar");
+  bar.style.transition = `width ${DURATION}ms linear`;
+  setTimeout(() => { bar.style.width = "0%"; }, 50);
+
+  const autoTimer = setTimeout(() => { if (notif.parentNode) notif.remove(); }, DURATION);
 }
 
 // ─── Render: Board ────────────────────────────────────────────────────────────
