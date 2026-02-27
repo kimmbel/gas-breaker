@@ -314,7 +314,9 @@ function subscribeToBoard(deptCode) {
   unsubBoard = onValue(boardRef(deptCode), snap => {
     boardData = snap.val() || {};
     checkAutoUnhold();
-    renderBoard();
+    // Only re-render if we're actually showing the board or display page
+    if (document.querySelector(".main"))         renderBoard();
+    else if (document.querySelector(".display-wrap")) renderDisplay();
   }, err => {
     console.error("Board error:", err);
     document.querySelector(".sync-pip")?.classList.add("offline");
@@ -325,7 +327,8 @@ function subscribeToBoard(deptCode) {
     locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
     noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
     roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
-    if (document.querySelector(".main, .display-grid")) renderBoard();
+    if (document.querySelector(".main"))              renderBoard();
+    else if (document.querySelector(".display-wrap")) renderDisplay();
   });
 }
 
@@ -460,12 +463,15 @@ async function toggleHold(loc) {
 
 async function toggleRequesting(loc) {
   const id = roomId(loc);
-  await writeRoom(id, r => ({
-    ...r,
-    requesting: !r.requesting,
-    hold:       !r.requesting ? false : r.hold,   // turning request ON clears hold
-    holdAt:     !r.requesting ? null  : r.holdAt,
-  }));
+  await writeRoom(id, r => {
+    const turningOn = !r.requesting;
+    return {
+      ...r,
+      requesting: turningOn,
+      hold:       turningOn ? false   : r.hold,   // only clear hold when turning ON
+      holdAt:     turningOn ? null    : r.holdAt,
+    };
+  });
 }
 
 async function clearBoard() {
@@ -530,8 +536,19 @@ function buildProviderInput(currentName, loc, card, onDone) {
     }
     onDone();
   }, 150));
-  input.addEventListener("keydown", e => {
-    if (e.key === "Escape") { closeDropdown(); onDone(); }
+  input.addEventListener("keydown", async e => {
+    if (e.key === "Escape") { closeDropdown(); onDone(); return; }
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      // Fill in the top roster match
+      const query = input.value.trim();
+      const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
+      if (matches.length > 0) {
+        closeDropdown();
+        await assignProvider(loc, matches[0]);
+        onDone();
+      }
+    }
   });
 
   wrap.appendChild(input);
