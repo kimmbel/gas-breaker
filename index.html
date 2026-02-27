@@ -450,27 +450,30 @@ async function toggleBreak(loc, breakId) {
 }
 
 async function toggleHold(loc) {
-  const id  = roomId(loc);
+  const id = roomId(loc);
   const now = Date.now();
+  // Read current state from local boardData to avoid race condition
+  const currentlyOnHold = !!(boardData[id] || {}).hold;
+  const turningOn = !currentlyOnHold;
   await writeRoom(id, r => ({
     ...r,
-    hold:      !r.hold,
-    holdAt:    !r.hold ? now : null,
-    requesting: !r.hold ? false : r.requesting, // turning hold ON clears request
+    hold:       turningOn,
+    holdAt:     turningOn ? now   : null,
+    requesting: turningOn ? false : r.requesting,
   }));
 }
 
 async function toggleRequesting(loc) {
   const id = roomId(loc);
-  await writeRoom(id, r => {
-    const turningOn = !r.requesting;
-    return {
-      ...r,
-      requesting: turningOn,
-      hold:       turningOn ? false   : r.hold,   // only clear hold when turning ON
-      holdAt:     turningOn ? null    : r.holdAt,
-    };
-  });
+  // Read current state from local boardData to avoid race condition
+  const currentlyRequesting = !!(boardData[id] || {}).requesting;
+  const turningOn = !currentlyRequesting;
+  await writeRoom(id, r => ({
+    ...r,
+    requesting: turningOn,
+    hold:       turningOn ? false : r.hold,
+    holdAt:     turningOn ? null  : r.holdAt,
+  }));
 }
 
 async function clearBoard() {
@@ -792,7 +795,6 @@ function renderBoard() {
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
       noBreakSlots.length ? el("div", { class: "no-break-section" },
-        el("div", { class: "no-break-section-label" }, "Breakers / No Break Needed"),
         ...noBreakCards,
         el("hr", { class: "or-section-divider" }),
       ) : null,
@@ -856,7 +858,6 @@ function renderDisplay() {
     ),
     el("div", { class: "display-wrap" },
       ...(noBreakSlots.length ? [
-        el("div", { class: "no-break-section-label", style: { padding:"4px 2px" } }, "Breakers / No Break Needed"),
         ...noBreakCards,
         el("hr", { class: "or-section-divider" }),
       ] : []),
@@ -877,7 +878,12 @@ function renderCodeScreen(errorMsg = "") {
     const code = input.value.trim().toUpperCase();
     if (code === ADMIN_CODE) {
       session = { isAdmin: true };
-      subscribeToDepartments(() => renderAdminDeptSelect());
+      // If departments already loaded, go straight to admin
+      if (Object.keys(departments).length > 0) {
+        renderAdminDeptSelect();
+      } else {
+        subscribeToDepartments(() => renderAdminDeptSelect());
+      }
       return;
     }
     if (departments[code]) {
