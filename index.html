@@ -166,8 +166,11 @@
       margin-bottom: 4px;
     }
     .display-nobreak-row .or-card.no-break-card {
-      flex: 0 0 auto; width: 200px;
+      flex: 0 0 auto; width: 180px;
+      padding: 5px 10px;
     }
+    .display-nobreak-row .no-break-label { font-size: 10px; margin-bottom: 1px; }
+    .display-nobreak-row .provider-name-btn { font-size: 11px; line-height: 1.2; }
     .display-divider { border: none; border-top: 1px dashed #e8e0d6; margin: 8px 0 10px; }
 
     /* OR columns */
@@ -1129,8 +1132,8 @@ function renderAdminPage(deptCode) {
       (loc, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
         el("span", {}, loc),
         el("button", { class: "btn-danger", onClick: async () => {
-          const newLocs = arr.filter(l => l !== loc);
-          await saveLocations(newLocs); locs = newLocs; rebuildFn(newLocs); showToast(`${loc} removed`);
+          locs = locs.filter(l => l !== loc);
+          await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
         }}, "Remove"),
       )
     );
@@ -1161,8 +1164,8 @@ function renderAdminPage(deptCode) {
       (slot, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
         el("span", {}, slot),
         el("button", { class: "btn-danger", onClick: async () => {
-          const newSlots = arr.filter(s => s !== slot);
-          await saveNoBreakSlots(newSlots); slots = newSlots; rebuildFn(newSlots); showToast(`${slot} removed`);
+          slots = slots.filter(s => s !== slot);
+          await saveNoBreakSlots(slots); rebuildFn(slots); showToast(`${slot} removed`);
         }}, "Remove"),
       )
     );
@@ -1195,7 +1198,7 @@ function renderAdminPage(deptCode) {
       (name, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
         el("span", {}, name),
         el("button", { class: "btn-danger", onClick: async () => {
-          await deleteRosterEntry(name); ros = ros.filter(n => n !== name); rebuildFn(ros); showToast(`${name} removed`);
+          await deleteRosterEntry(name); ros = ros.filter(n => n !== name); rebuildFn([...ros]); showToast(`${name} removed`);
         }}, "Remove"),
       )
     );
