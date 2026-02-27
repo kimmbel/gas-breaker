@@ -452,28 +452,32 @@ async function toggleBreak(loc, breakId) {
 async function toggleHold(loc) {
   const id = roomId(loc);
   const now = Date.now();
-  // Read current state from local boardData to avoid race condition
-  const currentlyOnHold = !!(boardData[id] || {}).hold;
-  const turningOn = !currentlyOnHold;
-  await writeRoom(id, r => ({
-    ...r,
+  const current = boardData[id] || {};
+  const turningOn = !current.hold;
+  const r = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
+  const snap = await get(r);
+  const data = snap.val() || {};
+  await set(r, {
+    ...data,
     hold:       turningOn,
     holdAt:     turningOn ? now   : null,
-    requesting: turningOn ? false : r.requesting,
-  }));
+    requesting: turningOn ? false : (data.requesting || false),
+  });
 }
 
 async function toggleRequesting(loc) {
   const id = roomId(loc);
-  // Read current state from local boardData to avoid race condition
-  const currentlyRequesting = !!(boardData[id] || {}).requesting;
-  const turningOn = !currentlyRequesting;
-  await writeRoom(id, r => ({
-    ...r,
+  const current = boardData[id] || {};
+  const turningOn = !current.requesting;
+  const r = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
+  const snap = await get(r);
+  const data = snap.val() || {};
+  await set(r, {
+    ...data,
     requesting: turningOn,
-    hold:       turningOn ? false : r.hold,
-    holdAt:     turningOn ? null  : r.holdAt,
-  }));
+    hold:       turningOn ? false : (data.hold || false),
+    holdAt:     turningOn ? null  : (data.holdAt || null),
+  });
 }
 
 async function clearBoard() {
@@ -953,7 +957,6 @@ function renderAdminDeptSelect() {
                 session.deptCode = code;
                 session.deptName = departments[code];
                 await loadConfig(code);
-                subscribeToBoard(code);
                 renderAdminPage(code);
               }}, "Manage →"),
             )
@@ -970,8 +973,9 @@ async function loadConfig(code) {
     let done = false;
     const unsub = onValue(configRef(code), snap => {
       const cfg = snap.val() || {};
-      locations = cfg.locations ? Object.values(cfg.locations) : [...DEFAULT_LOCATIONS];
-      roster    = cfg.roster    ? Object.values(cfg.roster).sort() : [];
+      locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
+      noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
+      roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
       if (!done) { done = true; resolve(); }
     });
     setTimeout(() => { if (!done) { done = true; resolve(); } }, 3000);
