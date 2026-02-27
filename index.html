@@ -52,21 +52,21 @@
     .or-card.empty   { background: #faf8f6; border-color: #ede8e3; }
     .or-card.hidden  { opacity: 0.45; background: #f5f2ef; border-color: #e2dcd6; border-style: dashed; }
 
-    /* Card top row */
-    .card-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-    .room-label { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; white-space: nowrap; min-width: 88px; padding-top: 2px; }
-    .card-center { flex: 1; min-width: 0; }
+    /* Card layout — vertical stack */
+    .card-inner { display: flex; align-items: flex-start; gap: 8px; }
+    .card-body  { flex: 1; min-width: 0; }
+    .room-label { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; display: block; margin-bottom: 3px; line-height: 1.2; }
 
     /* Provider name / assign */
     .provider-name-btn {
       background: none; border: none; padding: 0;
-      font-size: 14px; font-weight: 800; color: #2d2420;
+      font-size: 13px; font-weight: 700; color: #7c6c62;
       text-align: left; display: block; width: 100%;
-      line-height: 1.3; margin-bottom: 6px;
+      line-height: 1.3; margin-bottom: 7px;
     }
     .provider-name-btn.empty { color: #c4b8ad; font-weight: 600; font-style: italic; }
-    .provider-input-wrap { position: relative; margin-bottom: 6px; }
-    .provider-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 8px; padding: 6px 10px; font-size: 14px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
+    .provider-input-wrap { position: relative; margin-bottom: 7px; }
+    .provider-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
     .roster-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto; margin-top: 2px; }
     .roster-option { padding: 9px 12px; font-size: 13px; font-weight: 700; color: #2d2420; cursor: pointer; border: none; background: none; width: 100%; text-align: left; border-bottom: 1px solid #f1ede8; }
     .roster-option:last-child { border-bottom: none; }
@@ -77,11 +77,10 @@
     .pill-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .pill { border-radius: 8px; padding: 5px 12px; font-size: 12px; border: 1.5px solid #e8e0d6; background: #f1ede8; color: #c4b8ad; font-family: inherit; font-weight: 600; cursor: pointer; transition: none; }
     .pill.done { background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 700; }
-    .pill.empty-state { cursor: default; }
 
     /* Side buttons */
     .card-side { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
-    .side-btn { border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; background: #f1ede8; color: #a39688; }
+    .side-btn { border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; background: #f1ede8; color: #a39688; min-width: 52px; text-align: center; }
     .side-btn.hold-on    { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
     .side-btn.hold-warn  { background: #fef3c7; color: #b45309; border-color: #fcd34d; }
     .side-btn.request-on { background: #f0fdfa; color: #0f766e; border-color: #5eead4; }
@@ -89,10 +88,6 @@
 
     /* Requesting banner */
     .requesting-banner { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 800; margin-bottom: 8px; }
-
-    /* Hold timer */
-    .hold-timer { font-size: 10px; color: #dc2626; font-weight: 800; text-align: center; margin-top: 2px; }
-    .hold-timer.warn { color: #b45309; }
 
     /* ── Auth screens ── */
     .auth-root { min-height: 100vh; background: #f8f4ef; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -150,13 +145,27 @@
     .request-notification .notif-sub  { font-size: 12px; font-weight: 600; opacity: 0.85; margin-top: 2px; }
     .request-notification .notif-dismiss { margin-top: 10px; background: rgba(255,255,255,0.2); border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 800; padding: 4px 10px; cursor: pointer; }
 
-    /* ── Coordinator display layout ── */
-    .display-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; padding: 12px 16px 60px; max-width: 1400px; margin: 0 auto; }
-    .or-card.display-card { margin-bottom: 0; }
-    .display-card .room-label { font-size: 13px; min-width: 70px; }
-    .display-card .provider-name-btn { font-size: 13px; margin-bottom: 4px; }
+    /* ── Coordinator display layout — newspaper columns ── */
+    .display-wrap {
+      padding: 10px 12px 40px;
+      column-count: 4;
+      column-gap: 8px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    @media (max-width: 1200px) { .display-wrap { column-count: 3; } }
+    @media (max-width: 860px)  { .display-wrap { column-count: 2; } }
+    @media (max-width: 500px)  { .display-wrap { column-count: 1; } }
+    .or-card.display-card {
+      break-inside: avoid;
+      margin-bottom: 8px;
+      padding: 10px 12px;
+    }
+    .display-card .room-label { font-size: 13px; }
+    .display-card .provider-name-btn { font-size: 12px; margin-bottom: 5px; }
     .display-card .pill { font-size: 11px; padding: 4px 9px; }
-    .display-card .side-btn { font-size: 10px; padding: 4px 7px; }
+    .display-card .side-btn { font-size: 10px; padding: 4px 7px; min-width: 44px; }
+    .display-card .requesting-banner { font-size: 10px; padding: 3px 8px; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -488,9 +497,17 @@ function renderCard(loc, isDisplay = false) {
   const holdAge  = isHold && holdAt ? now - holdAt : 0;
   const isWarn   = isHold && holdAge >= HOLD_WARN_MS;
 
+  // Hold countdown label — shown inside the button itself
+  let holdBtnLabel = "Hold";
+  if (isHold && holdAt) {
+    const remaining = Math.max(0, HOLD_CLEAR_MS - holdAge);
+    const mins = Math.ceil(remaining / 60000);
+    holdBtnLabel = (isWarn ? "⚠️ " : "✋ ") + mins + "m";
+  }
+
   let cardClass = "or-card" + (isDisplay ? " display-card" : "");
-  if (!provider)        cardClass += " empty";
-  else if (isHidden)    cardClass += " hidden";
+  if (!provider)                      cardClass += " empty";
+  else if (isHidden)                  cardClass += " hidden";
   else if (isHold && isWarn && isReq) cardClass += " hold-warn requesting";
   else if (isHold && isWarn)          cardClass += " hold-warn";
   else if (isHold && isReq)           cardClass += " hold requesting";
@@ -504,17 +521,50 @@ function renderCard(loc, isDisplay = false) {
     card.appendChild(el("div", { class: "requesting-banner" }, "🔔 " + provider + " is requesting a break"));
   }
 
-  // ── Top row ──
-  const roomLabel = el("div", { class: "room-label" }, loc);
+  // ── Side buttons ──
+  const side = el("div", { class: "card-side" });
 
-  // Provider name / input area
-  const center = el("div", { class: "card-center" });
+  if (provider) {
+    // Hold button — countdown lives inside the button
+    const holdBtn = el("button", {
+      class: "side-btn" + (isHold ? (isWarn ? " hold-warn" : " hold-on") : ""),
+      onClick: () => toggleHold(loc)
+    }, holdBtnLabel);
+    side.appendChild(holdBtn);
+
+    // Request button
+    const reqBtn = el("button", {
+      class: "side-btn" + (isReq ? " request-on" : ""),
+      onClick: () => toggleRequesting(loc)
+    }, isReq ? "🔔 Sent" : "Request");
+    side.appendChild(reqBtn);
+  } else {
+    // Hide button only on empty rooms
+    const hideBtn = el("button", {
+      class: "side-btn hide-btn",
+      onClick: () => toggleHidden(loc)
+    }, isHidden ? "Show" : "Hide");
+    side.appendChild(hideBtn);
+  }
+
+  // ── Card body — vertical stack: room → provider → pills ──
+  const body = el("div", { class: "card-body" });
+
+  // Room label
+  body.appendChild(el("div", { class: "room-label" }, loc));
+
+  // Provider name / input
   let editingProvider = false;
 
   function renderProviderArea() {
-    center.innerHTML = "";
+    // Remove old provider area if present
+    const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
+    if (existing) existing.remove();
+    const existingPills = body.querySelector(".pill-row");
+    if (existingPills) existingPills.remove();
+
     if (editingProvider) {
-      center.appendChild(buildProviderInput(provider, loc, () => {
+      body.appendChild(buildProviderInput(provider, loc, () => {
         editingProvider = false;
         renderProviderArea();
       }));
@@ -523,58 +573,26 @@ function renderCard(loc, isDisplay = false) {
         class: "provider-name-btn" + (!provider ? " empty" : ""),
         onClick: () => { editingProvider = true; renderProviderArea(); }
       }, provider || "Tap to assign provider");
-      center.appendChild(nameBtn);
+      body.appendChild(nameBtn);
 
-      // Break pills
+      // Break pills — only if occupied
       if (provider) {
         const pillRow = el("div", { class: "pill-row" });
         BREAKS.forEach(b => {
           const done = !!breaks[b.id];
-          const pill = el("button", { class: "pill" + (done ? " done" : ""), onClick: () => toggleBreak(loc, b.id) }, done ? `✓ ${b.label}` : b.label);
+          const pill = el("button", {
+            class: "pill" + (done ? " done" : ""),
+            onClick: () => toggleBreak(loc, b.id)
+          }, done ? `✓ ${b.label}` : b.label);
           pillRow.appendChild(pill);
         });
-        center.appendChild(pillRow);
+        body.appendChild(pillRow);
       }
     }
   }
   renderProviderArea();
 
-  // ── Side buttons ──
-  const side = el("div", { class: "card-side" });
-
-  if (provider) {
-    // Hold button
-    let holdLabel = isHold ? (isWarn ? "⚠️ Hold" : "✋ Hold") : "Hold";
-    const holdBtn = el("button", {
-      class: "side-btn" + (isHold ? (isWarn ? " hold-warn" : " hold-on") : ""),
-      onClick: () => toggleHold(loc)
-    }, holdLabel);
-    side.appendChild(holdBtn);
-
-    // Hold timer countdown
-    if (isHold && holdAt) {
-      const remaining = Math.max(0, HOLD_CLEAR_MS - holdAge);
-      const mins = Math.ceil(remaining / 60000);
-      const timerEl = el("div", { class: "hold-timer" + (isWarn ? " warn" : "") }, `${mins}m`);
-      side.appendChild(timerEl);
-    }
-
-    // Request button
-    const reqBtn = el("button", {
-      class: "side-btn" + (isReq ? " request-on" : ""),
-      onClick: () => toggleRequesting(loc)
-    }, isReq ? "🔔 Sent" : "Request");
-    side.appendChild(reqBtn);
-  }
-
-  // Hide/show button
-  const hideBtn = el("button", {
-    class: "side-btn hide-btn",
-    onClick: () => toggleHidden(loc)
-  }, isHidden ? "Show" : "Hide");
-  side.appendChild(hideBtn);
-
-  card.appendChild(el("div", { class: "card-top" }, roomLabel, center, side));
+  card.appendChild(el("div", { class: "card-inner" }, body, side));
   return card;
 }
 
@@ -637,11 +655,10 @@ function renderBoard() {
 
   const cards = visibleLocs.map(loc => renderCard(loc, false));
 
-  const showHiddenBtn = hiddenCount > 0 && !showHidden
-    ? el("button", { class: "show-hidden-btn", onClick: () => { showHidden = true; renderBoard(); } }, `Show ${hiddenCount} hidden OR${hiddenCount > 1 ? "s" : ""}`)
-    : (showHidden && hiddenCount > 0)
-      ? el("button", { class: "show-hidden-btn", onClick: () => { showHidden = false; renderBoard(); } }, "Hide unused ORs")
-      : null;
+  const showHiddenBtn = hiddenCount > 0
+    ? el("button", { class: "show-hidden-btn", onClick: () => { showHidden = !showHidden; renderBoard(); } },
+        showHidden ? "Hide unused ORs" : `Show ${hiddenCount} hidden OR${hiddenCount > 1 ? "s" : ""}`)
+    : null;
 
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -702,12 +719,12 @@ function renderDisplay() {
         el("div", { class: "header-right" },
           el("div", { class: "sync-pip" }),
           hiddenCount > 0
-            ? el("button", { class: "display-link", style: { border: "none", cursor: "pointer" }, onClick: () => { showHidden = !showHidden; renderDisplay(); } }, showHidden ? "Hide unused" : `+${hiddenCount} hidden`)
+            ? el("button", { class: "display-link", style: { border: "none", cursor: "pointer" }, onClick: () => { showHidden = !showHidden; renderDisplay(); } }, showHidden ? "Hide unused ORs" : `+${hiddenCount} hidden ORs`)
             : null,
         ),
       )
     ),
-    el("div", { class: "display-grid" }, ...cards),
+    el("div", { class: "display-wrap" }, ...cards),
   ));
 
   clearTimeout(window._holdRefreshTimer);
