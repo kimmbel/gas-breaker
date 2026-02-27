@@ -719,7 +719,7 @@ function renderCodeScreen(errorMsg = "") {
   const input = el("input", { class: "text-input code-input", placeholder: "Enter code", type: "text", autocomplete: "off" });
   input.addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
 
-  function tryCode() {
+  async function tryCode() {
     const code = input.value.trim().toUpperCase();
     if (code === ADMIN_CODE) {
       session = { isAdmin: true };
