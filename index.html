@@ -50,7 +50,6 @@
     .or-card.requesting { border-color: #5eead4; background: #f0fdfa; }
     .or-card.hold.requesting      { border-color: #fca5a5; background: #fff5f5; }
     .or-card.hold-warn.requesting { border-color: #fcd34d; background: #fffbeb; }
-    .or-card.empty   { background: #faf8f6; border-color: #ede8e3; }
     .or-card.empty   { opacity: 0.5; background: #f5f2ef; border-color: #e2dcd6; }
     .or-card.empty.editing { opacity: 1; background: #fff; border-color: #b45309; }
 
@@ -239,7 +238,6 @@ let isDisplayMode = false;
 let unsubBoard  = null;
 let unsubConfig = null;
 let unsubDepts  = null;
-let holdTimers  = {};     // roomId → setInterval id
 
 // ─── Firebase refs ────────────────────────────────────────────────────────────
 const tsDay      = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
@@ -301,9 +299,11 @@ function el(tag, attrs, ...children) {
 // ─── Subscribe ────────────────────────────────────────────────────────────────
 function subscribeToDepartments(cb) {
   if (unsubDepts) unsubDepts();
+  let cbCalled = false;
   unsubDepts = onValue(deptsRef(), snap => {
     departments = snap.val() || {};
-    if (cb) cb();
+    if (cb && !cbCalled) { cbCalled = true; cb(); }
+    // After initial load, silently update departments without re-rendering
   });
 }
 
@@ -335,21 +335,14 @@ function subscribeToBoard(deptCode) {
 // ─── Auto-unhold check ────────────────────────────────────────────────────────
 function checkAutoUnhold() {
   const now = Date.now();
-  Object.entries(boardData).forEach(([roomId, room]) => {
+  Object.entries(boardData).forEach(([rid, room]) => {
     if (room.hold && room.holdAt && (now - room.holdAt) >= HOLD_CLEAR_MS) {
-      writeRoom(roomId, r => ({ ...r, hold: false, holdAt: null }));
+      writeRoom(rid, r => ({ ...r, hold: false, holdAt: null }));
     }
   });
 }
 
 // ─── Write helpers ────────────────────────────────────────────────────────────
-async function writeBoard(updater) {
-  if (!session?.deptCode) return;
-  const r    = boardRef(session.deptCode);
-  const snap = await get(r);
-  await set(r, updater(snap.val() || {}));
-}
-
 async function writeRoom(roomId, updater) {
   if (!session?.deptCode) return;
   const r    = ref(db, `boards/${session.deptCode}/${tsDay()}/${roomId}`);
@@ -401,7 +394,7 @@ async function assignProvider(loc, name) {
   
   // Check if this provider is already in another room
   const existingEntry = Object.entries(boardData).find(
-    ([id, room]) => room.provider === name && id !== targetId
+    ([id, room]) => room.provider === name && id !== targetId && !id.startsWith("nb_")
   );
 
   if (existingEntry) {
@@ -782,7 +775,7 @@ function renderBoard() {
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
             sessionStorage.removeItem(SESSION_KEY);
-            session = null; boardData = {};
+            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = [];
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
             renderCodeScreen();
@@ -986,6 +979,10 @@ function renderAdminPage(deptCode) {
 
     function rebuild(arr) {
       list.innerHTML = "";
+      if (!arr.length) {
+        // empty state — no items to show, leave blank (parent handles empty msg)
+        return;
+      }
       arr.forEach((item, i) => {
         const row = el("div", { class: "admin-list-item" });
         row.setAttribute("draggable", "true");
@@ -1130,10 +1127,12 @@ function renderAdminPage(deptCode) {
     }
     slotIn.addEventListener("keydown", e => { if (e.key === "Enter") addSlot(); });
 
+    const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No slots yet.");
+    if (!slots.length) list.appendChild(emptyMsg);
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "No-Break Slots"),
       el("div", { class: "admin-section-sub" }, "Slots for breakers or others who don't need breaks. Appear at the top of the board for tracking only."),
-      slots.length ? list : el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No slots yet."),
+      list,
       el("div", { class: "admin-add-row" }, slotIn, el("button", { class: "btn-primary", onClick: addSlot }, "Add")),
     );
   }
@@ -1163,7 +1162,7 @@ function renderAdminPage(deptCode) {
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Provider Roster"),
       el("div", { class: "admin-section-sub"   }, "Names appear as suggestions when assigning a provider. Format: Last, First."),
-      ros.length ? list : el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No providers in roster yet."),
+      list,
       el("div", { class: "admin-add-row" }, nameIn, el("button", { class: "btn-primary", onClick: addName }, "Add")),
     );
   }
@@ -1234,6 +1233,9 @@ function renderAdminPage(deptCode) {
       }
     }
   } catch {}
+
+  // Clean up any old session keys
+  sessionStorage.removeItem("gasbreaker-session-v3");
 
   // No valid session — show code screen
   // After code entry, if ?display=1 is in URL, go to display mode
