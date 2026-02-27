@@ -26,6 +26,8 @@
     .dept-name { font-size: 13px; color: #7c6c62; font-weight: 700; }
     .display-link { font-size: 12px; color: #a39688; font-weight: 700; text-decoration: none; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 10px; white-space: nowrap; }
     .display-link:hover { background: #f1ede8; }
+    .logout-btn { font-size: 12px; color: #a39688; font-weight: 700; background: none; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 10px; white-space: nowrap; }
+    .logout-btn:hover { background: #f1ede8; }
 
     /* ── Summary bar ── */
     .summary-bar { max-width: 780px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -65,6 +67,7 @@
       line-height: 1.3; margin-bottom: 7px;
     }
     .provider-name-btn.empty { color: #c4b8ad; font-weight: 600; font-style: italic; }
+    .provider-name-btn.requesting-name { color: #0f766e; }
     .provider-input-wrap { position: relative; margin-bottom: 7px; }
     .provider-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
     .roster-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto; margin-top: 2px; }
@@ -72,6 +75,16 @@
     .roster-option:last-child { border-bottom: none; }
     .roster-option:hover { background: #f8f4ef; }
     .roster-option.clear-opt { color: #dc2626; font-style: italic; }
+
+    /* No-break slot card */
+    .or-card.no-break-card { padding: 8px 14px; min-height: unset; }
+    .no-break-label { font-size: 12px; color: #a39688; font-family: 'Nunito', sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+    .no-break-card .provider-name-btn { margin-bottom: 0; font-size: 13px; }
+
+    /* No-break section divider */
+    .no-break-section { margin-bottom: 10px; }
+    .no-break-section-label { font-size: 11px; font-weight: 800; color: #c4b8ad; text-transform: uppercase; letter-spacing: 0.5px; padding: 0 2px; margin-bottom: 6px; }
+    .or-section-divider { border: none; border-top: 1px dashed #e8e0d6; margin: 10px 0; }
 
     /* Break pills */
     .pill-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -217,9 +230,10 @@ const BREAKS = [
 // ─── State ───────────────────────────────────────────────────────────────────
 let session     = null;   // { deptCode, deptName, isAdmin? }
 let boardData   = {};     // { [roomId]: { provider, breaks, hold, holdAt, requesting, hidden } }
-let locations   = [...DEFAULT_LOCATIONS];
-let roster      = [];
-let departments = {};
+let locations     = [...DEFAULT_LOCATIONS];
+let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
+let roster        = [];
+let departments   = {};
 let isDisplayMode = false;
 
 let unsubBoard  = null;
@@ -308,9 +322,9 @@ function subscribeToBoard(deptCode) {
 
   unsubConfig = onValue(configRef(deptCode), snap => {
     const cfg = snap.val() || {};
-    locations = cfg.locations ? Object.values(cfg.locations) : [...DEFAULT_LOCATIONS];
-    roster    = cfg.roster    ? Object.values(cfg.roster).sort() : [];
-    // re-render if board is visible
+    locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
+    noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
+    roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
     if (document.querySelector(".main, .display-grid")) renderBoard();
   });
 }
@@ -344,6 +358,11 @@ async function writeRoom(roomId, updater) {
 async function saveLocations(locs) {
   const obj = {}; locs.forEach((l, i) => { obj[i] = l; });
   await set(ref(db, `config/${session.deptCode}/locations`), obj);
+}
+
+async function saveNoBreakSlots(slots) {
+  const obj = {}; slots.forEach((s, i) => { obj[i] = s; });
+  await set(ref(db, `config/${session.deptCode}/noBreakSlots`), obj);
 }
 
 async function saveRosterEntry(name) {
@@ -430,18 +449,23 @@ async function toggleBreak(loc, breakId) {
 
 async function toggleHold(loc) {
   const id  = roomId(loc);
-  const room = boardData[id] || {};
-  const now  = Date.now();
+  const now = Date.now();
   await writeRoom(id, r => ({
     ...r,
-    hold:   !r.hold,
-    holdAt: !r.hold ? now : null,
+    hold:      !r.hold,
+    holdAt:    !r.hold ? now : null,
+    requesting: !r.hold ? false : r.requesting, // turning hold ON clears request
   }));
 }
 
 async function toggleRequesting(loc) {
   const id = roomId(loc);
-  await writeRoom(id, r => ({ ...r, requesting: !r.requesting }));
+  await writeRoom(id, r => ({
+    ...r,
+    requesting: !r.requesting,
+    hold:       !r.requesting ? false : r.hold,   // turning request ON clears hold
+    holdAt:     !r.requesting ? null  : r.holdAt,
+  }));
 }
 
 async function clearBoard() {
@@ -515,6 +539,39 @@ function buildProviderInput(currentName, loc, card, onDone) {
   return wrap;
 }
 
+// ─── Render: No-break slot card (half-height, name only) ────────────────────
+function renderNoBreakCard(slot, isDisplay = false) {
+  const id       = roomId("nb_" + slot);
+  const room     = boardData[id] || {};
+  const provider = room.provider || null;
+
+  const card = el("div", { class: "or-card no-break-card" + (isDisplay ? " display-card" : "") + (!provider ? " empty" : "") });
+
+  const body = el("div", { class: "card-body" });
+  body.appendChild(el("div", { class: "room-label no-break-label" }, slot));
+
+  let editingProvider = false;
+  function renderProviderArea() {
+    const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
+    if (existing) existing.remove();
+    if (editingProvider) {
+      body.appendChild(buildProviderInput(provider, "nb_" + slot, card, () => {
+        editingProvider = false; renderProviderArea();
+      }));
+    } else {
+      const nameBtn = el("button", {
+        class: "provider-name-btn" + (!provider ? " empty" : ""),
+        onClick: () => { editingProvider = true; renderProviderArea(); }
+      }, provider || "Tap to assign");
+      body.appendChild(nameBtn);
+    }
+  }
+  renderProviderArea();
+
+  card.appendChild(el("div", { class: "card-inner" }, body));
+  return card;
+}
+
 // ─── Render: OR card ─────────────────────────────────────────────────────────
 function renderCard(loc, isDisplay = false) {
   const id       = roomId(loc);
@@ -546,10 +603,7 @@ function renderCard(loc, isDisplay = false) {
 
   const card = el("div", { class: cardClass });
 
-  // Requesting banner
-  if (isReq && provider) {
-    card.appendChild(el("div", { class: "requesting-banner" }, "🔔 " + provider + " is requesting a break"));
-  }
+  // On mobile: show requesting banner. On display: just show green card + name suffix.
 
   // ── Side buttons ──
   const side = el("div", { class: "card-side" });
@@ -592,10 +646,17 @@ function renderCard(loc, isDisplay = false) {
         renderProviderArea();
       }));
     } else {
+      const nameLabel = provider
+        ? (isReq && isDisplay ? provider + " — 🔔 requesting" : provider)
+        : "Tap to assign provider";
       const nameBtn = el("button", {
-        class: "provider-name-btn" + (!provider ? " empty" : ""),
+        class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
         onClick: () => { editingProvider = true; renderProviderArea(); }
-      }, provider || "Tap to assign provider");
+      }, nameLabel);
+      // On mobile, show requesting banner above name
+      if (isReq && provider && !isDisplay) {
+        body.appendChild(el("div", { class: "requesting-banner" }, "🔔 requesting a break"));
+      }
       body.appendChild(nameBtn);
 
       // Break pills — only if occupied
@@ -682,6 +743,7 @@ function renderBoard() {
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa"),
   ];
 
+  const noBreakCards = noBreakSlots.map(s => renderNoBreakCard(s, false));
   const cards = visibleLocs.map(loc => renderCard(loc, false));
 
 
@@ -701,12 +763,23 @@ function renderBoard() {
         el("div", { class: "header-right" },
           el("a", { class: "display-link", href: "?display=1", target: "_blank" }, "🖥 Display"),
           el("div", { class: "sync-pip" }),
-          el("span", { class: "dept-name" }, session.deptName),
+          el("button", { class: "logout-btn", onClick: () => {
+            sessionStorage.removeItem(SESSION_KEY);
+            session = null; boardData = {};
+            if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
+            if (unsubConfig) { unsubConfig(); unsubConfig = null; }
+            renderCodeScreen();
+          }}, "Leave"),
         ),
       )
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
+      noBreakSlots.length ? el("div", { class: "no-break-section" },
+        el("div", { class: "no-break-section-label" }, "Breakers / No Break Needed"),
+        ...noBreakCards,
+        el("hr", { class: "or-section-divider" }),
+      ) : null,
       ...cards,
     ),
   ));
@@ -723,6 +796,7 @@ function renderDisplay() {
 
   const visibleLocs = locations;
 
+  const noBreakCards = noBreakSlots.map(s => renderNoBreakCard(s, true));
   const cards = visibleLocs.map(loc => renderCard(loc, true));
 
   const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
@@ -764,7 +838,14 @@ function renderDisplay() {
         );
       })
     ),
-    el("div", { class: "display-wrap" }, ...cards),
+    el("div", { class: "display-wrap" },
+      ...(noBreakSlots.length ? [
+        el("div", { class: "no-break-section-label", style: { padding:"4px 2px" } }, "Breakers / No Break Needed"),
+        ...noBreakCards,
+        el("hr", { class: "or-section-divider" }),
+      ] : []),
+      ...cards,
+    ),
   ));
 
   clearTimeout(window._holdRefreshTimer);
@@ -921,14 +1002,36 @@ function renderAdminPage(deptCode) {
     const { list } = buildDraggableList(
       Object.entries(departments),
       () => {},
-      ([code, name], arr, rebuild) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-        el("span", {}, name, el("span", { class: "dept-badge" }, code)),
-        el("button", { class: "btn-danger", onClick: () => showConfirm(
-          "Delete Department",
-          `Permanently delete "${name}" (${code}) and ALL its board data? This cannot be undone.`,
-          async () => { await deleteDepartment(code); showToast(`${name} deleted`); setTimeout(() => renderAdminPage(null), 400); }
-        )}, "Delete"),
-      )
+      ([code, name], arr, rebuild) => {
+        const newCodeIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New code", style: { flex:"1", fontSize:"12px", padding:"6px 8px", display:"none" } });
+        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" }, onClick: () => {
+          newCodeIn.style.display = newCodeIn.style.display === "none" ? "block" : "none";
+          if (newCodeIn.style.display !== "none") newCodeIn.focus();
+        }}, "Edit Code");
+        newCodeIn.addEventListener("keydown", async e => {
+          if (e.key !== "Enter") return;
+          const newCode = newCodeIn.value.trim().toUpperCase();
+          if (!newCode || newCode === code || departments[newCode]) { showToast("Invalid or duplicate code"); return; }
+          await saveDepartment(newCode, name);
+          await deleteDepartment(code);
+          showToast(`Code changed to ${newCode}`);
+          setTimeout(() => renderAdminPage(null), 400);
+        });
+        return el("div", { style: { display:"flex", flexDirection:"column", flex:"1", gap:"6px" } },
+          el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px" } },
+            el("span", {}, name, el("span", { class: "dept-badge" }, code)),
+            el("div", { style: { display:"flex", gap:"6px" } },
+              editBtn,
+              el("button", { class: "btn-danger", onClick: () => showConfirm(
+                "Delete Department",
+                `Permanently delete "${name}" (${code}) and ALL its board data? This cannot be undone.`,
+                async () => { await deleteDepartment(code); showToast(`${name} deleted`); setTimeout(() => renderAdminPage(null), 400); }
+              )}, "Delete"),
+            ),
+          ),
+          newCodeIn,
+        );
+      }
     );
 
     const codeIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Code (e.g. CARDIAC)", style: { flex:"1" } });
@@ -983,6 +1086,38 @@ function renderAdminPage(deptCode) {
       el("div", { class: "admin-section-sub"   }, "Drag ⠿ to reorder. Changes apply immediately for all users."),
       list,
       el("div", { class: "admin-add-row" }, locIn, el("button", { class: "btn-primary", onClick: addLoc }, "Add")),
+    );
+  }
+
+  // ── No-break slots section ──
+  function buildNoBreakSection() {
+    let slots = [...noBreakSlots];
+    const { list, rebuild } = buildDraggableList(
+      slots,
+      async (newOrder) => { slots = newOrder; await saveNoBreakSlots(newOrder); },
+      (slot, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
+        el("span", {}, slot),
+        el("button", { class: "btn-danger", onClick: async () => {
+          const newSlots = arr.filter(s => s !== slot);
+          await saveNoBreakSlots(newSlots); slots = newSlots; rebuildFn(newSlots); showToast(`${slot} removed`);
+        }}, "Remove"),
+      )
+    );
+
+    const slotIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Breaker 1, Float", style: { flex:"1" } });
+    async function addSlot() {
+      const val = slotIn.value.trim();
+      if (!val || slots.includes(val)) return;
+      const newSlots = [...slots, val];
+      await saveNoBreakSlots(newSlots); slots = newSlots; rebuild(newSlots); slotIn.value = ""; showToast(`${val} added`);
+    }
+    slotIn.addEventListener("keydown", e => { if (e.key === "Enter") addSlot(); });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "No-Break Slots"),
+      el("div", { class: "admin-section-sub" }, "Slots for breakers or others who don't need breaks. Appear at the top of the board for tracking only."),
+      slots.length ? list : el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No slots yet."),
+      el("div", { class: "admin-add-row" }, slotIn, el("button", { class: "btn-primary", onClick: addSlot }, "Add")),
     );
   }
 
@@ -1041,9 +1176,10 @@ function renderAdminPage(deptCode) {
     el("div", { class: "admin-root" },
       el("div", { style: { fontFamily:"'Libre Baskerville', serif", fontWeight:"700", fontSize:"22px", color:"#2d2420", marginBottom:"4px" } }, "⚙️ " + (isDept ? session.deptName : "Departments")),
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
-      isDept ? buildLocSection()    : buildDeptSection(),
-      isDept ? buildRosterSection() : null,
-      isDept ? buildClearSection()  : null,
+      isDept ? buildLocSection()        : buildDeptSection(),
+      isDept ? buildNoBreakSection()    : null,
+      isDept ? buildRosterSection()     : null,
+      isDept ? buildClearSection()      : null,
     ),
   ));
 }
