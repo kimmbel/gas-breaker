@@ -311,12 +311,17 @@ function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
 
+  let boardInitialized = false;
+
   unsubBoard = onValue(boardRef(deptCode), snap => {
     boardData = snap.val() || {};
     checkAutoUnhold();
-    // Only re-render if we're actually showing the board or display page
-    if (document.querySelector(".main"))         renderBoard();
-    else if (document.querySelector(".display-wrap")) renderDisplay();
+    if (!boardInitialized) {
+      // First fire — always render the board regardless of what's on screen
+      boardInitialized = true;
+      renderBoard();
+    } else if (document.querySelector(".main"))              renderBoard();
+    else if (document.querySelector(".display-wrap"))        renderDisplay();
   }, err => {
     console.error("Board error:", err);
     document.querySelector(".sync-pip")?.classList.add("offline");
@@ -327,6 +332,7 @@ function subscribeToBoard(deptCode) {
     locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
     noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
     roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
+    // Only re-render if board is showing — not if on admin page
     if (document.querySelector(".main"))              renderBoard();
     else if (document.querySelector(".display-wrap")) renderDisplay();
   });
