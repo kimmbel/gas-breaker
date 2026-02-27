@@ -157,13 +157,23 @@
     .request-notification .notif-dismiss { margin-top: 10px; background: rgba(255,255,255,0.2); border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 800; padding: 4px 10px; cursor: pointer; }
     .request-notification .notif-timer-bar { height: 3px; background: rgba(255,255,255,0.5); border-radius: 2px; width: 100%; margin-top: 8px; }
 
-    /* ── Coordinator display layout — newspaper columns ── */
+    /* ── Coordinator display layout ── */
+    .display-outer { padding: 10px 12px 40px; max-width: 1600px; margin: 0 auto; }
+
+    /* No-break row — horizontal strip at top */
+    .display-nobreak-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-bottom: 4px;
+    }
+    .display-nobreak-row .or-card.no-break-card {
+      flex: 0 0 auto; width: 200px;
+    }
+    .display-divider { border: none; border-top: 1px dashed #e8e0d6; margin: 8px 0 10px; }
+
+    /* OR columns */
     .display-wrap {
-      padding: 10px 12px 40px;
       column-count: 4;
       column-gap: 8px;
-      max-width: 1600px;
-      margin: 0 auto;
     }
     @media (max-width: 1200px) { .display-wrap { column-count: 3; } }
     @media (max-width: 860px)  { .display-wrap { column-count: 2; } }
@@ -334,7 +344,7 @@ function subscribeToBoard(deptCode) {
     roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
     // Only re-render if board is showing — not if on admin page
     if (document.querySelector(".main"))              renderBoard();
-    else if (document.querySelector(".display-wrap")) renderDisplay();
+    else if (document.querySelector(".display-outer")) renderDisplay();
   });
 }
 
@@ -387,6 +397,32 @@ async function deleteDepartment(code) {
   await remove(ref(db, `departments/${code}`));
   await remove(ref(db, `config/${code}`));
   await remove(ref(db, `boards/${code}`));
+}
+
+async function renameDepartmentCode(oldCode, newCode, name) {
+  // 1. Read all existing data under old code
+  const [cfgSnap, boardsSnap] = await Promise.all([
+    get(ref(db, `config/${oldCode}`)),
+    get(ref(db, `boards/${oldCode}`)),
+  ]);
+
+  // 2. Write dept entry under new code
+  await set(ref(db, `departments/${newCode}`), name);
+
+  // 3. Copy config to new code (if any)
+  if (cfgSnap.exists()) {
+    await set(ref(db, `config/${newCode}`), cfgSnap.val());
+  }
+
+  // 4. Copy boards to new code (if any)
+  if (boardsSnap.exists()) {
+    await set(ref(db, `boards/${newCode}`), boardsSnap.val());
+  }
+
+  // 5. Delete old code paths
+  await remove(ref(db, `departments/${oldCode}`));
+  await remove(ref(db, `config/${oldCode}`));
+  await remove(ref(db, `boards/${oldCode}`));
 }
 
 // ─── Room ID — stable key from location name ──────────────────────────────────
@@ -860,17 +896,15 @@ function renderDisplay() {
         );
       })
     ),
-    el("div", { class: "display-wrap" },
-      ...(noBreakSlots.length ? [
-        ...noBreakCards,
-        el("hr", { class: "or-section-divider" }),
-      ] : []),
-      ...cards,
+    el("div", { class: "display-outer" },
+      noBreakSlots.length ? el("div", { class: "display-nobreak-row" }, ...noBreakCards) : null,
+      noBreakSlots.length ? el("hr", { class: "display-divider" }) : null,
+      el("div", { class: "display-wrap" }, ...cards),
     ),
   ));
 
   clearTimeout(window._holdRefreshTimer);
-  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-wrap")) renderDisplay(); }, 30000);
+  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-outer")) renderDisplay(); }, 30000);
 }
 
 // ─── Render: Code screen ─────────────────────────────────────────────────────
@@ -1042,8 +1076,7 @@ function renderAdminPage(deptCode) {
           if (e.key !== "Enter") return;
           const newCode = newCodeIn.value.trim().toUpperCase();
           if (!newCode || newCode === code || departments[newCode]) { showToast("Invalid or duplicate code"); return; }
-          await saveDepartment(newCode, name);
-          await deleteDepartment(code);
+          await renameDepartmentCode(code, newCode, name);
           showToast(`Code changed to ${newCode}`);
           setTimeout(() => renderAdminPage(null), 400);
         });
