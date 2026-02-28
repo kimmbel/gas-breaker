@@ -44,12 +44,12 @@
     .chip-dot   { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
     .chip-count { font-size: 13px; font-weight: 900; }
 
-    /* Phone board: filtered-out cards collapse */
-    .or-card.filter-done { display: none; }
+    /* Phone board: filtered-out cards collapse (only non-display cards) */
+    .or-card.filter-done:not(.display-card) { display: none; }
 
     /* Display board: filtered-out cards dim, needed cards get bright border */
-    .or-card.display-card.filter-done  { opacity: 0.2; }
-    .or-card.display-card.filter-needs { border-color: #facc15 !important; box-shadow: 0 0 0 2px #facc1540; }
+    .or-card.display-card.filter-done  { opacity: 0.18; }
+    .or-card.display-card.filter-needs { border-color: #facc15 !important; box-shadow: 0 0 0 3px #facc1550; }
 
     /* ── Main board ── */
     .main { max-width: 780px; margin: 0 auto; padding: 10px 16px; }
@@ -216,8 +216,8 @@
     .or-card.display-card.hold-warn { background: #3b2e00; border-color: #f59e0b; }
     .or-card.display-card.requesting { background: #063b33; border-color: #10b981; }
 
-    .display-card .room-label { font-size: 14px; font-weight: 900; color: #a39688; letter-spacing: 0.3px; }
-    .display-card .provider-name-btn { font-size: 16px; font-weight: 900; color: #f5f0eb; margin-bottom: 8px; }
+    .display-card .room-label { font-size: 16px; font-weight: 900; color: #a39688; letter-spacing: 0.3px; }
+    .display-card .provider-name-btn { font-size: 18px; font-weight: 900; color: #f5f0eb; margin-bottom: 8px; }
     .display-card .provider-name-btn.empty { color: #4a4240; font-weight: 700; }
     .display-card .provider-name-btn.requesting-name { color: #34d399; }
 
@@ -624,6 +624,7 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
   input.addEventListener("focus", () => showDropdown(input.value));
   input.addEventListener("input", () => showDropdown(input.value));
   input.addEventListener("blur",  () => setTimeout(() => {
+    if (tabHandled) return; // Tab already called onDone, skip blur
     closeDropdown();
     // Restore empty state if no provider assigned
     if (card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
@@ -631,6 +632,8 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
     }
     onDone();
   }, 150));
+  let tabHandled = false;
+
   input.addEventListener("keydown", async e => {
     if (e.key === "Escape") { closeDropdown(); onDone(); return; }
     if (e.key === "Enter" || e.key === "Tab") {
@@ -638,15 +641,15 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
       const isTab = e.key === "Tab";
       const query = input.value.trim();
       const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
+      closeDropdown();
       if (matches.length > 0) {
-        closeDropdown();
         await assignProvider(loc, matches[0]);
-        if (isTab && onTab) onTab();
-        else onDone();
-      } else {
-        // No match — just move on
-        if (isTab && onTab) { closeDropdown(); onDone(); onTab(); }
       }
+      // Always call onDone to clean up current card
+      if (isTab) tabHandled = true;
+      onDone();
+      // After current card is done, open next
+      if (isTab && onTab) setTimeout(() => onTab(), 80);
     }
   });
 
@@ -901,8 +904,8 @@ function renderBoard() {
     const card = renderCard(loc, false, tabOrder, noBreakSlots.length + i);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
-      if (room.provider && (room.breaks||{})[activeFilter]) {
-        card.classList.add("filter-done");
+      if (!room.provider || (room.provider && (room.breaks||{})[activeFilter])) {
+        card.classList.add("filter-done"); // hide: empty room OR break already given
       }
     }
     return card;
