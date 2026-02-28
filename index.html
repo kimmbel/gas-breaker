@@ -8,6 +8,13 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: #f8f4ef; font-family: 'Nunito', sans-serif; color: #2d2420; -webkit-tap-highlight-color: transparent; }
+    body.display-mode { background: #130f0d; }
+    body.display-mode .header { background: #1e1a17; border-bottom-color: #3d3530; }
+    body.display-mode .logo-text { color: #f5f0eb; }
+    body.display-mode .logo-sub  { color: #7c6c62; }
+    body.display-mode .sync-pip  { box-shadow: 0 0 8px #4ade8099; }
+    body.display-mode .chip { border: 1.5px solid #3d3530; }
+    body.display-mode .summary-bar { max-width: none; background: #1e1a17; padding: 8px 14px; border-bottom: 1px solid #3d3530; }
     button, select, input { font-family: inherit; }
     button { cursor: pointer; }
     button:active { opacity: 0.82; transform: scale(0.96); }
@@ -31,9 +38,18 @@
 
     /* ── Summary bar ── */
     .summary-bar { max-width: 780px; margin: 0 auto; padding: 8px 16px; display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .chip { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+    .chip { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, box-shadow 0.15s; }
+    .chip.filter-rooms { cursor: default; }
+    .chip.active-filter { border-color: currentColor; box-shadow: 0 0 0 2px rgba(0,0,0,0.08); }
     .chip-dot   { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
     .chip-count { font-size: 13px; font-weight: 900; }
+
+    /* Phone board: filtered-out cards collapse */
+    .or-card.filter-done { display: none; }
+
+    /* Display board: filtered-out cards dim, needed cards get bright border */
+    .or-card.display-card.filter-done  { opacity: 0.2; }
+    .or-card.display-card.filter-needs { border-color: #facc15 !important; box-shadow: 0 0 0 2px #facc1540; }
 
     /* ── Main board ── */
     .main { max-width: 780px; margin: 0 auto; padding: 10px 16px; }
@@ -158,7 +174,7 @@
     .request-notification .notif-timer-bar { height: 3px; background: rgba(255,255,255,0.5); border-radius: 2px; width: 100%; margin-top: 8px; }
 
     /* ── Coordinator display layout ── */
-    .display-outer { padding: 10px 12px 40px; max-width: 1600px; margin: 0 auto; }
+    .display-outer { padding: 10px 14px 40px; max-width: 1600px; margin: 0 auto; }
 
     /* No-break row — horizontal strip at top */
     .display-nobreak-row {
@@ -167,32 +183,56 @@
     }
     .display-nobreak-row .or-card.no-break-card {
       flex: 0 0 auto; width: 180px;
-      padding: 5px 10px;
+      padding: 6px 10px;
       min-height: unset !important;
+      background: #1e1a17; border-color: #3d3530;
     }
-    .display-nobreak-row .no-break-label { font-size: 10px; margin-bottom: 1px; }
-    .display-nobreak-row .provider-name-btn { font-size: 11px; line-height: 1.2; margin-bottom: 0; }
-    .display-divider { border: none; border-top: 1px dashed #e8e0d6; margin: 8px 0 10px; }
+    .display-nobreak-row .no-break-label { font-size: 10px; margin-bottom: 1px; color: #7c6c62; }
+    .display-nobreak-row .provider-name-btn { font-size: 13px; font-weight: 800; line-height: 1.2; margin-bottom: 0; color: #e8ddd6; }
+    .display-nobreak-row .or-card.no-break-card.empty { opacity: 0.4; }
+    .display-divider { border: none; border-top: 2px dashed #3d3530; margin: 8px 0 10px; }
 
     /* OR columns */
     .display-wrap {
       column-count: 4;
-      column-gap: 8px;
+      column-gap: 10px;
     }
     @media (max-width: 1200px) { .display-wrap { column-count: 3; } }
     @media (max-width: 860px)  { .display-wrap { column-count: 2; } }
     @media (max-width: 500px)  { .display-wrap { column-count: 1; } }
+
+    /* Display cards — bold dark theme */
     .or-card.display-card {
       break-inside: avoid;
-      margin-bottom: 8px;
-      padding: 10px 12px;
-      min-height: 110px;
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      min-height: 120px;
+      background: #1e1a17;
+      border: 2px solid #3d3530;
+      box-shadow: none;
     }
-    .display-card .room-label { font-size: 13px; }
-    .display-card .provider-name-btn { font-size: 12px; margin-bottom: 5px; }
-    .display-card .pill { font-size: 11px; padding: 4px 9px; }
-    .display-card .side-btn { font-size: 10px; padding: 4px 7px; min-width: 44px; }
-    .display-card .requesting-banner { font-size: 10px; padding: 3px 8px; }
+    .or-card.display-card.empty   { background: #181410; border-color: #2a2420; opacity: 0.45; }
+    .or-card.display-card.hold      { background: #3b1515; border-color: #dc2626; }
+    .or-card.display-card.hold-warn { background: #3b2e00; border-color: #f59e0b; }
+    .or-card.display-card.requesting { background: #063b33; border-color: #10b981; }
+
+    .display-card .room-label { font-size: 14px; font-weight: 900; color: #a39688; letter-spacing: 0.3px; }
+    .display-card .provider-name-btn { font-size: 16px; font-weight: 900; color: #f5f0eb; margin-bottom: 8px; }
+    .display-card .provider-name-btn.empty { color: #4a4240; font-weight: 700; }
+    .display-card .provider-name-btn.requesting-name { color: #34d399; }
+
+    .display-card .pill {
+      font-size: 12px; padding: 5px 11px; font-weight: 800;
+      background: #2d2825; border-color: #4a4240; color: #6b5e57;
+    }
+    .display-card .pill.done {
+      background: #064e3b; color: #34d399; border-color: #059669;
+    }
+    .display-card .side-btn { font-size: 11px; padding: 5px 8px; min-width: 48px; background: #2d2825; border-color: #4a4240; color: #7c6c62; }
+    .display-card .side-btn.hold-on   { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
+    .display-card .side-btn.hold-warn { background: #78350f; color: #fcd34d; border-color: #f59e0b; }
+    .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
+    .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -248,6 +288,8 @@ let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
 let roster        = [];
 let departments   = {};
 let isDisplayMode = false;
+let activeFilter    = null;   // null | "am" | "lunch" | "pm"
+let providerHistory = {};    // { [nameKey]: { am?, lunch?, pm? } } — persists all day
 
 let unsubBoard  = null;
 let unsubConfig = null;
@@ -329,13 +371,17 @@ function subscribeToBoard(deptCode) {
 
   unsubBoard = onValue(boardRef(deptCode), snap => {
     boardData = snap.val() || {};
+    // Sync providerHistory from _hist_ keys in boardData
+    providerHistory = {};
+    Object.entries(boardData).forEach(([k, v]) => {
+      if (k.startsWith("_hist_") && v?.provider) providerHistory[v.provider] = v.breaks || {};
+    });
     checkAutoUnhold();
     if (!boardInitialized) {
-      // First fire — always render the board regardless of what's on screen
       boardInitialized = true;
       renderBoard();
     } else if (document.querySelector(".main"))              renderBoard();
-    else if (document.querySelector(".display-wrap"))        renderDisplay();
+    else if (document.querySelector(".display-outer"))       renderDisplay();
   }, err => {
     console.error("Board error:", err);
     document.querySelector(".sync-pip")?.classList.add("offline");
@@ -434,44 +480,46 @@ function roomId(loc) {
   return loc.replace(/[^a-zA-Z0-9]/g, "_");
 }
 
+// ─── Provider history helpers ─────────────────────────────────────────────────
+function providerKey(name) {
+  return "_hist_" + name.replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+async function saveProviderBreaks(name, breaks) {
+  if (!session?.deptCode || !name) return;
+  const key = providerKey(name);
+  await set(ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`), { provider: name, breaks });
+}
+
+function getProviderHistory(name) {
+  return providerHistory[name] || {};
+}
+
 // ─── Board actions ────────────────────────────────────────────────────────────
 async function assignProvider(loc, name) {
   const targetId = roomId(loc);
-  
-  // Check if this provider is already in another room
-  const existingEntry = Object.entries(boardData).find(
-    ([id, room]) => room.provider === name && id !== targetId && !id.startsWith("nb_")
-  );
 
+  // Always restore breaks from provider's day history
+  const restoredBreaks = getProviderHistory(name);
+
+  // If provider is already in another room, clear that room first
+  const existingEntry = Object.entries(boardData).find(
+    ([id, room]) => room.provider === name && id !== targetId && !id.startsWith("nb_") && !id.startsWith("_hist_")
+  );
   if (existingEntry) {
-    // Provider is moving from another room — carry their breaks, clear old room
-    const [oldId, oldRoom] = existingEntry;
-    const carriedBreaks = oldRoom.breaks || {};
-    
-    // Write both rooms in sequence
+    const [oldId] = existingEntry;
     const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${oldId}`);
     const oldSnap = await get(oldRef);
-    const oldData = oldSnap.val() || {};
-    await set(oldRef, { ...oldData, provider: null, breaks: {}, hold: false, holdAt: null, requesting: false });
-    
-    await writeRoom(targetId, r => ({
-      ...r,
-      location: loc,
-      provider: name,
-      breaks: carriedBreaks,
-      hold: false, holdAt: null, requesting: false,
-    }));
-  } else {
-    // New provider or same provider — reset breaks if different
-    const currentRoom = boardData[targetId] || {};
-    await writeRoom(targetId, r => ({
-      ...r,
-      location: loc,
-      provider: name,
-      breaks: (currentRoom.provider === name) ? (r.breaks || {}) : {},
-      hold: false, holdAt: null, requesting: false,
-    }));
+    await set(oldRef, { ...(oldSnap.val()||{}), provider: null, breaks: {}, hold: false, holdAt: null, requesting: false });
   }
+
+  await writeRoom(targetId, r => ({
+    ...r,
+    location: loc,
+    provider: name,
+    breaks: restoredBreaks,
+    hold: false, holdAt: null, requesting: false,
+  }));
 }
 
 async function clearProvider(loc) {
@@ -481,12 +529,13 @@ async function clearProvider(loc) {
 
 async function toggleBreak(loc, breakId) {
   const id = roomId(loc);
-  await writeRoom(id, r => {
-    const breaks = { ...(r.breaks || {}) };
-    if (breaks[breakId]) delete breaks[breakId]; // undo
-    else breaks[breakId] = Date.now();            // mark done
-    return { ...r, breaks };
-  });
+  const room = boardData[id] || {};
+  const breaks = { ...(room.breaks || {}) };
+  if (breaks[breakId]) delete breaks[breakId];
+  else breaks[breakId] = Date.now();
+  await writeRoom(id, r => ({ ...r, breaks }));
+  // Also persist to provider history so breaks follow them if moved
+  if (room.provider) await saveProviderBreaks(room.provider, breaks);
 }
 
 async function toggleHold(loc) {
@@ -525,7 +574,7 @@ async function clearBoard() {
 }
 
 // ─── Roster dropdown ──────────────────────────────────────────────────────────
-function buildProviderInput(currentName, loc, card, onDone) {
+function buildProviderInput(currentName, loc, card, onDone, onTab) {
   const wrap  = el("div", { class: "provider-input-wrap" });
   const input = el("input", { class: "provider-input", type: "text", value: "", placeholder: "Search roster...", autocomplete: "off" });
   let dropdown = null;
@@ -586,13 +635,17 @@ function buildProviderInput(currentName, loc, card, onDone) {
     if (e.key === "Escape") { closeDropdown(); onDone(); return; }
     if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
-      // Fill in the top roster match
+      const isTab = e.key === "Tab";
       const query = input.value.trim();
       const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
       if (matches.length > 0) {
         closeDropdown();
         await assignProvider(loc, matches[0]);
-        onDone();
+        if (isTab && onTab) onTab();
+        else onDone();
+      } else {
+        // No match — just move on
+        if (isTab && onTab) { closeDropdown(); onDone(); onTab(); }
       }
     }
   });
@@ -603,7 +656,7 @@ function buildProviderInput(currentName, loc, card, onDone) {
 }
 
 // ─── Render: No-break slot card (half-height, name only) ────────────────────
-function renderNoBreakCard(slot, isDisplay = false) {
+function renderNoBreakCard(slot, isDisplay = false, tabOrder = null, tabIdx = null) {
   const id       = roomId("nb_" + slot);
   const room     = boardData[id] || {};
   const provider = room.provider || null;
@@ -614,17 +667,31 @@ function renderNoBreakCard(slot, isDisplay = false) {
   body.appendChild(el("div", { class: "room-label no-break-label" }, slot));
 
   let editingProvider = false;
+
+  function openEdit() { editingProvider = true; renderProviderArea(); }
+
+  // Register in tab order so next card can trigger this one
+  if (tabOrder !== null && tabIdx !== null) tabOrder[tabIdx] = { openEdit };
+
+  function onTab() {
+    // Focus the next card in tab order
+    if (tabOrder) {
+      const next = tabOrder[tabIdx + 1];
+      if (next) setTimeout(() => next.openEdit(), 50);
+    }
+  }
+
   function renderProviderArea() {
     const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
     if (existing) existing.remove();
     if (editingProvider) {
       body.appendChild(buildProviderInput(provider, "nb_" + slot, card, () => {
         editingProvider = false; renderProviderArea();
-      }));
+      }, onTab));
     } else {
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!provider ? " empty" : ""),
-        onClick: () => { editingProvider = true; renderProviderArea(); }
+        onClick: openEdit
       }, provider || "Tap to assign");
       body.appendChild(nameBtn);
     }
@@ -636,7 +703,7 @@ function renderNoBreakCard(slot, isDisplay = false) {
 }
 
 // ─── Render: OR card ─────────────────────────────────────────────────────────
-function renderCard(loc, isDisplay = false) {
+function renderCard(loc, isDisplay = false, tabOrder = null, tabIdx = null) {
   const id       = roomId(loc);
   const room     = boardData[id] || {};
   const provider = room.provider || null;
@@ -696,6 +763,16 @@ function renderCard(loc, isDisplay = false) {
   // Provider name / input
   let editingProvider = false;
 
+  function openEdit() { editingProvider = true; renderProviderArea(); }
+  if (tabOrder !== null && tabIdx !== null) tabOrder[tabIdx] = { openEdit };
+
+  function onTab() {
+    if (tabOrder) {
+      const next = tabOrder[tabIdx + 1];
+      if (next) setTimeout(() => next.openEdit(), 50);
+    }
+  }
+
   function renderProviderArea() {
     // Remove old provider area if present
     const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
@@ -707,14 +784,14 @@ function renderCard(loc, isDisplay = false) {
       body.appendChild(buildProviderInput(provider, loc, card, () => {
         editingProvider = false;
         renderProviderArea();
-      }));
+      }, isDisplay ? null : onTab));
     } else {
       const nameLabel = provider
         ? (isReq && isDisplay ? provider + " — 🔔 requesting" : provider)
         : "Tap to assign provider";
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
-        onClick: () => { editingProvider = true; renderProviderArea(); }
+        onClick: openEdit
       }, nameLabel);
       // On mobile, show requesting banner above name
       if (isReq && provider && !isDisplay) {
@@ -778,7 +855,7 @@ function showRequestNotification(loc, providerName) {
 // ─── Render: Board ────────────────────────────────────────────────────────────
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
-
+  document.body.classList.remove("display-mode");
   checkRequestNotifications();
 
   const visibleLocs = locations;
@@ -790,24 +867,46 @@ function renderBoard() {
   const lunchLeft = allRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
   const pmLeft    = allRooms.filter(r => r.provider && !(r.breaks||{}).pm).length;
 
-  function makeChip(count, label, bg, color, dot) {
+  function makeChip(count, label, bg, color, dot, filterId) {
     const has = count > 0;
-    return el("div", { class: "chip", style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" } },
+    const isActive = activeFilter === filterId;
+    const chip = el("div", {
+      class: "chip" + (!filterId ? " filter-rooms" : "") + (isActive ? " active-filter" : ""),
+      style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" }
+    },
       el("span", { class: "chip-dot", style: { background: has ? dot : "#d4ccc6" } }),
       el("span", { class: "chip-count" }, String(count)),
-      el("span", {}, label),
+      el("span", {}, label + (isActive ? " ✕" : "")),
     );
+    if (filterId) {
+      chip.addEventListener("click", () => {
+        activeFilter = (activeFilter === filterId) ? null : filterId;
+        renderBoard();
+      });
+    }
+    return chip;
   }
 
   const chips = [
-    makeChip(occupied,  "Rooms",          "#fef3c7", "#b45309", "#f59e0b"),
-    makeChip(amLeft,    "AM remaining",   "#fee2e2", "#dc2626", "#f87171"),
-    makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8"),
-    makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa"),
+    makeChip(occupied,  "Rooms",          "#fef3c7", "#b45309", "#f59e0b", null),
+    makeChip(amLeft,    "AM remaining",   "#fee2e2", "#dc2626", "#f87171", "am"),
+    makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8", "lunch"),
+    makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
   ];
 
-  const noBreakCards = noBreakSlots.map(s => renderNoBreakCard(s, false));
-  const cards = visibleLocs.map(loc => renderCard(loc, false));
+  // Build tab-order list: no-break slots first, then regular ORs
+  const tabOrder = [];  // array of { openEdit: fn } in visual order — no-break slots first, then ORs
+  const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, tabOrder, i));
+  const cards = visibleLocs.map((loc, i) => {
+    const card = renderCard(loc, false, tabOrder, noBreakSlots.length + i);
+    if (activeFilter) {
+      const room = boardData[roomId(loc)] || {};
+      if (room.provider && (room.breaks||{})[activeFilter]) {
+        card.classList.add("filter-done");
+      }
+    }
+    return card;
+  });
 
 
 
@@ -854,12 +953,26 @@ function renderBoard() {
 // ─── Render: Coordinator display ──────────────────────────────────────────────
 function renderDisplay() {
   isDisplayMode = true;
+  document.body.classList.add("display-mode");
   checkRequestNotifications();
 
   const visibleLocs = locations;
 
   const noBreakCards = noBreakSlots.map(s => renderNoBreakCard(s, true));
-  const cards = visibleLocs.map(loc => renderCard(loc, true));
+  const cards = visibleLocs.map(loc => {
+    const card = renderCard(loc, true);
+    if (activeFilter) {
+      const room = boardData[roomId(loc)] || {};
+      if (room.provider) {
+        if ((room.breaks||{})[activeFilter]) {
+          card.classList.add("filter-done");   // dim: already got this break
+        } else {
+          card.classList.add("filter-needs");  // highlight: still needs this break
+        }
+      }
+    }
+    return card;
+  });
 
   const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
   const dOccupied  = dAllRooms.filter(r => r.provider).length;
@@ -887,17 +1000,23 @@ function renderDisplay() {
     ),
     el("div", { class: "summary-bar", style: { maxWidth: "none" } },
       ...[
-        [dOccupied,  "Rooms",           "#fef3c7", "#b45309", "#f59e0b"],
-        [dAmLeft,    "AM remaining",    "#fee2e2", "#dc2626", "#f87171"],
-        [dLunchLeft, "Lunch remaining", "#e0f2fe", "#0369a1", "#38bdf8"],
-        [dPmLeft,    "PM remaining",    "#ede9fe", "#7c3aed", "#a78bfa"],
-      ].map(([count, label, bg, color, dot]) => {
+        [dOccupied,  "Rooms",           "#fef3c7", "#b45309", "#f59e0b", null],
+        [dAmLeft,    "AM remaining",    "#fee2e2", "#dc2626", "#f87171", "am"],
+        [dLunchLeft, "Lunch remaining", "#e0f2fe", "#0369a1", "#38bdf8", "lunch"],
+        [dPmLeft,    "PM remaining",    "#ede9fe", "#7c3aed", "#a78bfa", "pm"],
+      ].map(([count, label, bg, color, dot, filterId]) => {
         const has = count > 0;
-        return el("div", { class: "chip", style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" } },
-          el("span", { class: "chip-dot", style: { background: has ? dot : "#d4ccc6" } }),
+        const isActive = activeFilter === filterId;
+        const chip = el("div", {
+          class: "chip" + (!filterId ? " filter-rooms" : "") + (isActive ? " active-filter" : ""),
+          style: { background: has ? bg : "#2d2825", color: has ? color : "#4a4240", border: "2px solid " + (isActive ? color : "transparent") }
+        },
+          el("span", { class: "chip-dot", style: { background: has ? dot : "#3d3530" } }),
           el("span", { class: "chip-count" }, String(count)),
-          el("span", {}, label),
+          el("span", {}, label + (isActive ? " ✕" : "")),
         );
+        if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; renderDisplay(); });
+        return chip;
       })
     ),
     el("div", { class: "display-outer" },
