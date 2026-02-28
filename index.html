@@ -206,19 +206,23 @@
     .or-card.display-card {
       break-inside: avoid;
       margin-bottom: 10px;
-      padding: 12px 14px;
+      padding: 0;
       background: #1e1a17;
       border: 2px solid #3d3530;
       box-shadow: none;
-      overflow: visible;       /* allow dropdown to escape */
+      overflow: visible;       /* never clip — allows dropdown to escape card boundary */
+      position: relative;
     }
-    /* Fixed height only on regular OR cards, not no-break slots */
-    .or-card.display-card:not(.no-break-card) {
+    /* Inner content wrapper clips to fixed height; card stays overflow:visible */
+    .or-card.display-card:not(.no-break-card) .display-card-inner {
       height: 130px;
       overflow: hidden;
+      padding: 12px 14px;
     }
-    .or-card.display-card:not(.no-break-card) .card-inner { height: 100%; align-items: stretch; }
-    .or-card.display-card:not(.no-break-card) .card-body  { overflow: hidden; }
+    /* No-break cards just use natural padding */
+    .or-card.display-card.no-break-card .display-card-inner {
+      padding: 6px 10px;
+    }
     .or-card.display-card.empty   { background: #181410; border-color: #2a2420; opacity: 0.45; }
     .or-card.display-card.hold      { background: #3b1515; border-color: #dc2626; }
     .or-card.display-card.hold-warn { background: #3b2e00; border-color: #f59e0b; }
@@ -245,7 +249,7 @@
     .display-card .side-btn.hold-warn { background: #78350f; color: #fcd34d; border-color: #f59e0b; }
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 11px; font-weight: 800; padding: 2px 8px; margin-top: 3px; white-space: nowrap; }
+    .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -617,7 +621,7 @@ async function clearBoard() {
 }
 
 // ─── Roster dropdown ──────────────────────────────────────────────────────────
-function buildProviderInput(currentName, loc, card, onDone, onTab) {
+function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = false) {
   const wrap  = el("div", { class: "provider-input-wrap" });
   const input = el("input", { class: "provider-input", type: "text", value: "", placeholder: "Search roster...", autocomplete: "off" });
   let dropdown = null;
@@ -661,7 +665,22 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
       dropdown.appendChild(none);
     }
 
-    wrap.appendChild(dropdown);
+    if (isDisplay) {
+      // On the coordinator display, append to body and position with fixed coords
+      // so no parent overflow:hidden or column layout can clip the dropdown.
+      dropdown.style.position = "fixed";
+      dropdown.style.zIndex   = "9999";
+      document.body.appendChild(dropdown);
+      // Position after paint so getBoundingClientRect is accurate
+      requestAnimationFrame(() => {
+        const rect = wrap.getBoundingClientRect();
+        dropdown.style.left  = rect.left + "px";
+        dropdown.style.top   = (rect.bottom + 2) + "px";
+        dropdown.style.width = rect.width + "px";
+      });
+    } else {
+      wrap.appendChild(dropdown);
+    }
   }
 
   input.addEventListener("focus", () => showDropdown(input.value));
@@ -732,7 +751,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
     if (editingProvider) {
       body.appendChild(buildProviderInput(provider, "nb_" + slot, card, () => {
         editingProvider = false; renderProviderArea();
-      }, onTab));
+      }, onTab, isDisplay));
     } else {
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!provider ? " empty" : ""),
@@ -808,8 +827,16 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   // ── Card body — vertical stack: room → provider → pills ──
   const body = el("div", { class: "card-body" });
 
-  // Room label
-  body.appendChild(el("div", { class: "room-label" }, loc));
+  // Room label — with requesting badge on right for display mode
+  if (isDisplay && isReq && provider) {
+    const labelRow = el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" } },
+      el("div", { class: "room-label", style: { flex:"1", minWidth:"0" } }, loc),
+      el("div", { class: "display-req-badge" }, "🔔 requesting"),
+    );
+    body.appendChild(labelRow);
+  } else {
+    body.appendChild(el("div", { class: "room-label" }, loc));
+  }
 
   // Provider name / input
   let editingProvider = false;
@@ -836,7 +863,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       body.appendChild(buildProviderInput(provider, loc, card, () => {
         editingProvider = false;
         renderProviderArea();
-      }, onTab));
+      }, onTab, isDisplay));
     } else {
       const nameLabel = provider || "Tap to assign provider";
       const nameBtn = el("button", {
@@ -848,10 +875,6 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         body.appendChild(el("div", { class: "requesting-banner" }, "🔔 requesting a break"));
       }
       body.appendChild(nameBtn);
-      // On display, show a compact requesting badge below the name
-      if (isReq && provider && isDisplay) {
-        body.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
-      }
 
       // Break pills — only if occupied
       if (provider) {
