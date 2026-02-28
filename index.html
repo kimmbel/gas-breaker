@@ -492,6 +492,11 @@ async function saveProviderBreaks(name, breaks) {
 }
 
 function getProviderHistory(name) {
+  // Read directly from live boardData so we always get the freshest breaks
+  const key = providerKey(name);
+  const entry = boardData[key];
+  if (entry && entry.provider === name) return entry.breaks || {};
+  // Fall back to in-memory providerHistory (populated by board listener)
   return providerHistory[name] || {};
 }
 
@@ -499,20 +504,43 @@ function getProviderHistory(name) {
 async function assignProvider(loc, name) {
   const targetId = roomId(loc);
 
-  // Always restore breaks from provider's day history
+  // Breaks for the provider being assigned (from day history)
   const restoredBreaks = getProviderHistory(name);
 
-  // If provider is already in another room, clear that room first
+  // Who is currently in the target room (may be displaced)?
+  const targetRoom = boardData[targetId] || {};
+  const displacedProvider = (targetRoom.provider && targetRoom.provider !== name)
+    ? targetRoom.provider : null;
+
+  // Where is the incoming provider currently (may need to be cleared or swapped)?
   const existingEntry = Object.entries(boardData).find(
-    ([id, room]) => room.provider === name && id !== targetId && !id.startsWith("nb_") && !id.startsWith("_hist_")
+    ([id, room]) => room.provider === name && id !== targetId
+      && !id.startsWith("nb_") && !id.startsWith("_hist_")
   );
-  if (existingEntry) {
-    const [oldId] = existingEntry;
-    const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${oldId}`);
+  const incomingOldId = existingEntry ? existingEntry[0] : null;
+
+  if (displacedProvider && incomingOldId) {
+    // SWAP: move displaced provider into the incoming provider's old room
+    const displacedBreaks = getProviderHistory(displacedProvider);
+    const swapRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
+    const swapSnap = await get(swapRef);
+    await set(swapRef, {
+      ...(swapSnap.val()||{}),
+      provider: displacedProvider,
+      breaks: displacedBreaks,
+      hold: false, holdAt: null, requesting: false,
+    });
+  } else if (incomingOldId) {
+    // MOVE: just clear the room the provider is leaving
+    const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const oldSnap = await get(oldRef);
     await set(oldRef, { ...(oldSnap.val()||{}), provider: null, breaks: {}, hold: false, holdAt: null, requesting: false });
+  } else if (displacedProvider) {
+    // DISPLACE into empty: displaced provider has nowhere to go — just clear target
+    // (their breaks are already saved in history, they can be reassigned)
   }
 
+  // Write the target room with the new provider
   await writeRoom(targetId, r => ({
     ...r,
     location: loc,
@@ -659,29 +687,29 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
 }
 
 // ─── Render: No-break slot card (half-height, name only) ────────────────────
-function renderNoBreakCard(slot, isDisplay = false, tabOrder = null, tabIdx = null) {
+function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
   const id       = roomId("nb_" + slot);
   const room     = boardData[id] || {};
   const provider = room.provider || null;
 
   const card = el("div", { class: "or-card no-break-card" + (isDisplay ? " display-card" : "") + (!provider ? " empty" : "") });
+  if (tabIdx !== null) card.setAttribute("data-tab-idx", tabIdx);
 
   const body = el("div", { class: "card-body" });
   body.appendChild(el("div", { class: "room-label no-break-label" }, slot));
 
   let editingProvider = false;
 
-  function openEdit() { editingProvider = true; renderProviderArea(); }
-
-  // Register in tab order so next card can trigger this one
-  if (tabOrder !== null && tabIdx !== null) tabOrder[tabIdx] = { openEdit };
+  function openEdit() {
+    if (editingProvider) return;
+    editingProvider = true; renderProviderArea();
+  }
 
   function onTab() {
-    // Focus the next card in tab order
-    if (tabOrder) {
-      const next = tabOrder[tabIdx + 1];
-      if (next) setTimeout(() => next.openEdit(), 50);
-    }
+    // Find the next card by data-tab-idx in the live DOM
+    const nextIdx = tabIdx + 1;
+    const nextBtn = document.querySelector(`[data-tab-idx="${nextIdx}"] .provider-name-btn`);
+    if (nextBtn) setTimeout(() => nextBtn.click(), 60);
   }
 
   function renderProviderArea() {
@@ -706,7 +734,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabOrder = null, tabIdx = nu
 }
 
 // ─── Render: OR card ─────────────────────────────────────────────────────────
-function renderCard(loc, isDisplay = false, tabOrder = null, tabIdx = null) {
+function renderCard(loc, isDisplay = false, tabIdx = null) {
   const id       = roomId(loc);
   const room     = boardData[id] || {};
   const provider = room.provider || null;
@@ -735,6 +763,7 @@ function renderCard(loc, isDisplay = false, tabOrder = null, tabIdx = null) {
   else if (isReq)                     cardClass += " requesting";
 
   const card = el("div", { class: cardClass });
+  if (tabIdx !== null && !isDisplay) card.setAttribute("data-tab-idx", tabIdx);
 
   // On mobile: show requesting banner. On display: just show green card + name suffix.
 
@@ -766,14 +795,15 @@ function renderCard(loc, isDisplay = false, tabOrder = null, tabIdx = null) {
   // Provider name / input
   let editingProvider = false;
 
-  function openEdit() { editingProvider = true; renderProviderArea(); }
-  if (tabOrder !== null && tabIdx !== null) tabOrder[tabIdx] = { openEdit };
+  function openEdit() {
+    if (editingProvider) return;
+    editingProvider = true; renderProviderArea();
+  }
 
   function onTab() {
-    if (tabOrder) {
-      const next = tabOrder[tabIdx + 1];
-      if (next) setTimeout(() => next.openEdit(), 50);
-    }
+    if (tabIdx === null || isDisplay) return;
+    const nextBtn = document.querySelector(`[data-tab-idx="${tabIdx + 1}"] .provider-name-btn`);
+    if (nextBtn) setTimeout(() => nextBtn.click(), 60);
   }
 
   function renderProviderArea() {
@@ -897,11 +927,9 @@ function renderBoard() {
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
   ];
 
-  // Build tab-order list: no-break slots first, then regular ORs
-  const tabOrder = [];  // array of { openEdit: fn } in visual order — no-break slots first, then ORs
-  const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, tabOrder, i));
+  const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, i));
   const cards = visibleLocs.map((loc, i) => {
-    const card = renderCard(loc, false, tabOrder, noBreakSlots.length + i);
+    const card = renderCard(loc, false, noBreakSlots.length + i);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
       if (!room.provider || (room.provider && (room.breaks||{})[activeFilter])) {
