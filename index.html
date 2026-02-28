@@ -296,7 +296,7 @@ let unsubConfig = null;
 let unsubDepts  = null;
 
 // ─── Firebase refs ────────────────────────────────────────────────────────────
-const tsDay      = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+const tsDay      = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; };
 const boardRef   = (code) => ref(db, `boards/${code}/${tsDay()}`);
 const configRef  = (code) => ref(db, `config/${code}`);
 const deptsRef   = ()     => ref(db, `departments`);
@@ -379,7 +379,8 @@ function subscribeToBoard(deptCode) {
     checkAutoUnhold();
     if (!boardInitialized) {
       boardInitialized = true;
-      renderBoard();
+      if (isDisplayMode) renderDisplay();
+      else renderBoard();
     } else if (document.querySelector(".main"))              renderBoard();
     else if (document.querySelector(".display-outer"))       renderDisplay();
   }, err => {
@@ -402,6 +403,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
+    if (rid.startsWith("_hist_")) return; // skip provider history entries
     if (room.hold && room.holdAt && (now - room.holdAt) >= HOLD_CLEAR_MS) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null }));
     }
@@ -668,15 +670,14 @@ function buildProviderInput(currentName, loc, card, onDone, onTab) {
       e.preventDefault();
       const isTab = e.key === "Tab";
       const query = input.value.trim();
-      const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
-      closeDropdown();
-      if (matches.length > 0) {
-        await assignProvider(loc, matches[0]);
+      // Only assign if user has typed something — empty tab just moves to next room
+      if (query) {
+        const matches = roster.filter(n => rosterMatches(n, query));
+        if (matches.length > 0) await assignProvider(loc, matches[0]);
       }
-      // Always call onDone to clean up current card
+      closeDropdown();
       if (isTab) tabHandled = true;
       onDone();
-      // After current card is done, open next
       if (isTab && onTab) setTimeout(() => onTab(), 80);
     }
   });
@@ -763,7 +764,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   else if (isReq)                     cardClass += " requesting";
 
   const card = el("div", { class: cardClass });
-  if (tabIdx !== null && !isDisplay) card.setAttribute("data-tab-idx", tabIdx);
+  if (tabIdx !== null) card.setAttribute("data-tab-idx", tabIdx);
 
   // On mobile: show requesting banner. On display: just show green card + name suffix.
 
@@ -801,7 +802,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   }
 
   function onTab() {
-    if (tabIdx === null || isDisplay) return;
+    if (tabIdx === null) return;
     const nextBtn = document.querySelector(`[data-tab-idx="${tabIdx + 1}"] .provider-name-btn`);
     if (nextBtn) setTimeout(() => nextBtn.click(), 60);
   }
@@ -817,7 +818,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       body.appendChild(buildProviderInput(provider, loc, card, () => {
         editingProvider = false;
         renderProviderArea();
-      }, isDisplay ? null : onTab));
+      }, onTab));
     } else {
       const nameLabel = provider
         ? (isReq && isDisplay ? provider + " — 🔔 requesting" : provider)
@@ -958,7 +959,7 @@ function renderBoard() {
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
             sessionStorage.removeItem(SESSION_KEY);
-            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = [];
+            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; activeFilter = null; providerHistory = {};
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
             renderCodeScreen();
@@ -989,9 +990,9 @@ function renderDisplay() {
 
   const visibleLocs = locations;
 
-  const noBreakCards = noBreakSlots.map(s => renderNoBreakCard(s, true));
-  const cards = visibleLocs.map(loc => {
-    const card = renderCard(loc, true);
+  const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, true, i));
+  const cards = visibleLocs.map((loc, i) => {
+    const card = renderCard(loc, true, noBreakSlots.length + i);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
       if (room.provider) {
@@ -1083,16 +1084,8 @@ function renderCodeScreen(errorMsg = "") {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
       await loadConfig(code);
       const goDisplay = window._postLoginDisplay || new URLSearchParams(window.location.search).has("display");
-      if (goDisplay) {
-        unsubBoard && unsubBoard();
-        unsubBoard = onValue(boardRef(code), snap => {
-          boardData = snap.val() || {};
-          checkAutoUnhold();
-          renderDisplay();
-        });
-      } else {
-        subscribeToBoard(code);
-      }
+      if (goDisplay) isDisplayMode = true; // flag so subscribeToBoard renders display
+      subscribeToBoard(code);
     } else {
       renderCodeScreen("Incorrect code. Check the department board.");
     }
@@ -1164,7 +1157,7 @@ async function loadConfig(code) {
       locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
       noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
       roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
-      if (!done) { done = true; resolve(); }
+      if (!done) { done = true; unsub(); resolve(); }
     });
     setTimeout(() => { if (!done) { done = true; resolve(); } }, 3000);
   });
@@ -1422,16 +1415,8 @@ function renderAdminPage(deptCode) {
       if (s?.deptCode && departments[s.deptCode]) {
         session = s;
         await loadConfig(s.deptCode);
+        if (isDisplay) isDisplayMode = true; // flag so subscribeToBoard renders display
         subscribeToBoard(s.deptCode);
-        if (isDisplay) {
-          // board listener will call renderBoard; override with display render
-          unsubBoard && unsubBoard();
-          unsubBoard = onValue(boardRef(s.deptCode), snap => {
-            boardData = snap.val() || {};
-            checkAutoUnhold();
-            renderDisplay();
-          });
-        }
         return;
       }
     }
