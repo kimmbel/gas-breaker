@@ -202,19 +202,23 @@
     @media (max-width: 860px)  { .display-wrap { column-count: 2; } }
     @media (max-width: 500px)  { .display-wrap { column-count: 1; } }
 
-    /* Display cards — bold dark theme, fixed height to prevent reflow */
+    /* Display cards — bold dark theme */
     .or-card.display-card {
       break-inside: avoid;
       margin-bottom: 10px;
       padding: 12px 14px;
-      height: 130px;           /* fixed — never grows */
-      overflow: hidden;
       background: #1e1a17;
       border: 2px solid #3d3530;
       box-shadow: none;
+      overflow: visible;       /* allow dropdown to escape */
     }
-    .or-card.display-card .card-inner { height: 100%; }
-    .or-card.display-card .card-body  { overflow: hidden; }
+    /* Fixed height only on regular OR cards, not no-break slots */
+    .or-card.display-card:not(.no-break-card) {
+      height: 130px;
+      overflow: hidden;
+    }
+    .or-card.display-card:not(.no-break-card) .card-inner { height: 100%; align-items: stretch; }
+    .or-card.display-card:not(.no-break-card) .card-body  { overflow: hidden; }
     .or-card.display-card.empty   { background: #181410; border-color: #2a2420; opacity: 0.45; }
     .or-card.display-card.hold      { background: #3b1515; border-color: #dc2626; }
     .or-card.display-card.hold-warn { background: #3b2e00; border-color: #f59e0b; }
@@ -241,6 +245,7 @@
     .display-card .side-btn.hold-warn { background: #78350f; color: #fcd34d; border-color: #f59e0b; }
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 11px; font-weight: 800; padding: 2px 8px; margin-top: 3px; white-space: nowrap; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -843,6 +848,10 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         body.appendChild(el("div", { class: "requesting-banner" }, "🔔 requesting a break"));
       }
       body.appendChild(nameBtn);
+      // On display, show a compact requesting badge below the name
+      if (isReq && provider && isDisplay) {
+        body.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
+      }
 
       // Break pills — only if occupied
       if (provider) {
@@ -934,7 +943,7 @@ function renderBoard() {
 
   function makeChip(count, label, bg, color, dot, filterId) {
     const has = count > 0;
-    const isActive = activeFilter === filterId;
+    const isActive = filterId !== null && activeFilter === filterId;
     const chip = el("div", {
       class: "chip" + (!filterId ? " filter-rooms" : "") + (isActive ? " active-filter" : ""),
       style: { background: has ? bg : "#f1ede8", color: has ? color : "#c4b8ad" }
@@ -953,7 +962,7 @@ function renderBoard() {
   }
 
   const chips = [
-    makeChip(occupied,  "Rooms",          "#fef3c7", "#b45309", "#f59e0b", null),
+    makeChip(occupied,  "Rooms Running",  "#fef3c7", "#b45309", "#f59e0b", null),
     makeChip(amLeft,    "AM remaining",   "#fee2e2", "#dc2626", "#f87171", "am"),
     makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8", "lunch"),
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
@@ -1063,13 +1072,13 @@ function renderDisplay() {
     ),
     el("div", { class: "summary-bar", style: { maxWidth: "none" } },
       ...[
-        [dOccupied,  "Rooms",           "#fef3c7", "#b45309", "#f59e0b", null],
+        [dOccupied,  "Rooms Running",   "#fef3c7", "#b45309", "#f59e0b", null],
         [dAmLeft,    "AM remaining",    "#fee2e2", "#dc2626", "#f87171", "am"],
         [dLunchLeft, "Lunch remaining", "#e0f2fe", "#0369a1", "#38bdf8", "lunch"],
         [dPmLeft,    "PM remaining",    "#ede9fe", "#7c3aed", "#a78bfa", "pm"],
       ].map(([count, label, bg, color, dot, filterId]) => {
         const has = count > 0;
-        const isActive = activeFilter === filterId;
+        const isActive = filterId !== null && activeFilter === filterId;
         const chip = el("div", {
           class: "chip" + (!filterId ? " filter-rooms" : "") + (isActive ? " active-filter" : ""),
           style: { background: has ? bg : "#2d2825", color: has ? color : "#4a4240", border: "2px solid " + (isActive ? color : "transparent") }
