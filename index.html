@@ -212,7 +212,6 @@
       border: 2px solid #3d3530;
       box-shadow: none;
       overflow: hidden;        /* clips content; dropdown is position:fixed on body so unaffected */
-      position: relative;
     }
     /* Fixed height on OR cards — empty and occupied are always the same size */
     .or-card.display-card:not(.no-break-card) {
@@ -251,7 +250,7 @@
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
     .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
-    .display-badges { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; position: absolute; top: 12px; right: 14px; }
+    .display-badges { display: flex; flex-direction: row; gap: 4px; align-items: center; flex-shrink: 0; }
     .display-card .note-input-wrap { display: flex; gap: 4px; margin-bottom: 4px; }
     .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 6px; padding: 3px 7px; font-size: 12px; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
 
@@ -946,8 +945,12 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
     const badges = el("div", { class: "display-badges" });
     if (note) badges.appendChild(el("div", { class: "display-note-badge" }, "📌 " + note));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
-    body.appendChild(el("div", { class: "room-label" }, loc));
-    body.appendChild(badges);
+    body.appendChild(
+      el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
+        el("div", { class: "room-label", style: { flex:"1", minWidth:"0", marginBottom:"0" } }, loc),
+        badges,
+      )
+    );
   } else {
     body.appendChild(el("div", { class: "room-label" }, loc));
   }
