@@ -1195,17 +1195,14 @@ function renderCodeScreen(errorMsg = "") {
     btn.textContent = "Checking…"; btn.disabled = true;
 
     try {
-      // Try admin first, then dept
+      // Always try admin first (same password, different email), then dept
       let user, isAdmin = false;
-      if (code === "ADMIN" || auth.currentUser?.email === ADMIN_EMAIL) {
-        // Let Firebase tell us — try admin email with entered code as password
-        try {
-          user = await signInAs(ADMIN_EMAIL, code);
-          isAdmin = true;
-        } catch { /* not admin, fall through */ }
-      }
+      try {
+        user = await signInAs(ADMIN_EMAIL, code);
+        isAdmin = true;
+      } catch { /* not admin — try as dept */ }
+
       if (!user) {
-        // Try as dept account
         user = await signInAs(deptEmail(code), code);
       }
 
