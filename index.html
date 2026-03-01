@@ -284,7 +284,6 @@ const auth        = getAuth(firebaseApp);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 // Admin code is now a Firebase Auth account — no hardcoded secret
-const SESSION_KEY    = "gasbreaker-session-v4";
 const HOLD_WARN_MS   = 15 * 60 * 1000; // 15 min → amber warning
 const HOLD_CLEAR_MS  = 20 * 60 * 1000; // 20 min → auto-release
 
@@ -474,6 +473,8 @@ async function saveDepartment(code, name, passcode = null) {
     // Account already exists — that's fine for renames
   }
   await set(ref(db, `departments/${code}`), name);
+  // Store the passcode so we can retrieve it later for auth operations
+  await set(ref(db, `config/${code}/passcode`), password);
   // Re-authenticate as admin after creating dept account (creating a user signs you in as them)
   await signInAs(ADMIN_EMAIL, window._adminPass);
 }
@@ -481,7 +482,8 @@ async function saveDepartment(code, name, passcode = null) {
 async function deleteDepartment(code) {
   // Sign in as dept briefly to delete its Auth account
   try {
-    const deptUser = await signInAs(deptEmail(code), code);
+    const pass = await getDeptPasscode(code);
+    const deptUser = await signInAs(deptEmail(code), pass);
     await deleteUser(deptUser);
   } catch { /* account may not exist — continue */ }
   // Re-authenticate as admin
@@ -492,9 +494,12 @@ async function deleteDepartment(code) {
 }
 
 async function changeDeptPasscode(code, newPasscode) {
-  // Sign in as dept, change password, re-auth as admin
-  const deptUser = await signInAs(deptEmail(code), /* old pass = code or stored */ code);
+  // Sign in as dept using stored passcode, change password, re-auth as admin
+  const currentPass = await getDeptPasscode(code);
+  const deptUser = await signInAs(deptEmail(code), currentPass);
   await updatePassword(deptUser, newPasscode);
+  // Store the new passcode so future operations can retrieve it
+  await set(ref(db, `config/${code}/passcode`), newPasscode);
   await signInAs(ADMIN_EMAIL, window._adminPass);
 }
 
@@ -504,24 +509,20 @@ async function changeAdminPasscode(newPasscode) {
 }
 
 async function renameDepartmentCode(oldCode, newCode, name) {
-  // 1. Read all existing data under old code
+  // 1. Read all existing data under old code (including stored passcode)
   const [cfgSnap, boardsSnap] = await Promise.all([
     get(ref(db, `config/${oldCode}`)),
     get(ref(db, `boards/${oldCode}`)),
   ]);
+  const oldPass = (cfgSnap.val() || {}).passcode || oldCode;
 
-  // 2. Create new Auth account for new code (using same passcode as old dept — oldCode)
-  //    We sign in as old dept to get its credential, then create new account
+  // 2. Create new Auth account for new code, preserving the existing passcode
   try {
-    const oldDeptUser = await signInAs(deptEmail(oldCode), oldCode);
-    // Get the old password — we need to create new account with same password
-    // Since we can't read a password, we re-use oldCode as the initial password
-    // Admin can change it afterward if needed
-    await signInAs(ADMIN_EMAIL, window._adminPass); // go back to admin
-    await createUserWithEmailAndPassword(auth, deptEmail(newCode), oldCode);
+    await signInAs(ADMIN_EMAIL, window._adminPass);
+    await createUserWithEmailAndPassword(auth, deptEmail(newCode), oldPass);
     await signInAs(ADMIN_EMAIL, window._adminPass);
     // Delete old auth account
-    const oldUser = await signInAs(deptEmail(oldCode), oldCode);
+    const oldUser = await signInAs(deptEmail(oldCode), oldPass);
     await deleteUser(oldUser);
     await signInAs(ADMIN_EMAIL, window._adminPass);
   } catch (e) {
@@ -532,8 +533,9 @@ async function renameDepartmentCode(oldCode, newCode, name) {
   // 3. Write dept entry under new code
   await set(ref(db, `departments/${newCode}`), name);
 
-  // 4. Copy config to new code (if any)
-  if (cfgSnap.exists()) await set(ref(db, `config/${newCode}`), cfgSnap.val());
+  // 4. Copy config to new code, ensuring passcode is stored under new key
+  const cfgVal = cfgSnap.exists() ? { ...cfgSnap.val(), passcode: oldPass } : { passcode: oldPass };
+  await set(ref(db, `config/${newCode}`), cfgVal);
 
   // 5. Copy boards to new code (if any)
   if (boardsSnap.exists()) await set(ref(db, `boards/${newCode}`), boardsSnap.val());
@@ -542,6 +544,12 @@ async function renameDepartmentCode(oldCode, newCode, name) {
   await remove(ref(db, `departments/${oldCode}`));
   await remove(ref(db, `config/${oldCode}`));
   await remove(ref(db, `boards/${oldCode}`));
+}
+
+// ─── Dept passcode helper — reads stored passcode from config ────────────────
+async function getDeptPasscode(code) {
+  const snap = await get(ref(db, `config/${code}/passcode`));
+  return snap.val() || code; // fall back to code itself if not stored yet
 }
 
 // ─── Room ID — stable key from location name ──────────────────────────────────
@@ -686,7 +694,14 @@ async function toggleRequesting(loc) {
 }
 
 async function clearBoard() {
-  await set(boardRef(session.deptCode), {});
+  // Preserve _hist_ provider history entries — only clear room assignments
+  const snap = await get(boardRef(session.deptCode));
+  const current = snap.val() || {};
+  const preserved = {};
+  Object.entries(current).forEach(([k, v]) => {
+    if (k.startsWith("_hist_")) preserved[k] = v;
+  });
+  await set(boardRef(session.deptCode), preserved);
 }
 
 // ─── Roster dropdown ──────────────────────────────────────────────────────────
@@ -783,7 +798,6 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const opts = getOptions();
       if (!dropdown) showDropdown(input.value);
       setHighlight(Math.min(highlightedIdx + 1, getOptions().length - 1));
       return;
@@ -882,7 +896,6 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const holdAt   = room.holdAt || null;
   const now      = Date.now();
   const holdAge  = isHold && holdAt ? now - holdAt : 0;
-  const isWarn   = isHold && holdAge >= HOLD_WARN_MS;
 
   // If hold has already expired, treat as not on hold (Firebase will catch up)
   const holdExpired = isHold && holdAt && (now - holdAt) >= HOLD_CLEAR_MS;
@@ -1179,7 +1192,6 @@ function renderBoard() {
           el("a", { class: "display-link", href: `?display=1&code=${session.deptCode}`, target: "_blank" }, "🖥 Display"),
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
-            sessionStorage.removeItem(SESSION_KEY);
             session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; activeFilter = null; providerHistory = {};
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
@@ -1198,9 +1210,18 @@ function renderBoard() {
     ),
   ));
 
-  // Refresh every 30s to update hold timers
+  // Refresh every 30s to update hold timers — but skip if user is actively typing
   clearTimeout(window._holdRefreshTimer);
-  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".main")) renderBoard(); }, 30000);
+  window._holdRefreshTimer = setTimeout(() => {
+    if (!document.querySelector(".main")) return;
+    // Don't interrupt active input — reschedule instead
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+      window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".main")) renderBoard(); }, 30000);
+      return;
+    }
+    renderBoard();
+  }, 30000);
 }
 
 // ─── Render: Coordinator display ──────────────────────────────────────────────
@@ -1280,7 +1301,16 @@ function renderDisplay() {
   ));
 
   clearTimeout(window._holdRefreshTimer);
-  window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-outer")) renderDisplay(); }, 30000);
+  window._holdRefreshTimer = setTimeout(() => {
+    if (!document.querySelector(".display-outer")) return;
+    // Don't interrupt active input — reschedule instead
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+      window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-outer")) renderDisplay(); }, 30000);
+      return;
+    }
+    renderDisplay();
+  }, 30000);
 }
 
 // ─── Auth helpers ────────────────────────────────────────────────────────────
@@ -1736,9 +1766,13 @@ function renderAdminPage(deptCode) {
     if (!user) {
       // Not signed in — check for URL code (display auto-login)
       if (urlCode) {
-        // Try to sign in with the URL code
+        // Try admin first, then dept (mirrors tryCode logic)
         try {
-          await signInAs(deptEmail(urlCode), urlCode);
+          try {
+            await signInAs(ADMIN_EMAIL, urlCode);
+          } catch {
+            await signInAs(deptEmail(urlCode), urlCode);
+          }
           // onAuthStateChanged will fire again with the user
           return;
         } catch {
