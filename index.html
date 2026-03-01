@@ -556,8 +556,11 @@ function providerKey(name) {
 
 async function saveProviderBreaks(name, breaks) {
   if (!session?.deptCode || !name) return;
-  const key = providerKey(name);
-  await set(ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`), { provider: name, breaks });
+  const key  = providerKey(name);
+  const r    = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
+  const snap = await get(r);
+  const current = snap.val() || {};
+  await set(r, { ...current, provider: name, breaks }); // preserve note and any other fields
 }
 
 function getProviderHistory(name) {
