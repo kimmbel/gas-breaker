@@ -1225,9 +1225,11 @@ function renderCodeScreen(errorMsg = "") {
         subscribeToBoard(code);
       }
     } catch (err) {
-      const msg = err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password"
+      console.error("Login error:", err.code, err.message);
+      const authFail = ["auth/invalid-credential","auth/user-not-found","auth/wrong-password","auth/invalid-email"].includes(err.code);
+      const msg = authFail
         ? "Incorrect code. Check the department board."
-        : "Incorrect code. Check the department board.";
+        : `Error: ${err.code || err.message}`;
       btn.textContent = "Enter →"; btn.disabled = false;
       busy = false;
       renderCodeScreen(msg);
