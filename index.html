@@ -261,6 +261,7 @@
 <script type="module">
 import { initializeApp }                                           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, onValue, set, get, remove, push, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, signOut, updatePassword, createUserWithEmailAndPassword, deleteUser, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -274,9 +275,10 @@ const firebaseConfig = {
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
+const auth        = getAuth(firebaseApp);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const ADMIN_CODE     = "GBADMIN";
+// Admin code is now a Firebase Auth account — no hardcoded secret
 const SESSION_KEY    = "gasbreaker-session-v4";
 const HOLD_WARN_MS   = 15 * 60 * 1000; // 15 min → amber warning
 const HOLD_CLEAR_MS  = 20 * 60 * 1000; // 20 min → auto-release
@@ -456,14 +458,44 @@ async function deleteRosterEntry(name) {
   }
 }
 
-async function saveDepartment(code, name) {
+async function saveDepartment(code, name, passcode = null) {
+  // passcode = initial password for new dept account; if null, code is used as default
+  const password = passcode || code;
+  // Create the Firebase Auth account for this dept
+  try {
+    await createUserWithEmailAndPassword(auth, deptEmail(code), password);
+  } catch (e) {
+    if (e.code !== "auth/email-already-in-use") throw e;
+    // Account already exists — that's fine for renames
+  }
   await set(ref(db, `departments/${code}`), name);
+  // Re-authenticate as admin after creating dept account (creating a user signs you in as them)
+  await signInAs(ADMIN_EMAIL, window._adminPass);
 }
 
 async function deleteDepartment(code) {
+  // Sign in as dept briefly to delete its Auth account
+  try {
+    const deptUser = await signInAs(deptEmail(code), code);
+    await deleteUser(deptUser);
+  } catch { /* account may not exist — continue */ }
+  // Re-authenticate as admin
+  await signInAs(ADMIN_EMAIL, window._adminPass);
   await remove(ref(db, `departments/${code}`));
   await remove(ref(db, `config/${code}`));
   await remove(ref(db, `boards/${code}`));
+}
+
+async function changeDeptPasscode(code, newPasscode) {
+  // Sign in as dept, change password, re-auth as admin
+  const deptUser = await signInAs(deptEmail(code), /* old pass = code or stored */ code);
+  await updatePassword(deptUser, newPasscode);
+  await signInAs(ADMIN_EMAIL, window._adminPass);
+}
+
+async function changeAdminPasscode(newPasscode) {
+  await updatePassword(auth.currentUser, newPasscode);
+  window._adminPass = newPasscode;
 }
 
 async function renameDepartmentCode(oldCode, newCode, name) {
@@ -473,20 +505,35 @@ async function renameDepartmentCode(oldCode, newCode, name) {
     get(ref(db, `boards/${oldCode}`)),
   ]);
 
-  // 2. Write dept entry under new code
+  // 2. Create new Auth account for new code (using same passcode as old dept — oldCode)
+  //    We sign in as old dept to get its credential, then create new account
+  try {
+    const oldDeptUser = await signInAs(deptEmail(oldCode), oldCode);
+    // Get the old password — we need to create new account with same password
+    // Since we can't read a password, we re-use oldCode as the initial password
+    // Admin can change it afterward if needed
+    await signInAs(ADMIN_EMAIL, window._adminPass); // go back to admin
+    await createUserWithEmailAndPassword(auth, deptEmail(newCode), oldCode);
+    await signInAs(ADMIN_EMAIL, window._adminPass);
+    // Delete old auth account
+    const oldUser = await signInAs(deptEmail(oldCode), oldCode);
+    await deleteUser(oldUser);
+    await signInAs(ADMIN_EMAIL, window._adminPass);
+  } catch (e) {
+    if (e.code !== "auth/email-already-in-use") console.warn("Auth rename note:", e.message);
+    try { await signInAs(ADMIN_EMAIL, window._adminPass); } catch {}
+  }
+
+  // 3. Write dept entry under new code
   await set(ref(db, `departments/${newCode}`), name);
 
-  // 3. Copy config to new code (if any)
-  if (cfgSnap.exists()) {
-    await set(ref(db, `config/${newCode}`), cfgSnap.val());
-  }
+  // 4. Copy config to new code (if any)
+  if (cfgSnap.exists()) await set(ref(db, `config/${newCode}`), cfgSnap.val());
 
-  // 4. Copy boards to new code (if any)
-  if (boardsSnap.exists()) {
-    await set(ref(db, `boards/${newCode}`), boardsSnap.val());
-  }
+  // 5. Copy boards to new code (if any)
+  if (boardsSnap.exists()) await set(ref(db, `boards/${newCode}`), boardsSnap.val());
 
-  // 5. Delete old code paths
+  // 6. Delete old code paths
   await remove(ref(db, `departments/${oldCode}`));
   await remove(ref(db, `config/${oldCode}`));
   await remove(ref(db, `boards/${oldCode}`));
@@ -1023,7 +1070,7 @@ function renderBoard() {
             session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; activeFilter = null; providerHistory = {};
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
-            renderCodeScreen();
+            signOut(auth).finally(() => renderCodeScreen());
           }}, "Leave"),
         ),
       )
@@ -1123,34 +1170,75 @@ function renderDisplay() {
   window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-outer")) renderDisplay(); }, 30000);
 }
 
+// ─── Auth helpers ────────────────────────────────────────────────────────────
+// Dept accounts: <CODE>@gasbreaker.app  password = the code
+// Admin account: admin@gasbreaker.app  password = admin passcode
+function deptEmail(code) { return code.toLowerCase() + "@gasbreaker.app"; }
+const ADMIN_EMAIL = "admin@gasbreaker.app";
+
+async function signInAs(email, password) {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  return cred.user;
+}
+
 // ─── Render: Code screen ─────────────────────────────────────────────────────
 function renderCodeScreen(errorMsg = "") {
   const input = el("input", { class: "text-input code-input", placeholder: "Enter code", type: "text", autocomplete: "off" });
-  input.addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
+  const btn   = el("button", { class: "btn-primary mt" }, "Enter →");
+  let busy = false;
 
   async function tryCode() {
+    if (busy) return;
     const code = input.value.trim().toUpperCase();
-    if (code === ADMIN_CODE) {
-      session = { isAdmin: true };
-      // If departments already loaded, go straight to admin
-      if (Object.keys(departments).length > 0) {
-        renderAdminDeptSelect();
-      } else {
-        subscribeToDepartments(() => renderAdminDeptSelect());
+    if (!code) return;
+    busy = true;
+    btn.textContent = "Checking…"; btn.disabled = true;
+
+    try {
+      // Try admin first, then dept
+      let user, isAdmin = false;
+      if (code === "ADMIN" || auth.currentUser?.email === ADMIN_EMAIL) {
+        // Let Firebase tell us — try admin email with entered code as password
+        try {
+          user = await signInAs(ADMIN_EMAIL, code);
+          isAdmin = true;
+        } catch { /* not admin, fall through */ }
       }
-      return;
-    }
-    if (departments[code]) {
-      session = { deptCode: code, deptName: departments[code] };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      await loadConfig(code);
-      const goDisplay = window._postLoginDisplay || new URLSearchParams(window.location.search).has("display");
-      if (goDisplay) isDisplayMode = true; // flag so subscribeToBoard renders display
-      subscribeToBoard(code);
-    } else {
-      renderCodeScreen("Incorrect code. Check the department board.");
+      if (!user) {
+        // Try as dept account
+        user = await signInAs(deptEmail(code), code);
+      }
+
+      if (isAdmin) {
+        window._adminPass = code; // store for re-auth after dept account operations
+        session = { isAdmin: true };
+        subscribeToDepartments(() => renderAdminDeptSelect());
+      } else {
+        // Dept login — load departments to get name
+        await new Promise(resolve => {
+          if (Object.keys(departments).length) { resolve(); return; }
+          subscribeToDepartments(resolve);
+        });
+        const deptName = departments[code];
+        if (!deptName) throw new Error("Dept not found");
+        session = { deptCode: code, deptName };
+        await loadConfig(code);
+        const goDisplay = window._postLoginDisplay || new URLSearchParams(window.location.search).has("display");
+        if (goDisplay) isDisplayMode = true;
+        subscribeToBoard(code);
+      }
+    } catch (err) {
+      const msg = err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password"
+        ? "Incorrect code. Check the department board."
+        : "Incorrect code. Check the department board.";
+      btn.textContent = "Enter →"; btn.disabled = false;
+      busy = false;
+      renderCodeScreen(msg);
     }
   }
+
+  input.addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
+  btn.addEventListener("click", tryCode);
 
   document.getElementById("app").innerHTML = "";
   document.getElementById("app").appendChild(
@@ -1163,7 +1251,7 @@ function renderCodeScreen(errorMsg = "") {
         el("label", { class: "field-label" }, "Department Code"),
         input,
         errorMsg ? el("div", { class: "error-msg" }, errorMsg) : null,
-        el("button", { class: "btn-primary mt", onClick: tryCode }, "Enter →"),
+        btn,
       )
     )
   );
@@ -1276,6 +1364,7 @@ function renderAdminPage(deptCode) {
       () => {},
       ([code, name], arr, rebuild) => {
         const newCodeIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New code", style: { flex:"1", fontSize:"12px", padding:"6px 8px", display:"none" } });
+        const passIn   = el("input", { class: "admin-add-input", type: "text", placeholder: "New passcode for " + code, style: { flex:"1", fontSize:"12px", padding:"6px 8px", display:"none" } });
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" }, onClick: () => {
           newCodeIn.style.display = newCodeIn.style.display === "none" ? "block" : "none";
           if (newCodeIn.style.display !== "none") newCodeIn.focus();
@@ -1288,11 +1377,28 @@ function renderAdminPage(deptCode) {
           showToast(`Code changed to ${newCode}`);
           setTimeout(() => renderAdminPage(null), 400);
         });
+        passIn.addEventListener("keydown", async e => {
+          if (e.key !== "Enter") return;
+          const newPass = passIn.value.trim().toUpperCase();
+          if (!newPass || newPass.length < 4) { showToast("Passcode must be at least 4 characters"); return; }
+          passIn.disabled = true;
+          try {
+            await changeDeptPasscode(code, newPass);
+            showToast(`Passcode updated for ${code}`);
+          } catch (err) {
+            showToast("Error: " + (err.message || "Could not update passcode"));
+          }
+          passIn.value = ""; passIn.disabled = false; passIn.style.display = "none";
+        });
         return el("div", { style: { display:"flex", flexDirection:"column", flex:"1", gap:"6px" } },
           el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px" } },
             el("span", {}, name, el("span", { class: "dept-badge" }, code)),
             el("div", { style: { display:"flex", gap:"6px" } },
               editBtn,
+              el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" }, onClick: () => {
+                passIn.style.display = passIn.style.display === "none" ? "block" : "none";
+                if (passIn.style.display !== "none") passIn.focus();
+              }}, "Change Passcode"),
               el("button", { class: "btn-danger", onClick: () => showConfirm(
                 "Delete Department",
                 `Permanently delete "${name}" (${code}) and ALL its board data? This cannot be undone.`,
@@ -1301,6 +1407,7 @@ function renderAdminPage(deptCode) {
             ),
           ),
           newCodeIn,
+          passIn,
         );
       }
     );
@@ -1313,10 +1420,14 @@ function renderAdminPage(deptCode) {
       const name = nameIn.value.trim();
       if (!code || !name) return;
       if (departments[code]) { showToast("Code already exists"); return; }
-      await saveDepartment(code, name);
-      showToast(`${name} added`);
-      codeIn.value = ""; nameIn.value = "";
-      setTimeout(() => renderAdminPage(null), 400);
+      try {
+        await saveDepartment(code, name);
+        showToast(`${name} added — passcode is "${code}"`);
+        codeIn.value = ""; nameIn.value = "";
+        setTimeout(() => renderAdminPage(null), 400);
+      } catch (err) {
+        showToast("Error: " + (err.message || "Could not create department"));
+      }
     }
     nameIn.addEventListener("keydown", e => { if (e.key === "Enter") addDept(); });
 
@@ -1424,6 +1535,36 @@ function renderAdminPage(deptCode) {
     );
   }
 
+  // ── Admin passcode section (shown on departments page) ──
+  function buildAdminPasscodeSection() {
+    const newPassIn    = el("input", { class: "admin-add-input", type: "password", placeholder: "New admin passcode", style: { flex:"1" } });
+    const confirmIn    = el("input", { class: "admin-add-input", type: "password", placeholder: "Confirm passcode", style: { flex:"1" } });
+    const statusMsg    = el("div", { style: { fontSize:"12px", color:"#dc2626", marginTop:"4px", minHeight:"16px" } });
+
+    async function doChange() {
+      const np = newPassIn.value.trim();
+      const cp = confirmIn.value.trim();
+      if (!np || np.length < 6) { statusMsg.textContent = "Passcode must be at least 6 characters."; return; }
+      if (np !== cp)             { statusMsg.textContent = "Passcodes do not match."; return; }
+      statusMsg.textContent = "";
+      try {
+        await changeAdminPasscode(np);
+        newPassIn.value = ""; confirmIn.value = "";
+        showToast("Admin passcode updated ✓");
+      } catch (err) {
+        statusMsg.textContent = "Error: " + (err.message || "Could not update.");
+      }
+    }
+    confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Admin Passcode"),
+      el("div", { class: "admin-section-sub" }, "Change the admin login passcode. You will need to use the new passcode next time."),
+      el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
+      statusMsg,
+    );
+  }
+
   // ── Clear board section ──
   function buildClearSection() {
     return el("div", { class: "admin-section" },
@@ -1449,58 +1590,80 @@ function renderAdminPage(deptCode) {
     el("div", { class: "admin-root" },
       el("div", { style: { fontFamily:"'Libre Baskerville', serif", fontWeight:"700", fontSize:"22px", color:"#2d2420", marginBottom:"4px" } }, "⚙️ " + (isDept ? session.deptName : "Departments")),
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
-      isDept ? buildLocSection()        : buildDeptSection(),
-      isDept ? buildNoBreakSection()    : null,
-      isDept ? buildRosterSection()     : null,
-      isDept ? buildClearSection()      : null,
+      isDept ? buildLocSection()           : buildDeptSection(),
+      isDept ? buildNoBreakSection()       : buildAdminPasscodeSection(),
+      isDept ? buildRosterSection()        : null,
+      isDept ? buildClearSection()         : null,
     ),
   ));
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
-(async function init() {
-  const isDisplay = new URLSearchParams(window.location.search).has("display");
+(function init() {
+  const params    = new URLSearchParams(window.location.search);
+  const isDisplay = params.has("display");
+  const urlCode   = params.get("code");
 
-  // Load departments first
-  await new Promise(resolve => {
-    let done = false;
-    subscribeToDepartments(() => { if (!done) { done = true; resolve(); } });
-    setTimeout(() => { if (!done) { done = true; resolve(); } }, 3000);
-  });
+  // Show a loading state immediately
+  document.getElementById("app").innerHTML =
+    "<div style='min-height:100vh;display:flex;align-items:center;justify-content:center;'>" +
+    "<div style='font-size:32px'>💨</div></div>";
 
-  // Restore session
-  try {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (stored) {
-      const s = JSON.parse(stored);
-      if (s?.deptCode && departments[s.deptCode]) {
-        session = s;
-        await loadConfig(s.deptCode);
-        if (isDisplay) isDisplayMode = true; // flag so subscribeToBoard renders display
-        subscribeToBoard(s.deptCode);
-        return;
+  // Firebase Auth persists the token — onAuthStateChanged fires on every load
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      // Not signed in — check for URL code (display auto-login)
+      if (urlCode) {
+        // Try to sign in with the URL code
+        try {
+          await signInAs(deptEmail(urlCode), urlCode);
+          // onAuthStateChanged will fire again with the user
+          return;
+        } catch {
+          // Invalid code in URL — fall through to code screen
+        }
       }
+      window._postLoginDisplay = isDisplay;
+      renderCodeScreen();
+      return;
     }
-  } catch {}
 
-  // Clean up any old session keys
-  sessionStorage.removeItem("gasbreaker-session-v3");
+    // User is signed in — figure out who
+    const email = user.email;
 
-  // Check for auto-login code in URL (e.g. from display link ?display=1&code=GASPASS)
-  const urlCode = new URLSearchParams(window.location.search).get("code");
-  if (urlCode && departments[urlCode]) {
-    session = { deptCode: urlCode, deptName: departments[urlCode] };
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    await loadConfig(urlCode);
+    if (email === ADMIN_EMAIL) {
+      // Admin session restored
+      session = { isAdmin: true };
+      await new Promise(resolve => {
+        subscribeToDepartments(resolve);
+      });
+      renderAdminDeptSelect();
+      return;
+    }
+
+    // Dept session — derive code from email  (e.g. gaspass@gasbreaker.app → GASPASS)
+    const code = email.split("@")[0].toUpperCase();
+
+    // Load departments if not yet loaded
+    if (!Object.keys(departments).length) {
+      await new Promise(resolve => {
+        subscribeToDepartments(resolve);
+      });
+    }
+
+    const deptName = departments[code];
+    if (!deptName) {
+      // Dept no longer exists — sign out and show code screen
+      await signOut(auth);
+      renderCodeScreen();
+      return;
+    }
+
+    session = { deptCode: code, deptName };
+    await loadConfig(code);
     if (isDisplay) isDisplayMode = true;
-    subscribeToBoard(urlCode);
-    return;
-  }
-
-  // No valid session — show code screen
-  // After code entry, if ?display=1 is in URL, go to display mode
-  window._postLoginDisplay = isDisplay;
-  renderCodeScreen();
+    subscribeToBoard(code);
+  });
 })();
 
 
