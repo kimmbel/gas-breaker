@@ -212,6 +212,7 @@
       border: 2px solid #3d3530;
       box-shadow: none;
       overflow: hidden;        /* clips content; dropdown is position:fixed on body so unaffected */
+      position: relative;
     }
     /* Fixed height on OR cards — empty and occupied are always the same size */
     .or-card.display-card:not(.no-break-card) {
@@ -250,10 +251,9 @@
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
     .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
-    .display-badges { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; align-items: flex-end; }
+    .display-badges { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; position: absolute; top: 12px; right: 14px; }
     .display-card .note-input-wrap { display: flex; gap: 4px; margin-bottom: 4px; }
     .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 6px; padding: 3px 7px; font-size: 12px; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
-    .display-card .side-btn.note-active { background: #431407; color: #fb923c; border-color: #9a3412; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -930,7 +930,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
     if (isDisplay) {
       const currentNote = getProviderNote(provider);
       const noteBtn = el("button", {
-        class: "side-btn" + (currentNote ? " note-active" : ""),
+        class: "side-btn",
         onClick: () => openNoteEdit()
       }, "Note");
       side.appendChild(noteBtn);
@@ -946,10 +946,8 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
     const badges = el("div", { class: "display-badges" });
     if (note) badges.appendChild(el("div", { class: "display-note-badge" }, "📌 " + note));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
-    body.appendChild(el("div", { style: { display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"6px" } },
-      el("div", { class: "room-label", style: { flex:"1", minWidth:"0" } }, loc),
-      badges,
-    ));
+    body.appendChild(el("div", { class: "room-label" }, loc));
+    body.appendChild(badges);
   } else {
     body.appendChild(el("div", { class: "room-label" }, loc));
   }
@@ -980,7 +978,11 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       if (e.key === "Enter") { e.preventDefault(); saveNote(); }
       if (e.key === "Escape") { editingNote = false; wrap.remove(); }
     });
-    noteInput.addEventListener("blur", () => setTimeout(() => { if (editingNote) saveNote(); }, 150));
+    // No blur-to-save — note only commits on Enter, cancels on Escape
+    noteInput.addEventListener("blur", () => setTimeout(() => {
+      // On blur just close without saving (don't auto-save on accidental focus loss)
+      if (editingNote) { editingNote = false; wrap.remove(); }
+    }, 200));
     const wrap = el("div", { class: "note-input-wrap" }, noteInput);
     // Insert after room label row
     const roomRow = body.firstChild;
