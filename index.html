@@ -89,6 +89,7 @@
     .roster-option { padding: 9px 12px; font-size: 13px; font-weight: 700; color: #2d2420; cursor: pointer; border: none; background: none; width: 100%; text-align: left; border-bottom: 1px solid #f1ede8; }
     .roster-option:last-child { border-bottom: none; }
     .roster-option:hover { background: #f8f4ef; }
+    .roster-option.highlighted { background: #f0e8df; }
     .roster-option.clear-opt { color: #dc2626; font-style: italic; }
 
     /* No-break slot card */
@@ -214,7 +215,7 @@
     }
     /* Fixed height on OR cards — empty and occupied are always the same size */
     .or-card.display-card:not(.no-break-card) {
-      height: 116px;
+      height: 130px;
     }
     /* No-break cards: compact, natural height */
     .or-card.display-card.no-break-card {
@@ -248,6 +249,11 @@
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
+    .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+    .display-badges { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; align-items: flex-end; }
+    .display-card .note-input-wrap { display: flex; gap: 4px; margin-bottom: 4px; }
+    .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 6px; padding: 3px 7px; font-size: 12px; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
+    .display-card .side-btn.note-active { background: #431407; color: #fb923c; border-color: #9a3412; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -564,6 +570,22 @@ function getProviderHistory(name) {
   return providerHistory[name] || {};
 }
 
+async function saveProviderNote(name, note) {
+  if (!session?.deptCode || !name) return;
+  const key = providerKey(name);
+  const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
+  const snap = await get(r);
+  const current = snap.val() || {};
+  await set(r, { ...current, provider: name, note: note || null });
+}
+
+function getProviderNote(name) {
+  if (!name) return null;
+  const key   = providerKey(name);
+  const entry = boardData[key];
+  return (entry && entry.provider === name) ? (entry.note || null) : null;
+}
+
 // ─── Board actions ────────────────────────────────────────────────────────────
 async function assignProvider(loc, name) {
   const targetId = roomId(loc);
@@ -674,7 +696,7 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
   // Immediately make card look active/normal (remove grayed out empty state)
   if (card) { card.classList.remove("empty"); card.classList.add("editing"); }
 
-  function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
+  function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } highlightedIdx = -1; }
 
   function showDropdown(query) {
     closeDropdown();
@@ -741,20 +763,56 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
   }, 150));
   let tabHandled = false;
 
+  let highlightedIdx = -1;
+
+  function getOptions() {
+    return dropdown ? Array.from(dropdown.querySelectorAll(".roster-option:not(.clear-opt)")) : [];
+  }
+
+  function setHighlight(idx) {
+    const opts = getOptions();
+    opts.forEach((o, i) => o.classList.toggle("highlighted", i === idx));
+    highlightedIdx = idx;
+    if (opts[idx]) opts[idx].scrollIntoView({ block: "nearest" });
+  }
+
   input.addEventListener("keydown", async e => {
     if (e.key === "Escape") { closeDropdown(); onDone(); return; }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const opts = getOptions();
+      if (!dropdown) showDropdown(input.value);
+      setHighlight(Math.min(highlightedIdx + 1, getOptions().length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight(Math.max(highlightedIdx - 1, 0));
+      return;
+    }
+
     if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       const isTab = e.key === "Tab";
       const query = input.value.trim();
-      // Only assign if user has typed something — empty tab just moves to next room
-      if (query) {
+      const opts = getOptions();
+      // If an item is arrow-highlighted, use that; else fall back to first match
+      let selected = null;
+      if (highlightedIdx >= 0 && opts[highlightedIdx]) {
+        selected = opts[highlightedIdx].textContent.trim();
+      } else if (query) {
         const matches = roster.filter(n => rosterMatches(n, query));
-        if (matches.length > 0) await assignProvider(loc, matches[0]);
+        if (matches.length > 0) selected = matches[0];
       }
+      if (selected) await assignProvider(loc, selected);
       closeDropdown();
       if (isTab) tabHandled = true;
       onDone();
+      // If tabbing out with nothing assigned, immediately restore card empty state
+      if (isTab && !selected && card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
+        card.classList.add("empty"); card.classList.remove("editing");
+      }
       if (isTab && onTab) setTimeout(() => onTab(), 80);
     }
   });
@@ -854,7 +912,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const side = el("div", { class: "card-side" });
 
   if (provider) {
-    // Hold button — countdown lives inside the button
+    // Hold button
     const holdBtn = el("button", {
       class: "side-btn" + (effectiveHold ? (effectiveWarn ? " hold-warn" : " hold-on") : ""),
       onClick: () => toggleHold(loc)
@@ -867,20 +925,67 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       onClick: () => toggleRequesting(loc)
     }, isReq ? "🔔 Sent" : "Request");
     side.appendChild(reqBtn);
+
+    // Note button — display only
+    if (isDisplay) {
+      const currentNote = getProviderNote(provider);
+      const noteBtn = el("button", {
+        class: "side-btn" + (currentNote ? " note-active" : ""),
+        onClick: () => openNoteEdit()
+      }, "Note");
+      side.appendChild(noteBtn);
+    }
   }
 
   // ── Card body — vertical stack: room → provider → pills ──
   const body = el("div", { class: "card-body" });
 
-  // Room label — with requesting badge on right for display mode
-  if (isDisplay && isReq && provider) {
-    const labelRow = el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px" } },
+  // Room label row — badges stack vertically on right (note on top, requesting below)
+  const note = provider ? getProviderNote(provider) : null;
+  if (isDisplay && (note || isReq) && provider) {
+    const badges = el("div", { class: "display-badges" });
+    if (note) badges.appendChild(el("div", { class: "display-note-badge" }, "📌 " + note));
+    if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
+    body.appendChild(el("div", { style: { display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"6px" } },
       el("div", { class: "room-label", style: { flex:"1", minWidth:"0" } }, loc),
-      el("div", { class: "display-req-badge" }, "🔔 requesting"),
-    );
-    body.appendChild(labelRow);
+      badges,
+    ));
   } else {
     body.appendChild(el("div", { class: "room-label" }, loc));
+  }
+
+  // Note editing (display only) — inline input shown when Note button clicked
+  let editingNote = false;
+  function openNoteEdit() {
+    if (!isDisplay || editingNote) return;
+    editingNote = true;
+    // Remove existing note input if any
+    const existing = body.querySelector(".note-input-wrap");
+    if (existing) existing.remove();
+    const currentNote = getProviderNote(provider) || "";
+    const noteInput = el("input", {
+      class: "note-input",
+      type: "text",
+      placeholder: "Short note…",
+      maxlength: "15",
+    });
+    noteInput.value = currentNote;
+    const saveNote = async () => {
+      const val = noteInput.value.trim().slice(0, 15);
+      await saveProviderNote(provider, val || null);
+      editingNote = false;
+      wrap.remove();
+    };
+    noteInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveNote(); }
+      if (e.key === "Escape") { editingNote = false; wrap.remove(); }
+    });
+    noteInput.addEventListener("blur", () => setTimeout(() => { if (editingNote) saveNote(); }, 150));
+    const wrap = el("div", { class: "note-input-wrap" }, noteInput);
+    // Insert after room label row
+    const roomRow = body.firstChild;
+    body.insertBefore(wrap, roomRow.nextSibling);
+    setTimeout(() => noteInput.focus(), 20);
   }
 
   // Provider name / input
@@ -1362,42 +1467,51 @@ function renderAdminPage(deptCode) {
       Object.entries(departments),
       () => {},
       ([code, name], arr, rebuild) => {
-        const newCodeIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New code", style: { flex:"1", fontSize:"12px", padding:"6px 8px", display:"none" } });
-        const passIn   = el("input", { class: "admin-add-input", type: "text", placeholder: "New passcode for " + code, style: { flex:"1", fontSize:"12px", padding:"6px 8px", display:"none" } });
+        // Single "Edit" panel — changes both the code (DB identifier) and the passcode together
+        const editWrap  = el("div", { style: { display:"none", flexDirection:"column", gap:"6px" } });
+        const newCodeIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New code (e.g. CARDIAC)", style: { fontSize:"12px", padding:"6px 8px" } });
+        const newPassIn2 = el("input", { class: "admin-add-input", type: "text", placeholder: "New passcode (leave blank = same as code)", style: { fontSize:"12px", padding:"6px 8px" } });
+        newCodeIn.addEventListener("input",  () => { const s = newCodeIn.selectionStart;  newCodeIn.value  = newCodeIn.value.toUpperCase();  newCodeIn.setSelectionRange(s,s); });
+        newPassIn2.addEventListener("input", () => { const s = newPassIn2.selectionStart; newPassIn2.value = newPassIn2.value.toUpperCase(); newPassIn2.setSelectionRange(s,s); });
+        const saveEditBtn = el("button", { class: "btn-primary", style: { fontSize:"11px", padding:"5px 10px", alignSelf:"flex-start" } }, "Save");
+        editWrap.appendChild(newCodeIn);
+        editWrap.appendChild(newPassIn2);
+        editWrap.appendChild(saveEditBtn);
+
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" }, onClick: () => {
-          newCodeIn.style.display = newCodeIn.style.display === "none" ? "block" : "none";
-          if (newCodeIn.style.display !== "none") newCodeIn.focus();
-        }}, "Edit Code");
-        newCodeIn.addEventListener("keydown", async e => {
-          if (e.key !== "Enter") return;
+          const open = editWrap.style.display !== "none";
+          editWrap.style.display = open ? "none" : "flex";
+          if (!open) { newCodeIn.value = code; newPassIn2.value = ""; newCodeIn.focus(); }
+        }}, "Edit");
+
+        async function doSaveEdit() {
           const newCode = newCodeIn.value.trim().toUpperCase();
-          if (!newCode || newCode === code || departments[newCode]) { showToast("Invalid or duplicate code"); return; }
-          await renameDepartmentCode(code, newCode, name);
-          showToast(`Code changed to ${newCode}`);
-          setTimeout(() => renderAdminPage(null), 400);
-        });
-        passIn.addEventListener("keydown", async e => {
-          if (e.key !== "Enter") return;
-          const newPass = passIn.value.trim().toUpperCase();
-          if (!newPass || newPass.length < 4) { showToast("Passcode must be at least 4 characters"); return; }
-          passIn.disabled = true;
+          const newPass = newPassIn2.value.trim().toUpperCase() || newCode;
+          if (!newCode) { showToast("Code cannot be empty"); return; }
+          if (newCode !== code && departments[newCode]) { showToast("Code already exists"); return; }
+          if (newPass.length < 4) { showToast("Passcode must be at least 4 characters"); return; }
+          saveEditBtn.disabled = true; saveEditBtn.textContent = "Saving…";
           try {
-            await changeDeptPasscode(code, newPass);
-            showToast(`Passcode updated for ${code}`);
+            if (newCode !== code) {
+              await renameDepartmentCode(code, newCode, name);
+            }
+            // Change the passcode for the (possibly renamed) account
+            await changeDeptPasscode(newCode, newPass);
+            showToast(`${name} updated — code: ${newCode}, passcode: ${newPass}`);
+            setTimeout(() => renderAdminPage(null), 400);
           } catch (err) {
-            showToast("Error: " + (err.message || "Could not update passcode"));
+            showToast("Error: " + (err.message || "Could not save"));
+            saveEditBtn.disabled = false; saveEditBtn.textContent = "Save";
           }
-          passIn.value = ""; passIn.disabled = false; passIn.style.display = "none";
-        });
+        }
+        saveEditBtn.addEventListener("click", doSaveEdit);
+        newPassIn2.addEventListener("keydown", e => { if (e.key === "Enter") doSaveEdit(); });
+
         return el("div", { style: { display:"flex", flexDirection:"column", flex:"1", gap:"6px" } },
           el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px" } },
             el("span", {}, name, el("span", { class: "dept-badge" }, code)),
             el("div", { style: { display:"flex", gap:"6px" } },
               editBtn,
-              el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" }, onClick: () => {
-                passIn.style.display = passIn.style.display === "none" ? "block" : "none";
-                if (passIn.style.display !== "none") passIn.focus();
-              }}, "Change Passcode"),
               el("button", { class: "btn-danger", onClick: () => showConfirm(
                 "Delete Department",
                 `Permanently delete "${name}" (${code}) and ALL its board data? This cannot be undone.`,
@@ -1405,8 +1519,7 @@ function renderAdminPage(deptCode) {
               )}, "Delete"),
             ),
           ),
-          newCodeIn,
-          passIn,
+          editWrap,
         );
       }
     );
@@ -1536,8 +1649,10 @@ function renderAdminPage(deptCode) {
 
   // ── Admin passcode section (shown on departments page) ──
   function buildAdminPasscodeSection() {
-    const newPassIn    = el("input", { class: "admin-add-input", type: "password", placeholder: "New admin passcode", style: { flex:"1" } });
-    const confirmIn    = el("input", { class: "admin-add-input", type: "password", placeholder: "Confirm passcode", style: { flex:"1" } });
+    const newPassIn    = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode", style: { flex:"1" } });
+    const confirmIn    = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex:"1" } });
+    newPassIn.addEventListener("input", () => { const s = newPassIn.selectionStart; newPassIn.value = newPassIn.value.toUpperCase(); newPassIn.setSelectionRange(s,s); });
+    confirmIn.addEventListener("input", () => { const s = confirmIn.selectionStart; confirmIn.value = confirmIn.value.toUpperCase(); confirmIn.setSelectionRange(s,s); });
     const statusMsg    = el("div", { style: { fontSize:"12px", color:"#dc2626", marginTop:"4px", minHeight:"16px" } });
 
     async function doChange() {
