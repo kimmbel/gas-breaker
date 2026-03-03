@@ -8,7 +8,8 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: #f8f4ef; font-family: 'Nunito', sans-serif; color: #2d2420; -webkit-tap-highlight-color: transparent; }
-    body.display-mode { background: #130f0d; }
+    body.display-mode { background: #130f0d; min-height: 100vh; font-size: clamp(8px, 1.1vmin, 14px); }
+    body.display-mode #app { background: #130f0d; min-height: 100vh; }
     body.display-mode .header { background: #1e1a17; border-bottom-color: #3d3530; }
     body.display-mode .logo-text { color: #f5f0eb; }
     body.display-mode .logo-sub  { color: #7c6c62; }
@@ -176,7 +177,12 @@
     .request-notification .notif-timer-bar { height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; width: 100%; margin-top: 12px; }
 
     /* ── Coordinator display layout ── */
-    .display-outer { padding: 10px 14px 40px; max-width: 1600px; margin: 0 auto; }
+    .display-outer {
+      padding: 0.8em 1em 1em;
+      max-width: none;
+      margin: 0;
+      box-sizing: border-box;
+    }
 
     /* No-break row — horizontal strip at top */
     .display-nobreak-row {
@@ -184,42 +190,40 @@
       margin-bottom: 4px;
     }
     .display-nobreak-row .or-card.no-break-card {
-      flex: 0 0 auto; width: 180px;
-      padding: 6px 10px;
+      flex: 0 0 auto; width: clamp(120px, 13vw, 200px);
+      padding: 0.5em 0.75em;
       min-height: unset !important;
       background: #1e1a17; border-color: #3d3530;
     }
-    .display-nobreak-row .no-break-label { font-size: 10px; margin-bottom: 1px; color: #7c6c62; }
-    .display-nobreak-row .provider-name-btn { font-size: 13px; font-weight: 800; line-height: 1.2; margin-bottom: 0; color: #e8ddd6; }
+    .display-nobreak-row .no-break-label { font-size: 0.85em; margin-bottom: 0.1em; color: #7c6c62; }
+    .display-nobreak-row .provider-name-btn { font-size: 1.1em; font-weight: 800; line-height: 1.2; margin-bottom: 0; color: #e8ddd6; }
     .display-nobreak-row .or-card.no-break-card.empty { opacity: 0.4; }
     .display-divider { border: none; border-top: 2px dashed #3d3530; margin: 8px 0 10px; }
 
-    /* OR columns */
+    /* OR columns — auto-fill based on viewport width */
     .display-wrap {
-      column-count: 4;
-      column-gap: 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 16vw, 260px), 1fr));
+      gap: 0.6em;
     }
-    @media (max-width: 1200px) { .display-wrap { column-count: 3; } }
-    @media (max-width: 860px)  { .display-wrap { column-count: 2; } }
-    @media (max-width: 500px)  { .display-wrap { column-count: 1; } }
 
-    /* Display cards — bold dark theme */
+    /* Display cards — bold dark theme, all sizes in em so they scale with body font-size */
     .or-card.display-card {
-      break-inside: avoid;
-      margin-bottom: 10px;
-      padding: 14px 16px;
+      padding: 0.85em 1em;
+      margin-bottom: 0;
       background: #1e1a17;
       border: 2px solid #3d3530;
       box-shadow: none;
       overflow: hidden;        /* clips content; dropdown is position:fixed on body so unaffected */
+      border-radius: 0.75em;
     }
-    /* Fixed height on OR cards — empty and occupied are always the same size */
+    /* Height as viewport fraction — fits all rooms on screen without scrolling */
     .or-card.display-card:not(.no-break-card) {
-      height: 130px;
+      height: clamp(90px, 13.5vh, 160px);
     }
     /* No-break cards: compact, natural height */
     .or-card.display-card.no-break-card {
-      padding: 8px 12px;
+      padding: 0.5em 0.75em;
       height: auto;
     }
     .or-card.display-card.empty   { background: #181410; border-color: #2a2420; opacity: 0.45; }
@@ -227,9 +231,9 @@
     .or-card.display-card.hold-warn { background: #3b2e00; border-color: #f59e0b; }
     .or-card.display-card.requesting { background: #063b33; border-color: #10b981; }
 
-    .display-card .room-label { font-size: 16px; font-weight: 900; color: #d4cfc9; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .display-card .room-label { font-size: 1.2em; font-weight: 900; color: #d4cfc9; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-card .provider-name-btn {
-      font-size: 18px; font-weight: 900; color: #f5f0eb; margin-bottom: 8px;
+      font-size: 1.4em; font-weight: 900; color: #f5f0eb; margin-bottom: 0.4em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       display: block; width: 100%;
     }
@@ -237,22 +241,32 @@
     .display-card .provider-name-btn.requesting-name { color: #34d399; }
 
     .display-card .pill {
-      font-size: 12px; padding: 5px 11px; font-weight: 800;
+      font-size: 0.9em; padding: 0.35em 0.75em; font-weight: 800;
       background: #2d2825; border-color: #4a4240; color: #6b5e57;
     }
     .display-card .pill.done {
       background: #064e3b; color: #34d399; border-color: #059669;
     }
-    .display-card .side-btn { font-size: 11px; padding: 5px 8px; min-width: 48px; background: #2d2825; border-color: #4a4240; color: #7c6c62; flex-shrink: 0; }
+    .display-card .side-btn { font-size: 0.85em; padding: 0.35em 0.6em; min-width: 3.5em; background: #2d2825; border-color: #4a4240; color: #7c6c62; flex-shrink: 0; }
     .display-card .side-btn.hold-on   { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
     .display-card .side-btn.hold-warn { background: #78350f; color: #fcd34d; border-color: #f59e0b; }
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
-    .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 6px; font-size: 10px; font-weight: 800; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+    .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 0.4em; font-size: 0.85em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; }
+    .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 0.4em; font-size: 1.1em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
     .display-badges { display: flex; flex-direction: row; gap: 4px; align-items: center; flex-shrink: 0; }
     .display-card .note-input-wrap { display: flex; gap: 4px; margin-bottom: 4px; }
-    .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 6px; padding: 3px 7px; font-size: 12px; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
+    .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 0.4em; padding: 0.25em 0.5em; font-size: 1.1em; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
+
+    /* ── Display mode header overrides — scale with viewport ── */
+    body.display-mode .header-inner { padding: 0.6em 1em; }
+    body.display-mode .logo-text { font-size: 1.3em; }
+    body.display-mode .logo-sub  { font-size: 0.9em; }
+    body.display-mode .logo-icon { font-size: 1.8em; }
+    body.display-mode .summary-bar { padding: 0.4em 1em; gap: 0.6em; }
+    body.display-mode .chip { font-size: 0.9em; padding: 0.25em 0.7em; }
+    body.display-mode .chip-count { font-size: 1em; }
+    body.display-mode .sync-pip { width: 0.6em; height: 0.6em; }
 
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
@@ -959,7 +973,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const note = provider ? getProviderNote(provider) : null;
   if (isDisplay && (note || isReq) && provider) {
     const badges = el("div", { class: "display-badges" });
-    if (note) badges.appendChild(el("div", { class: "display-note-badge" }, "📌 " + note));
+    if (note) badges.appendChild(el("div", { class: "display-note-badge" }, note));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
     body.appendChild(
       el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
