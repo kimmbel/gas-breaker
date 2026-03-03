@@ -9,7 +9,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; background: #f8f4ef; font-family: 'Nunito', sans-serif; color: #2d2420; -webkit-tap-highlight-color: transparent; }
     body.display-mode { background: #130f0d; min-height: 100vh; font-size: clamp(8px, 1.1vmin, 14px); }
-    body.display-mode #app { background: #130f0d; min-height: 100vh; }
+    body.display-mode #app { background: #130f0d; min-height: 100vh; padding-bottom: 0; }
     body.display-mode .header { background: #1e1a17; border-bottom-color: #3d3530; }
     body.display-mode .logo-text { color: #f5f0eb; }
     body.display-mode .logo-sub  { color: #7c6c62; }
@@ -178,7 +178,7 @@
 
     /* ── Coordinator display layout ── */
     .display-outer {
-      padding: 0.8em 1em 1em;
+      padding: 0.8em 1em 0.4em;
       max-width: none;
       margin: 0;
       box-sizing: border-box;
@@ -219,7 +219,7 @@
     }
     /* Height as viewport fraction — fits all rooms on screen without scrolling */
     .or-card.display-card:not(.no-break-card) {
-      height: clamp(90px, 13.5vh, 160px);
+      height: clamp(80px, 11vh, 140px);
     }
     /* No-break cards: compact, natural height */
     .or-card.display-card.no-break-card {
