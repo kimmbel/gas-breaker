@@ -412,7 +412,7 @@ function subscribeToBoard(deptCode) {
       if (isDisplayMode) renderDisplay();
       else renderBoard();
     } else if (document.querySelector(".main"))              renderBoard();
-    else if (document.querySelector(".display-outer"))       renderDisplay();
+    else if (document.querySelector(".display-outer"))       patchDisplay();
   }, err => {
     console.error("Board error:", err);
     document.querySelector(".sync-pip")?.classList.add("offline");
@@ -1282,7 +1282,7 @@ function layoutDisplay(forceRemeasure = false) {
   // Side button stack is ~58px; card body needs ~120px; padding ~20px.
   // We derive this from availW so it scales — never less than 160px,
   // never more than 320px, and we want cards at least 1.5x wider than tall.
-  const MIN_CARD_W = Math.max(160, availW * 0.12);  // at least 12% of available width
+  const MIN_CARD_W = 220;  // side buttons (~60px) + card body (~120px) + padding + gap
   const MIN_CARD_H = 72;
 
   // Try column counts from max down to 2. For each, compute the card size.
@@ -1331,6 +1331,115 @@ function _applyLayout(cache) {
     c.style.height = cache.bestCardH + "px";
   });
   document.body.style.fontSize = cache.fontSize + "px";
+}
+
+// ─── Patch: Coordinator display (data update without full DOM rebuild) ──────────
+// Called on Firebase data updates. Updates only the parts of each card that
+// can change from a data update: break pills, card state classes, badges,
+// hold button label. Does NOT rebuild the DOM — no jitter.
+function patchDisplay() {
+  const wrap = document.querySelector(".display-wrap");
+  if (!wrap) { renderDisplay(); return; } // fallback if display not rendered yet
+
+  locations.forEach(loc => {
+    const id   = roomId(loc);
+    const room = boardData[id] || {};
+    const provider  = room.provider || null;
+    const breaks    = room.breaks   || {};
+    const isHold    = !!room.hold;
+    const isReq     = !!room.requesting;
+    const holdAt    = room.holdAt || null;
+    const now       = Date.now();
+    const holdAge   = isHold && holdAt ? now - holdAt : 0;
+    const holdExpired   = isHold && holdAt && (now - holdAt) >= HOLD_CLEAR_MS;
+    const effectiveHold = isHold && !holdExpired;
+    const effectiveWarn = effectiveHold && holdAge >= HOLD_WARN_MS;
+
+    // Find the card in the DOM by its data-tab-idx or by searching room label
+    const allCards = Array.from(wrap.querySelectorAll(".or-card.display-card:not(.no-break-card)"));
+    const card = allCards.find(c => {
+      const lbl = c.querySelector(".room-label");
+      return lbl && lbl.textContent.trim() === loc;
+    });
+    if (!card) return;
+
+    // ── Update card state classes ──
+    const stateClasses = ["empty","hold","hold-warn","requesting"];
+    stateClasses.forEach(cl => card.classList.remove(cl));
+    if (!provider)                                    card.classList.add("empty");
+    else if (effectiveHold && effectiveWarn && isReq) { card.classList.add("hold-warn"); card.classList.add("requesting"); }
+    else if (effectiveHold && effectiveWarn)          card.classList.add("hold-warn");
+    else if (effectiveHold && isReq)                  { card.classList.add("hold"); card.classList.add("requesting"); }
+    else if (effectiveHold)                           card.classList.add("hold");
+    else if (isReq)                                   card.classList.add("requesting");
+
+    // ── Update break pills ──
+    const pillRow = card.querySelector(".pill-row");
+    if (pillRow) {
+      BREAKS.forEach(b => {
+        const pill = Array.from(pillRow.querySelectorAll(".pill")).find(p =>
+          p.textContent.replace("✓ ","").trim() === b.label
+        );
+        if (!pill) return;
+        const done = !!breaks[b.id];
+        pill.className = "pill" + (done ? " done" : "");
+        pill.textContent = done ? "✓ " + b.label : b.label;
+      });
+    }
+
+    // ── Update hold button ──
+    const holdBtn = card.querySelector(".card-side .side-btn:first-child");
+    if (holdBtn && provider) {
+      let holdBtnLabel = "Hold";
+      let holdBtnClass = "side-btn";
+      if (effectiveHold && holdAt) {
+        const remaining = Math.max(0, HOLD_CLEAR_MS - holdAge);
+        const mins = Math.ceil(remaining / 60000);
+        holdBtnLabel = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
+        holdBtnClass += effectiveWarn ? " hold-warn" : " hold-on";
+      }
+      holdBtn.className = holdBtnClass;
+      holdBtn.textContent = holdBtnLabel;
+    }
+
+    // ── Update request button ──
+    const reqBtn = card.querySelector(".card-side .side-btn:nth-child(2)");
+    if (reqBtn && provider) {
+      reqBtn.className = "side-btn" + (isReq ? " request-on" : "");
+      reqBtn.textContent = isReq ? "🔔 Sent" : "Request";
+    }
+
+    // ── Update provider name color ──
+    const nameBtn = card.querySelector(".provider-name-btn");
+    if (nameBtn) {
+      if (isReq) nameBtn.classList.add("requesting-name");
+      else nameBtn.classList.remove("requesting-name");
+    }
+
+    // ── Update badges (note + requesting) in room label row ──
+    const note = provider ? getProviderNote(provider) : null;
+    const labelRow = card.querySelector(".room-label")?.parentElement;
+    if (labelRow && labelRow !== card.querySelector(".card-body")) {
+      // labelRow is the flex wrapper containing room-label + badges
+      let badges = labelRow.querySelector(".display-badges");
+      if (note || isReq) {
+        if (!badges) {
+          badges = el("div", { class: "display-badges" });
+          labelRow.appendChild(badges);
+        }
+        badges.innerHTML = "";
+        if (note) badges.appendChild(el("div", { class: "display-note-badge" }, note));
+        if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
+      } else if (badges) {
+        badges.remove();
+      }
+    }
+  });
+
+  // Re-apply layout (from cache — no jitter)
+  layoutDisplay();
+  // Also check for new request notifications
+  checkRequestNotifications();
 }
 
 // ─── Render: Coordinator display ──────────────────────────────────────────────
