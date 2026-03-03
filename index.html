@@ -1333,6 +1333,40 @@ function _applyLayout(cache) {
   document.body.style.fontSize = cache.fontSize + "px";
 }
 
+// ─── Patch: Filter chips only (no DOM rebuild) ───────────────────────────────
+function patchFilter() {
+  const wrap = document.querySelector(".display-wrap");
+  if (!wrap) return;
+
+  // Update chip active states using data-filter attribute (reliable, no text parsing)
+  const colorMap = { "am": "#f87171", "lunch": "#38bdf8", "pm": "#a78bfa" };
+  const labelMap  = { "am": "AM remaining", "lunch": "Lunch remaining", "pm": "PM remaining" };
+  document.querySelectorAll(".summary-bar .chip[data-filter]").forEach(chip => {
+    const filterId = chip.getAttribute("data-filter");
+    const isActive = activeFilter === filterId;
+    chip.classList.toggle("active-filter", isActive);
+    chip.style.border = "2px solid " + (isActive ? colorMap[filterId] : "transparent");
+    const label = chip.querySelector("span:last-child");
+    if (label) label.textContent = labelMap[filterId] + (isActive ? " ✕" : "");
+  });
+
+  // Update card filter classes
+  Array.from(wrap.querySelectorAll(".or-card.display-card:not(.no-break-card)")).forEach(card => {
+    card.classList.remove("filter-done", "filter-needs");
+    if (!activeFilter) return;
+    const lbl = card.querySelector(".room-label");
+    if (!lbl) return;
+    const loc = lbl.textContent.trim();
+    const room = boardData[roomId(loc)] || {};
+    if (!room.provider) return;
+    if ((room.breaks || {})[activeFilter]) {
+      card.classList.add("filter-done");
+    } else {
+      card.classList.add("filter-needs");
+    }
+  });
+}
+
 // ─── Patch: Coordinator display (data update without full DOM rebuild) ──────────
 // Called on Firebase data updates. Updates only the parts of each card that
 // can change from a data update: break pills, card state classes, badges,
@@ -1355,13 +1389,32 @@ function patchDisplay() {
     const effectiveHold = isHold && !holdExpired;
     const effectiveWarn = effectiveHold && holdAge >= HOLD_WARN_MS;
 
-    // Find the card in the DOM by its data-tab-idx or by searching room label
+    // Find the card in the DOM by room label text
     const allCards = Array.from(wrap.querySelectorAll(".or-card.display-card:not(.no-break-card)"));
     const card = allCards.find(c => {
       const lbl = c.querySelector(".room-label");
       return lbl && lbl.textContent.trim() === loc;
     });
     if (!card) return;
+
+    // Detect structural change: provider added/removed or swapped
+    const domNameBtn = card.querySelector(".provider-name-btn");
+    const domProvider = domNameBtn && !domNameBtn.classList.contains("empty")
+      ? domNameBtn.textContent.trim() : null;
+    if (domProvider !== provider) {
+      // Provider changed — rebuild just this card in-place
+      const tabIdx = card.getAttribute("data-tab-idx");
+      const newCard = renderCard(loc, true, tabIdx !== null ? parseInt(tabIdx) : null);
+      // Apply filter classes to new card
+      if (activeFilter) {
+        const rm = boardData[roomId(loc)] || {};
+        if (rm.provider) {
+          newCard.classList.add((rm.breaks||{})[activeFilter] ? "filter-done" : "filter-needs");
+        }
+      }
+      card.parentNode.replaceChild(newCard, card);
+      return;
+    }
 
     // ── Update card state classes ──
     const stateClasses = ["empty","hold","hold-warn","requesting"];
@@ -1418,11 +1471,28 @@ function patchDisplay() {
 
     // ── Update badges (note + requesting) in room label row ──
     const note = provider ? getProviderNote(provider) : null;
-    const labelRow = card.querySelector(".room-label")?.parentElement;
-    if (labelRow && labelRow !== card.querySelector(".card-body")) {
-      // labelRow is the flex wrapper containing room-label + badges
-      let badges = labelRow.querySelector(".display-badges");
+    const cardBody = card.querySelector(".card-body");
+    if (cardBody) {
+      // The room label may be either directly in cardBody, or inside a flex wrapper
+      // Find or create the flex wrapper that holds room-label + badges
+      let labelRow = cardBody.querySelector(".room-label")?.parentElement;
+
       if (note || isReq) {
+        // If labelRow is cardBody itself, we need to wrap the room-label in a flex div
+        if (labelRow === cardBody) {
+          const roomLabelEl = cardBody.querySelector(".room-label");
+          const wrapper = el("div", {
+            style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" }
+          });
+          roomLabelEl.style.marginBottom = "0";
+          roomLabelEl.style.flex = "1";
+          roomLabelEl.style.minWidth = "0";
+          cardBody.insertBefore(wrapper, roomLabelEl);
+          wrapper.appendChild(roomLabelEl);
+          labelRow = wrapper;
+        }
+        // Now labelRow is the flex wrapper — update badges inside it
+        let badges = labelRow.querySelector(".display-badges");
         if (!badges) {
           badges = el("div", { class: "display-badges" });
           labelRow.appendChild(badges);
@@ -1430,8 +1500,21 @@ function patchDisplay() {
         badges.innerHTML = "";
         if (note) badges.appendChild(el("div", { class: "display-note-badge" }, note));
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
-      } else if (badges) {
-        badges.remove();
+      } else {
+        // Remove badges if present; unwrap labelRow back to direct child if needed
+        const badges = cardBody.querySelector(".display-badges");
+        if (badges) badges.remove();
+        // If labelRow is a wrapper (not cardBody), unwrap the room-label back
+        if (labelRow && labelRow !== cardBody && !labelRow.querySelector(".display-badges")) {
+          const roomLabelEl = labelRow.querySelector(".room-label");
+          if (roomLabelEl) {
+            roomLabelEl.style.marginBottom = "";
+            roomLabelEl.style.flex = "";
+            roomLabelEl.style.minWidth = "";
+            cardBody.insertBefore(roomLabelEl, labelRow);
+            labelRow.remove();
+          }
+        }
       }
     }
   });
@@ -1501,13 +1584,14 @@ function renderDisplay() {
         const isActive = filterId !== null && activeFilter === filterId;
         const chip = el("div", {
           class: "chip" + (!filterId ? " filter-rooms" : "") + (isActive ? " active-filter" : ""),
-          style: { background: has ? bg : "#2d2825", color: has ? color : "#4a4240", border: "2px solid " + (isActive ? color : "transparent") }
+          style: { background: has ? bg : "#2d2825", color: has ? color : "#4a4240", border: "2px solid " + (isActive ? color : "transparent") },
+          ...(filterId ? { "data-filter": filterId } : {})
         },
           el("span", { class: "chip-dot", style: { background: has ? dot : "#3d3530" } }),
           el("span", { class: "chip-count" }, String(count)),
           el("span", {}, label + (isActive ? " ✕" : "")),
         );
-        if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; renderDisplay(); });
+        if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; patchFilter(); });
         return chip;
       })
     ),
