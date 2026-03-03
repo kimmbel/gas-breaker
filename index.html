@@ -200,11 +200,10 @@
     .display-nobreak-row .or-card.no-break-card.empty { opacity: 0.4; }
     .display-divider { border: none; border-top: 2px dashed #3d3530; margin: 8px 0 10px; }
 
-    /* OR columns — auto-fill based on viewport width */
+    /* OR columns — layout controlled by layoutDisplay() JS after render */
     .display-wrap {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 16vw, 260px), 1fr));
-      gap: 0.6em;
+      gap: 0.5em;
     }
 
     /* Display cards — bold dark theme, all sizes in em so they scale with body font-size */
@@ -216,10 +215,6 @@
       box-shadow: none;
       overflow: hidden;        /* clips content; dropdown is position:fixed on body so unaffected */
       border-radius: 0.75em;
-    }
-    /* Height as viewport fraction — fits all rooms on screen without scrolling */
-    .or-card.display-card:not(.no-break-card) {
-      height: clamp(80px, 11vh, 140px);
     }
     /* No-break cards: compact, natural height */
     .or-card.display-card.no-break-card {
@@ -1238,6 +1233,70 @@ function renderBoard() {
   }, 30000);
 }
 
+// ─── Display layout calculator ───────────────────────────────────────────────
+// Called after renderDisplay() paints the DOM. Measures available space and
+// calculates the optimal column count + card size to fill the screen with no
+// scrolling and minimal wasted space.
+function layoutDisplay() {
+  const wrap = document.querySelector(".display-wrap");
+  if (!wrap) return;
+
+  const cardCount = wrap.children.length;
+  if (!cardCount) return;
+
+  // Measure available height: viewport minus header and summary bar
+  const header  = document.querySelector(".header");
+  const summary = document.querySelector(".summary-bar");
+  const outer   = document.querySelector(".display-outer");
+  const noBreakRow = document.querySelector(".display-nobreak-row");
+  const divider    = document.querySelector(".display-divider");
+
+  const headerH  = header  ? header.offsetHeight  : 0;
+  const summaryH = summary ? summary.offsetHeight : 0;
+  const noBreakH = noBreakRow ? noBreakRow.offsetHeight + (divider ? divider.offsetHeight : 0) + 12 : 0;
+
+  const outerPadV = outer ? (parseFloat(getComputedStyle(outer).paddingTop) + parseFloat(getComputedStyle(outer).paddingBottom)) : 16;
+  const gapPx = parseFloat(getComputedStyle(wrap).gap) || 8;
+
+  const availH = window.innerHeight - headerH - summaryH - noBreakH - outerPadV - gapPx;
+  const availW = wrap.offsetWidth;
+
+  // Try each column count from 2 up to min(cardCount, 10)
+  // For each, calculate rows needed and resulting card height/width
+  // Pick the option that maximises card area while fitting on screen
+  let bestCols = 4, bestCardH = 0, bestCardW = 0;
+
+  const maxCols = Math.min(cardCount, 10);
+  for (let cols = 2; cols <= maxCols; cols++) {
+    const rows = Math.ceil(cardCount / cols);
+    const cardW = (availW - gapPx * (cols - 1)) / cols;
+    const cardH = (availH - gapPx * (rows - 1)) / rows;
+    // Card must be at least 70px tall and 120px wide to be usable
+    if (cardH < 70 || cardW < 120) continue;
+    // Card aspect ratio should be wider than tall (landscape) for readability
+    // Accept if card area is bigger than current best
+    if (cardW * cardH > bestCardW * bestCardH) {
+      bestCols  = cols;
+      bestCardH = cardH;
+      bestCardW = cardW;
+    }
+  }
+
+  // Apply grid columns and explicit card height
+  wrap.style.gridTemplateColumns = `repeat(${bestCols}, 1fr)`;
+
+  // Set card height and derive font-size from card height (so text scales too)
+  const cards = wrap.querySelectorAll(".or-card.display-card:not(.no-break-card)");
+  cards.forEach(c => {
+    c.style.height = bestCardH + "px";
+  });
+
+  // Scale body font-size based on card height so all em values scale naturally
+  // Base ratio: at cardH=130px the font was ~13px, so ratio = 13/130 = 0.1
+  const fontSize = Math.max(8, Math.min(16, bestCardH * 0.1));
+  document.body.style.fontSize = fontSize + "px";
+}
+
 // ─── Render: Coordinator display ──────────────────────────────────────────────
 function renderDisplay() {
   isDisplayMode = true;
@@ -1313,6 +1372,17 @@ function renderDisplay() {
       el("div", { class: "display-wrap" }, ...cards),
     ),
   ));
+
+  // Calculate optimal card layout after DOM paints
+  requestAnimationFrame(() => requestAnimationFrame(layoutDisplay));
+
+  // Re-layout on window resize (TV resolution change, window resize)
+  window.removeEventListener("resize", window._displayResizeHandler);
+  window._displayResizeHandler = () => {
+    clearTimeout(window._resizeLayoutTimer);
+    window._resizeLayoutTimer = setTimeout(layoutDisplay, 80);
+  };
+  window.addEventListener("resize", window._displayResizeHandler);
 
   clearTimeout(window._holdRefreshTimer);
   window._holdRefreshTimer = setTimeout(() => {
