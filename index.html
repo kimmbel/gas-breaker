@@ -248,9 +248,24 @@
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 0.4em; font-size: 0.85em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; }
-    .display-note-badge { display: inline-block; background: #431407; color: #fb923c; border: 1px solid #9a3412; border-radius: 0.4em; font-size: 1.1em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
+    /* Note badge — color variants */
+    .display-note-badge { display: inline-block; border-radius: 0.4em; font-size: 1.1em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; max-width: 8em; overflow: hidden; text-overflow: ellipsis; border: 1px solid; }
+    .display-note-badge.note-amber { background: #431407; color: #fb923c; border-color: #9a3412; }
+    .display-note-badge.note-blue  { background: #0f2744; color: #60a5fa; border-color: #1d4ed8; }
+    .display-note-badge.note-green { background: #052e16; color: #4ade80; border-color: #15803d; }
+    .display-note-badge.note-rose  { background: #4c0519; color: #f472b6; border-color: #9d174d; }
+    /* Note input area */
+    .display-card .note-input-wrap { display: flex; flex-direction: column; gap: 0.3em; margin-bottom: 0.3em; }
+    .display-card .note-color-row  { display: flex; gap: 0.4em; align-items: center; }
+    .display-card .note-color-dot  { width: 1.4em; height: 1.4em; border-radius: 50%; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; transition: border-color 0.1s, transform 0.1s; }
+    .display-card .note-color-dot:hover  { transform: scale(1.15); }
+    .display-card .note-color-dot.selected { border-color: #fff; transform: scale(1.15); }
+    .display-card .note-color-dot.dot-amber { background: #fb923c; }
+    .display-card .note-color-dot.dot-blue  { background: #60a5fa; }
+    .display-card .note-color-dot.dot-green { background: #4ade80; }
+    .display-card .note-color-dot.dot-rose  { background: #f472b6; }
     .display-badges { display: flex; flex-direction: row; gap: 4px; align-items: center; flex-shrink: 0; }
-    .display-card .note-input-wrap { display: flex; gap: 4px; margin-bottom: 4px; }
+
     .display-card .note-input { background: #2d2825; border: 1.5px solid #fb923c; border-radius: 0.4em; padding: 0.25em 0.5em; font-size: 1.1em; font-weight: 700; color: #f5f0eb; outline: none; font-family: inherit; width: 100%; }
 
     /* ── Display mode header overrides — scale with viewport ── */
@@ -589,20 +604,26 @@ function getProviderHistory(name) {
   return providerHistory[name] || {};
 }
 
-async function saveProviderNote(name, note) {
+async function saveProviderNote(name, noteObj) {
+  // noteObj: { text, color } or null to clear
   if (!session?.deptCode || !name) return;
   const key = providerKey(name);
   const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
   const snap = await get(r);
   const current = snap.val() || {};
-  await set(r, { ...current, provider: name, note: note || null });
+  await set(r, { ...current, provider: name, note: noteObj || null });
 }
 
 function getProviderNote(name) {
+  // Returns { text, color } or null
+  // Backward-compat: plain string notes (from before color feature) treated as amber
   if (!name) return null;
   const key   = providerKey(name);
   const entry = boardData[key];
-  return (entry && entry.provider === name) ? (entry.note || null) : null;
+  if (!entry || entry.provider !== name || !entry.note) return null;
+  const n = entry.note;
+  if (typeof n === "string") return { text: n, color: "amber" };
+  return n;
 }
 
 // ─── Board actions ────────────────────────────────────────────────────────────
@@ -968,7 +989,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const note = provider ? getProviderNote(provider) : null;
   if (isDisplay && (note || isReq) && provider) {
     const badges = el("div", { class: "display-badges" });
-    if (note) badges.appendChild(el("div", { class: "display-note-badge" }, note));
+    if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
     body.appendChild(
       el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
@@ -985,20 +1006,46 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   function openNoteEdit() {
     if (!isDisplay || editingNote) return;
     editingNote = true;
-    // Remove existing note input if any
     const existing = body.querySelector(".note-input-wrap");
     if (existing) existing.remove();
-    const currentNote = getProviderNote(provider) || "";
+
+    const currentNoteObj = getProviderNote(provider);
+    let selectedColor = currentNoteObj ? currentNoteObj.color : "amber";
+
     const noteInput = el("input", {
       class: "note-input",
       type: "text",
       placeholder: "Short note…",
       maxlength: "15",
     });
-    noteInput.value = currentNote;
+    noteInput.value = currentNoteObj ? currentNoteObj.text : "";
+
+    // Color picker dots
+    const NOTE_COLORS = [
+      { id: "amber", cls: "dot-amber", label: "Amber" },
+      { id: "blue",  cls: "dot-blue",  label: "Blue"  },
+      { id: "green", cls: "dot-green", label: "Green" },
+      { id: "rose",  cls: "dot-rose",  label: "Rose"  },
+    ];
+    const colorRow = el("div", { class: "note-color-row" });
+    NOTE_COLORS.forEach(c => {
+      const dot = el("button", {
+        class: "note-color-dot " + c.cls + (selectedColor === c.id ? " selected" : ""),
+        type: "button",
+        title: c.label,
+      });
+      dot.addEventListener("mousedown", e => {
+        e.preventDefault();   // prevent blur on input
+        selectedColor = c.id;
+        colorRow.querySelectorAll(".note-color-dot").forEach(d => d.classList.remove("selected"));
+        dot.classList.add("selected");
+      });
+      colorRow.appendChild(dot);
+    });
+
     const saveNote = async () => {
       const val = noteInput.value.trim().slice(0, 15);
-      await saveProviderNote(provider, val || null);
+      await saveProviderNote(provider, val ? { text: val, color: selectedColor } : null);
       editingNote = false;
       wrap.remove();
     };
@@ -1006,13 +1053,11 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       if (e.key === "Enter") { e.preventDefault(); saveNote(); }
       if (e.key === "Escape") { editingNote = false; wrap.remove(); }
     });
-    // No blur-to-save — note only commits on Enter, cancels on Escape
     noteInput.addEventListener("blur", () => setTimeout(() => {
-      // On blur just close without saving (don't auto-save on accidental focus loss)
       if (editingNote) { editingNote = false; wrap.remove(); }
     }, 200));
-    const wrap = el("div", { class: "note-input-wrap" }, noteInput);
-    // Insert after room label row
+
+    const wrap = el("div", { class: "note-input-wrap" }, noteInput, colorRow);
     const roomRow = body.firstChild;
     body.insertBefore(wrap, roomRow.nextSibling);
     setTimeout(() => noteInput.focus(), 20);
@@ -1517,7 +1562,7 @@ function patchDisplay() {
           labelRow.appendChild(badges);
         }
         badges.innerHTML = "";
-        if (note) badges.appendChild(el("div", { class: "display-note-badge" }, note));
+        if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
       } else {
         // Remove badges if present; unwrap labelRow back to direct child if needed
@@ -1634,15 +1679,15 @@ function renderDisplay() {
   window.addEventListener("resize", window._displayResizeHandler);
 
   clearTimeout(window._holdRefreshTimer);
-  window._holdRefreshTimer = setTimeout(() => {
+  window._holdRefreshTimer = setTimeout(function tickDisplay() {
     if (!document.querySelector(".display-outer")) return;
-    // Don't interrupt active input — reschedule instead
+    // Use patchDisplay (no DOM rebuild) — timer only needs to refresh hold countdowns
     const active = document.activeElement;
-    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
-      window._holdRefreshTimer = setTimeout(() => { if (document.querySelector(".display-outer")) renderDisplay(); }, 30000);
-      return;
+    if (!active || (active.tagName !== "INPUT" && active.tagName !== "TEXTAREA")) {
+      patchDisplay();
     }
-    renderDisplay();
+    // Reschedule
+    window._holdRefreshTimer = setTimeout(tickDisplay, 30000);
   }, 30000);
 }
 
