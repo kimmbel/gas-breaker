@@ -972,22 +972,33 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const side = el("div", { class: "card-side" });
 
   if (provider) {
-    // Hold button — first press shows duration picker, second press clears
+    // Hold button — first press shows duration picker below all buttons,
+    //               second press (when already held) clears the hold.
+    //               onClick reads live boardData to avoid stale-closure bug.
     let showingDurationPicker = false;
     const holdBtn = el("button", {
       class: "side-btn" + (effectiveHold ? (effectiveWarn ? " hold-warn" : " hold-on") : ""),
+      "data-role": "hold",
       onClick: () => {
-        if (effectiveHold) {
+        // Read live state — don't trust closure variables which may be stale
+        const liveRoom = boardData[roomId(loc)] || {};
+        const liveHold = !!liveRoom.hold;
+        const liveDur  = liveRoom.holdDuration || HOLD_CLEAR_MS;
+        const liveAge  = liveHold && liveRoom.holdAt ? Date.now() - liveRoom.holdAt : 0;
+        const liveExpired = liveHold && liveAge >= liveDur;
+        const liveEffective = liveHold && !liveExpired;
+
+        if (liveEffective) {
           // Already on hold — clear it
           toggleHold(loc);
         } else if (showingDurationPicker) {
-          // Second press on Hold while picker is showing — cancel picker
+          // Cancel picker
           showingDurationPicker = false;
           holdBtn.textContent = "Hold";
           holdBtn.className = "side-btn";
           durationPicker.style.display = "none";
         } else {
-          // First press — show duration picker
+          // Show duration picker
           showingDurationPicker = true;
           holdBtn.textContent = "Hold?";
           holdBtn.className = "side-btn hold-on";
@@ -996,7 +1007,24 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       }
     }, holdBtnLabel);
 
-    // Duration picker — hidden until Hold is pressed
+    // Request button
+    const reqBtn = el("button", {
+      class: "side-btn" + (isReq ? " request-on" : ""),
+      "data-role": "request",
+      onClick: () => toggleRequesting(loc)
+    }, isReq ? "🔔 Sent" : "Request");
+
+    // Note button — display only
+    let noteBtn = null;
+    if (isDisplay) {
+      noteBtn = el("button", {
+        class: "side-btn",
+        "data-role": "note",
+        onClick: () => openNoteEdit()
+      }, "Note");
+    }
+
+    // Duration picker — appended LAST so it never sits between main buttons
     const DURATIONS = [
       { label: "10m", ms: 10 * 60 * 1000 },
       { label: "20m", ms: 20 * 60 * 1000 },
@@ -1009,30 +1037,16 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       const btn = el("button", {
         class: "side-btn",
         style: { fontSize: "0.8em" },
-        onClick: () => { setHold(loc, d.ms); durationPicker.style.display = "none"; }
+        "data-role": "duration",
+        onClick: () => { setHold(loc, d.ms); durationPicker.style.display = "none"; showingDurationPicker = false; }
       }, d.label);
       durationPicker.appendChild(btn);
     });
 
     side.appendChild(holdBtn);
-    side.appendChild(durationPicker);
-
-    // Request button
-    const reqBtn = el("button", {
-      class: "side-btn" + (isReq ? " request-on" : ""),
-      onClick: () => toggleRequesting(loc)
-    }, isReq ? "🔔 Sent" : "Request");
     side.appendChild(reqBtn);
-
-    // Note button — display only
-    if (isDisplay) {
-      const currentNote = getProviderNote(provider);
-      const noteBtn = el("button", {
-        class: "side-btn",
-        onClick: () => openNoteEdit()
-      }, "Note");
-      side.appendChild(noteBtn);
-    }
+    if (noteBtn) side.appendChild(noteBtn);
+    side.appendChild(durationPicker);
   }
 
   // ── Card body — vertical stack: room → provider → pills ──
@@ -1558,7 +1572,7 @@ function patchDisplay() {
     }
 
     // ── Update hold button (only when hold is active — don't disturb duration picker state) ──
-    const holdBtn = card.querySelector(".card-side .side-btn:first-child");
+    const holdBtn = card.querySelector(".card-side [data-role='hold']");
     if (holdBtn && provider && effectiveHold) {
       const holdDuration = room.holdDuration || HOLD_CLEAR_MS;
       const remaining = Math.max(0, holdDuration - holdAge);
@@ -1574,7 +1588,7 @@ function patchDisplay() {
     }
 
     // ── Update request button ──
-    const reqBtn = card.querySelector(".card-side .side-btn:nth-child(2)");
+    const reqBtn = card.querySelector(".card-side [data-role='request']");
     if (reqBtn && provider) {
       reqBtn.className = "side-btn" + (isReq ? " request-on" : "");
       reqBtn.textContent = isReq ? "🔔 Sent" : "Request";
