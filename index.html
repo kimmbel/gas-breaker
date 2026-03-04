@@ -1661,31 +1661,33 @@ function patchDisplay() {
     }
   });
 
-  // ── Patch no-break slot cards — always rebuild in-place ──
-  // No-break cards are cheap (no breaks/hold/pills), so we always replace them
-  // rather than trying to do surgical updates. This avoids all stale-state issues.
-  const nbRow = document.querySelector(".display-nobreak-row");
-  if (nbRow) {
+  // ── Patch no-break slot cards ──
+  // Rebuild each no-break card whenever its provider differs from the DOM.
+  // These cards are cheap to rebuild (no break pills or hold state).
+  // If the nobreak row doesn't exist but slots are configured, do a full rebuild.
+  if (noBreakSlots.length > 0) {
+    const nbRow = document.querySelector(".display-nobreak-row");
+    if (!nbRow) { renderDisplay(); return; }
     noBreakSlots.forEach((slot, i) => {
-      // Find the existing card by slot label
+      const id       = roomId("nb_" + slot);
+      const room     = boardData[id] || {};
+      const provider = room.provider || null;
+      // Find existing card
       const existingCards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
       const existing = existingCards.find(c => {
         const lbl = c.querySelector(".no-break-label");
         return lbl && lbl.textContent.trim() === slot;
       });
       if (!existing) return;
-      // Skip if user is currently editing this card
+      // Skip if user is actively editing this card
       if (existing.querySelector(".provider-input-wrap")) return;
-      // Check if provider changed
-      const id = roomId("nb_" + slot);
-      const room = boardData[id] || {};
-      const provider = room.provider || null;
-      const nameBtn = existing.querySelector(".provider-name-btn");
+      // Check what the DOM currently shows
+      const nameBtn   = existing.querySelector(".provider-name-btn");
       const domProvider = nameBtn
         ? (nameBtn.classList.contains("empty") ? null : nameBtn.textContent.trim())
         : "__unknown__";
-      if (domProvider === provider) return; // no change
-      // Rebuild this card in-place
+      // Rebuild if provider changed
+      if (domProvider === provider) return;
       const tabIdx = existing.getAttribute("data-tab-idx");
       const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : i);
       nbRow.replaceChild(newCard, existing);
@@ -1694,6 +1696,8 @@ function patchDisplay() {
 
   // Re-apply layout (from cache — no jitter)
   layoutDisplay();
+  // Update filter highlights to reflect any break changes
+  patchFilter();
   // Also check for new request notifications
   checkRequestNotifications();
 }
