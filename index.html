@@ -1298,13 +1298,9 @@ function renderBoard() {
     const card = renderCard(loc, false, noBreakSlots.length + i);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
-      if (room.provider) {
-        if ((room.breaks||{})[activeFilter]) {
-          card.classList.add("filter-done");   // dim: break already given
-        }
-        // else: no class — highlighted as needing this break
+      if (!room.provider || (room.breaks||{})[activeFilter]) {
+        card.classList.add("filter-done"); // dim: empty room OR break already given
       }
-      // empty rooms get no filter class — they stay at normal opacity
     }
     return card;
   });
