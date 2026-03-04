@@ -71,7 +71,7 @@
     .or-card.empty.editing { opacity: 1; background: #fff; border-color: #b45309; }
 
     /* Card layout — vertical stack */
-    .card-inner { display: flex; align-items: flex-start; gap: 8px; }
+    .card-inner { display: flex; align-items: flex-start; gap: 0.6em; }
     .card-body  { flex: 1; min-width: 0; }
     .room-label { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; display: block; margin-bottom: 3px; line-height: 1.2; }
 
@@ -242,7 +242,7 @@
     .display-card .pill.done {
       background: #064e3b; color: #34d399; border-color: #059669;
     }
-    .display-card .side-btn { font-size: 0.85em; padding: 0.35em 0.6em; min-width: 3.5em; background: #2d2825; border-color: #4a4240; color: #7c6c62; flex-shrink: 0; }
+    .display-card .side-btn { font-size: 0.85em; padding: 0.35em 0.6em; min-width: 5.5em; background: #2d2825; border-color: #4a4240; color: #7c6c62; flex-shrink: 0; }
     .display-card .side-btn.hold-on   { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
     .display-card .side-btn.hold-warn { background: #78350f; color: #fcd34d; border-color: #f59e0b; }
     .display-card .side-btn.request-on { background: #064e3b; color: #34d399; border-color: #059669; }
@@ -1278,48 +1278,67 @@ function layoutDisplay(forceRemeasure = false) {
   const availH = vh - headerH - summaryH - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
-  // Minimum card width: must comfortably hold provider name + side buttons.
-  // Side button stack is ~58px; card body needs ~120px; padding ~20px.
-  // We derive this from availW so it scales — never less than 160px,
-  // never more than 320px, and we want cards at least 1.5x wider than tall.
-  const MIN_CARD_W = 220;  // side buttons (~60px) + card body (~120px) + padding + gap
-  const MIN_CARD_H = 72;
+  // ── Find the best column count ──
+  // We try each column count, compute what card dimensions and font size would
+  // result, then check the card is wide enough to hold all content AT THAT
+  // font size. This prevents buttons overflowing onto separate lines.
+  //
+  // Card minimum width breakdown (all at computed fontSize F px):
+  //   Card padding L+R        : 2 * 1em        = 2F px
+  //   card-inner gap          : 0.6em           = 0.6F px
+  //   Side button stack width : widest is hold-warn "26x20 20m" with emoji
+  //                             roughly 5.5em at 0.85em font = 5.5 * 0.85 * F
+  //                             = 4.7F px  (plus border/padding already in em)
+  //   Card body min           : room name needs ~8em minimum
+  //                             = 8F px
+  //   Total                   : (2 + 0.6 + 4.7 + 8) F = 15.3F px
+  //   Safety margin 20%       : 15.3 * 1.2 = ~18.4F
+  //
+  // So MIN_CARD_W = 18.4 * fontSize, with an absolute floor of 190px.
 
-  // Try column counts from max down to 2. For each, compute the card size.
-  // Accept the first (highest column count) that keeps cards wide enough.
-  // This naturally drops columns when the screen narrows.
-  let bestCols = 2, bestCardH = 0, bestCardW = 0;
+  const MIN_EM_RATIO = 20.0; // card must be at least this many em-widths wide
+  const ABS_MIN_W    = 190;  // absolute px floor for very small font sizes
+  const MIN_CARD_H   = 70;   // px minimum useful card height
+
+  let bestCols = 2, bestCardH = 0, bestCardW = 0, bestFontSize = 8;
 
   const maxCols = Math.min(cardCount, 10);
+
   for (let cols = maxCols; cols >= 2; cols--) {
     const rows  = Math.ceil(cardCount / cols);
     const cardW = (availW - gapPx * (cols - 1)) / cols;
     const cardH = (availH - gapPx * (rows - 1)) / rows;
 
-    // Skip if cards would be too narrow or too short
-    if (cardW < MIN_CARD_W) continue;
     if (cardH < MIN_CARD_H) continue;
+    if (cardH > cardW * 0.9) continue;   // reject portrait-ish cards
 
-    // Skip if cards would be taller than wide (portrait) — looks wrong
-    if (cardH > cardW * 0.85) continue;
+    // Font size that would apply at this card height
+    const fs = Math.max(8, Math.min(16, cardH * 0.1));
 
-    // This column count works — take the highest one that passes all checks
-    bestCols  = cols;
-    bestCardH = cardH;
-    bestCardW = cardW;
+    // Minimum card width in px at this font size
+    const minW = Math.max(ABS_MIN_W, MIN_EM_RATIO * fs);
+
+    if (cardW < minW) continue;
+
+    bestCols     = cols;
+    bestCardH    = cardH;
+    bestCardW    = cardW;
+    bestFontSize = fs;
     break;
   }
 
-  // Fallback: if nothing passed, use 2 columns and let height be whatever fits
+  // Fallback: nothing passed — use 2 columns, accept whatever size results
   if (!bestCardH) {
     bestCols  = 2;
     bestCardW = (availW - gapPx) / 2;
-    bestCardH = Math.max(MIN_CARD_H, (availH - gapPx * (Math.ceil(cardCount / 2) - 1)) / Math.ceil(cardCount / 2));
+    const rows = Math.ceil(cardCount / 2);
+    bestCardH  = Math.max(MIN_CARD_H, (availH - gapPx * (rows - 1)) / rows);
+    bestFontSize = Math.max(8, Math.min(16, bestCardH * 0.1));
   }
 
-  const fontSize = Math.max(8, Math.min(16, bestCardH * 0.1));
+  const fontSize = bestFontSize;
 
-  _layoutCache = { cardCount, vw, vh, bestCols, bestCardH, bestCardW, fontSize };
+  _layoutCache = { cardCount, vw, vh, bestCols, bestCardH, bestCardW, fontSize: bestFontSize };
   _applyLayout(_layoutCache);
 }
 
