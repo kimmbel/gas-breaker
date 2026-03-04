@@ -448,9 +448,10 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_")) return; // skip provider history entries
-    if (room.hold && room.holdAt && (now - room.holdAt) >= HOLD_CLEAR_MS) {
-      writeRoom(rid, r => ({ ...r, hold: false, holdAt: null }));
+    if (rid.startsWith("_hist_")) return;
+    const duration = room.holdDuration || HOLD_CLEAR_MS;
+    if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
+      writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
     }
   });
 }
@@ -693,18 +694,29 @@ async function toggleBreak(loc, breakId) {
 }
 
 async function toggleHold(loc) {
+  // Called to CLEAR an existing hold (second press on active hold button)
   const id = roomId(loc);
-  const now = Date.now();
-  const current = boardData[id] || {};
-  const turningOn = !current.hold;
-  const r = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
+  const r  = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
   const snap = await get(r);
   const data = snap.val() || {};
   await set(r, {
     ...data,
-    hold:       turningOn,
-    holdAt:     turningOn ? now   : null,
-    requesting: turningOn ? false : (data.requesting || false),
+    hold: false, holdAt: null, holdDuration: null,
+    requesting: data.requesting || false,
+  });
+}
+
+async function setHold(loc, durationMs) {
+  // Called when a duration button is chosen (10m / 20m / 30m)
+  const id  = roomId(loc);
+  const now = Date.now();
+  const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
+  const snap = await get(r);
+  const data = snap.val() || {};
+  await set(r, {
+    ...data,
+    hold: true, holdAt: now, holdDuration: durationMs,
+    requesting: false,
   });
 }
 
@@ -717,9 +729,10 @@ async function toggleRequesting(loc) {
   const data = snap.val() || {};
   await set(r, {
     ...data,
-    requesting: turningOn,
-    hold:       turningOn ? false : (data.hold || false),
-    holdAt:     turningOn ? null  : (data.holdAt || null),
+    requesting:   turningOn,
+    hold:         turningOn ? false : (data.hold || false),
+    holdAt:       turningOn ? null  : (data.holdAt || null),
+    holdDuration: turningOn ? null  : (data.holdDuration || null),
   });
 }
 
@@ -925,17 +938,19 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const isReq    = !!room.requesting;
   const holdAt   = room.holdAt || null;
   const now      = Date.now();
+  const holdDuration = room.holdDuration || HOLD_CLEAR_MS;
+  const holdWarnMs   = Math.max(5 * 60 * 1000, holdDuration * 0.25); // warn at 25% remaining or 5 min
   const holdAge  = isHold && holdAt ? now - holdAt : 0;
 
   // If hold has already expired, treat as not on hold (Firebase will catch up)
-  const holdExpired = isHold && holdAt && (now - holdAt) >= HOLD_CLEAR_MS;
+  const holdExpired   = isHold && holdAt && holdAge >= holdDuration;
   const effectiveHold = isHold && !holdExpired;
-  const effectiveWarn = effectiveHold && holdAge >= HOLD_WARN_MS;
+  const effectiveWarn = effectiveHold && (holdDuration - holdAge) <= holdWarnMs;
 
   // Hold countdown label — shown inside the button itself
   let holdBtnLabel = "Hold";
   if (effectiveHold && holdAt) {
-    const remaining = Math.max(0, HOLD_CLEAR_MS - holdAge);
+    const remaining = Math.max(0, holdDuration - holdAge);
     const mins = Math.ceil(remaining / 60000);
     holdBtnLabel = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
   }
@@ -957,12 +972,50 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const side = el("div", { class: "card-side" });
 
   if (provider) {
-    // Hold button
+    // Hold button — first press shows duration picker, second press clears
+    let showingDurationPicker = false;
     const holdBtn = el("button", {
       class: "side-btn" + (effectiveHold ? (effectiveWarn ? " hold-warn" : " hold-on") : ""),
-      onClick: () => toggleHold(loc)
+      onClick: () => {
+        if (effectiveHold) {
+          // Already on hold — clear it
+          toggleHold(loc);
+        } else if (showingDurationPicker) {
+          // Second press on Hold while picker is showing — cancel picker
+          showingDurationPicker = false;
+          holdBtn.textContent = "Hold";
+          holdBtn.className = "side-btn";
+          durationPicker.style.display = "none";
+        } else {
+          // First press — show duration picker
+          showingDurationPicker = true;
+          holdBtn.textContent = "Hold?";
+          holdBtn.className = "side-btn hold-on";
+          durationPicker.style.display = "flex";
+        }
+      }
     }, holdBtnLabel);
+
+    // Duration picker — hidden until Hold is pressed
+    const DURATIONS = [
+      { label: "10m", ms: 10 * 60 * 1000 },
+      { label: "20m", ms: 20 * 60 * 1000 },
+      { label: "30m", ms: 30 * 60 * 1000 },
+    ];
+    const durationPicker = el("div", {
+      style: { display: "none", flexDirection: "column", gap: "3px" }
+    });
+    DURATIONS.forEach(d => {
+      const btn = el("button", {
+        class: "side-btn",
+        style: { fontSize: "0.8em" },
+        onClick: () => { setHold(loc, d.ms); durationPicker.style.display = "none"; }
+      }, d.label);
+      durationPicker.appendChild(btn);
+    });
+
     side.appendChild(holdBtn);
+    side.appendChild(durationPicker);
 
     // Request button
     const reqBtn = el("button", {
@@ -1504,19 +1557,20 @@ function patchDisplay() {
       });
     }
 
-    // ── Update hold button ──
+    // ── Update hold button (only when hold is active — don't disturb duration picker state) ──
     const holdBtn = card.querySelector(".card-side .side-btn:first-child");
-    if (holdBtn && provider) {
-      let holdBtnLabel = "Hold";
-      let holdBtnClass = "side-btn";
-      if (effectiveHold && holdAt) {
-        const remaining = Math.max(0, HOLD_CLEAR_MS - holdAge);
-        const mins = Math.ceil(remaining / 60000);
-        holdBtnLabel = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
-        holdBtnClass += effectiveWarn ? " hold-warn" : " hold-on";
+    if (holdBtn && provider && effectiveHold) {
+      const holdDuration = room.holdDuration || HOLD_CLEAR_MS;
+      const remaining = Math.max(0, holdDuration - holdAge);
+      const mins = Math.ceil(remaining / 60000);
+      holdBtn.textContent = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
+      holdBtn.className   = "side-btn " + (effectiveWarn ? "hold-warn" : "hold-on");
+    } else if (holdBtn && provider && !effectiveHold) {
+      // Only reset to "Hold" if it's not currently showing the duration picker
+      if (holdBtn.textContent !== "Hold?") {
+        holdBtn.textContent = "Hold";
+        holdBtn.className   = "side-btn";
       }
-      holdBtn.className = holdBtnClass;
-      holdBtn.textContent = holdBtnLabel;
     }
 
     // ── Update request button ──
@@ -1582,6 +1636,37 @@ function patchDisplay() {
       }
     }
   });
+
+  // ── Patch no-break slot cards ──
+  const nbRow = document.querySelector(".display-nobreak-row");
+  if (nbRow) {
+    noBreakSlots.forEach(slot => {
+      const id       = roomId("nb_" + slot);
+      const room     = boardData[id] || {};
+      const provider = room.provider || null;
+      // Find card by its label text
+      const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
+      const card  = cards.find(c => {
+        const lbl = c.querySelector(".no-break-label");
+        return lbl && lbl.textContent.trim() === slot;
+      });
+      if (!card) return;
+      // Update empty class
+      if (provider) card.classList.remove("empty");
+      else          card.classList.add("empty");
+      // Update provider name button
+      const nameBtn = card.querySelector(".provider-name-btn");
+      if (nameBtn) {
+        const domProvider = nameBtn.classList.contains("empty") ? null : nameBtn.textContent.trim();
+        if (domProvider !== provider) {
+          // Structural change — rebuild just this card in-place
+          const tabIdx = card.getAttribute("data-tab-idx");
+          const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : null);
+          card.parentNode.replaceChild(newCard, card);
+        }
+      }
+    });
+  }
 
   // Re-apply layout (from cache — no jitter)
   layoutDisplay();
