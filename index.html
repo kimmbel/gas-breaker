@@ -992,17 +992,21 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
           // Already on hold — clear it
           toggleHold(loc);
         } else if (showingDurationPicker) {
-          // Cancel picker
+          // Cancel picker — restore request/note buttons
           showingDurationPicker = false;
           holdBtn.textContent = "Hold";
           holdBtn.className = "side-btn";
           durationPicker.style.display = "none";
+          if (reqBtn)  reqBtn.style.display  = "";
+          if (noteBtn) noteBtn.style.display = "";
         } else {
-          // Show duration picker
+          // Show duration picker — hide request/note to keep layout clean
           showingDurationPicker = true;
           holdBtn.textContent = "Hold?";
           holdBtn.className = "side-btn hold-on";
           durationPicker.style.display = "flex";
+          if (reqBtn)  reqBtn.style.display  = "none";
+          if (noteBtn) noteBtn.style.display = "none";
         }
       }
     }, holdBtnLabel);
@@ -1038,7 +1042,13 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         class: "side-btn",
         style: { fontSize: "0.8em" },
         "data-role": "duration",
-        onClick: () => { setHold(loc, d.ms); durationPicker.style.display = "none"; showingDurationPicker = false; }
+        onClick: () => {
+          setHold(loc, d.ms);
+          durationPicker.style.display = "none";
+          showingDurationPicker = false;
+          if (reqBtn)  reqBtn.style.display  = "";
+          if (noteBtn) noteBtn.style.display = "";
+        }
       }, d.label);
       durationPicker.appendChild(btn);
     });
@@ -1651,34 +1661,34 @@ function patchDisplay() {
     }
   });
 
-  // ── Patch no-break slot cards ──
+  // ── Patch no-break slot cards — always rebuild in-place ──
+  // No-break cards are cheap (no breaks/hold/pills), so we always replace them
+  // rather than trying to do surgical updates. This avoids all stale-state issues.
   const nbRow = document.querySelector(".display-nobreak-row");
   if (nbRow) {
-    noBreakSlots.forEach(slot => {
-      const id       = roomId("nb_" + slot);
-      const room     = boardData[id] || {};
-      const provider = room.provider || null;
-      // Find card by its label text
-      const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
-      const card  = cards.find(c => {
+    noBreakSlots.forEach((slot, i) => {
+      // Find the existing card by slot label
+      const existingCards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
+      const existing = existingCards.find(c => {
         const lbl = c.querySelector(".no-break-label");
         return lbl && lbl.textContent.trim() === slot;
       });
-      if (!card) return;
-      // Update empty class
-      if (provider) card.classList.remove("empty");
-      else          card.classList.add("empty");
-      // Update provider name button
-      const nameBtn = card.querySelector(".provider-name-btn");
-      if (nameBtn) {
-        const domProvider = nameBtn.classList.contains("empty") ? null : nameBtn.textContent.trim();
-        if (domProvider !== provider) {
-          // Structural change — rebuild just this card in-place
-          const tabIdx = card.getAttribute("data-tab-idx");
-          const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : null);
-          card.parentNode.replaceChild(newCard, card);
-        }
-      }
+      if (!existing) return;
+      // Skip if user is currently editing this card
+      if (existing.querySelector(".provider-input-wrap")) return;
+      // Check if provider changed
+      const id = roomId("nb_" + slot);
+      const room = boardData[id] || {};
+      const provider = room.provider || null;
+      const nameBtn = existing.querySelector(".provider-name-btn");
+      const domProvider = nameBtn
+        ? (nameBtn.classList.contains("empty") ? null : nameBtn.textContent.trim())
+        : "__unknown__";
+      if (domProvider === provider) return; // no change
+      // Rebuild this card in-place
+      const tabIdx = existing.getAttribute("data-tab-idx");
+      const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : i);
+      nbRow.replaceChild(newCard, existing);
     });
   }
 
