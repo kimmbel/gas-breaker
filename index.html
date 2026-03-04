@@ -655,13 +655,13 @@ async function assignProvider(loc, name) {
       ...(swapSnap.val()||{}),
       provider: displacedProvider,
       breaks: displacedBreaks,
-      hold: false, holdAt: null, requesting: false,
+      hold: false, holdAt: null, holdDuration: null, requesting: false,
     });
   } else if (incomingOldId) {
     // MOVE: just clear the room the provider is leaving
     const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const oldSnap = await get(oldRef);
-    await set(oldRef, { ...(oldSnap.val()||{}), provider: null, breaks: {}, hold: false, holdAt: null, requesting: false });
+    await set(oldRef, { ...(oldSnap.val()||{}), provider: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false });
   } else if (displacedProvider) {
     // DISPLACE into empty: displaced provider has nowhere to go — just clear target
     // (their breaks are already saved in history, they can be reassigned)
@@ -673,13 +673,13 @@ async function assignProvider(loc, name) {
     location: loc,
     provider: name,
     breaks: restoredBreaks,
-    hold: false, holdAt: null, requesting: false,
+    hold: false, holdAt: null, holdDuration: null, requesting: false,
   }));
 }
 
 async function clearProvider(loc) {
   const id = roomId(loc);
-  await writeRoom(id, () => ({ location: loc, provider: null, breaks: {}, hold: false, holdAt: null, requesting: false }));
+  await writeRoom(id, () => ({ location: loc, provider: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false }));
 }
 
 async function toggleBreak(loc, breakId) {
@@ -901,7 +901,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
   }
 
   function onTab() {
-    // Find the next card by data-tab-idx in the live DOM
+    if (tabIdx === null || tabIdx === undefined) return;
     const nextIdx = tabIdx + 1;
     const nextBtn = document.querySelector(`[data-tab-idx="${nextIdx}"] .provider-name-btn`);
     if (nextBtn) setTimeout(() => nextBtn.click(), 60);
@@ -1298,9 +1298,13 @@ function renderBoard() {
     const card = renderCard(loc, false, noBreakSlots.length + i);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
-      if (!room.provider || (room.provider && (room.breaks||{})[activeFilter])) {
-        card.classList.add("filter-done"); // hide: empty room OR break already given
+      if (room.provider) {
+        if ((room.breaks||{})[activeFilter]) {
+          card.classList.add("filter-done");   // dim: break already given
+        }
+        // else: no class — highlighted as needing this break
       }
+      // empty rooms get no filter class — they stay at normal opacity
     }
     return card;
   });
@@ -1506,6 +1510,32 @@ function patchFilter() {
       card.classList.add("filter-needs");
     }
   });
+
+  // Update chip counts to reflect current break state
+  const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const dOccupied  = dAllRooms.filter(r => r.provider).length;
+  const dAmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
+  const dLunchLeft = dAllRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
+  const dPmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).pm).length;
+  const countMap   = { "am": dAmLeft, "lunch": dLunchLeft, "pm": dPmLeft };
+  const dotMap     = { "am": "#f87171", "lunch": "#38bdf8", "pm": "#a78bfa" };
+  const bgMap      = { "am": "#fee2e2", "lunch": "#e0f2fe", "pm": "#ede9fe" };
+  const colorMap2  = { "am": "#dc2626", "lunch": "#0369a1", "pm": "#7c3aed" };
+  // Update Rooms Running chip count
+  const roomsChip = document.querySelector(".summary-bar .chip.filter-rooms .chip-count");
+  if (roomsChip) roomsChip.textContent = String(dOccupied);
+  // Update break chips
+  document.querySelectorAll(".summary-bar .chip[data-filter]").forEach(chip => {
+    const fid   = chip.getAttribute("data-filter");
+    const count = countMap[fid];
+    const has   = count > 0;
+    const countEl = chip.querySelector(".chip-count");
+    const dotEl   = chip.querySelector(".chip-dot");
+    if (countEl) countEl.textContent = String(count);
+    chip.style.background = has ? bgMap[fid]  : "#2d2825";
+    chip.style.color      = has ? colorMap2[fid] : "#4a4240";
+    if (dotEl) dotEl.style.background = has ? dotMap[fid] : "#3d3530";
+  });
 }
 
 // ─── Patch: Coordinator display (data update without full DOM rebuild) ──────────
@@ -1523,12 +1553,14 @@ function patchDisplay() {
     const breaks    = room.breaks   || {};
     const isHold    = !!room.hold;
     const isReq     = !!room.requesting;
-    const holdAt    = room.holdAt || null;
-    const now       = Date.now();
-    const holdAge   = isHold && holdAt ? now - holdAt : 0;
-    const holdExpired   = isHold && holdAt && (now - holdAt) >= HOLD_CLEAR_MS;
+    const holdAt       = room.holdAt || null;
+    const holdDuration = room.holdDuration || HOLD_CLEAR_MS;
+    const holdWarnMs   = Math.max(5 * 60 * 1000, holdDuration * 0.25);
+    const now          = Date.now();
+    const holdAge      = isHold && holdAt ? now - holdAt : 0;
+    const holdExpired   = isHold && holdAt && holdAge >= holdDuration;
     const effectiveHold = isHold && !holdExpired;
-    const effectiveWarn = effectiveHold && holdAge >= HOLD_WARN_MS;
+    const effectiveWarn = effectiveHold && (holdDuration - holdAge) <= holdWarnMs;
 
     // Find the card in the DOM by room label text
     const allCards = Array.from(wrap.querySelectorAll(".or-card.display-card:not(.no-break-card)"));
@@ -1584,7 +1616,6 @@ function patchDisplay() {
     // ── Update hold button (only when hold is active — don't disturb duration picker state) ──
     const holdBtn = card.querySelector(".card-side [data-role='hold']");
     if (holdBtn && provider && effectiveHold) {
-      const holdDuration = room.holdDuration || HOLD_CLEAR_MS;
       const remaining = Math.max(0, holdDuration - holdAge);
       const mins = Math.ceil(remaining / 60000);
       holdBtn.textContent = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
