@@ -104,7 +104,10 @@
     .or-section-divider { border: none; border-top: 1px dashed #e8e0d6; margin: 10px 0; }
 
     /* Break pills */
-    .pill-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .pill-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .board-divider { width: 100%; height: 0; border: none; border-top: 2px solid #e8e0d6; margin: 6px 0 2px; opacity: 0.7; }
+    /* display-divider-break: full-width element in CSS grid that forces next card to new row */
+    .display-divider-break { grid-column: 1 / -1; height: 0; border: none; border-top: 2px solid #3d3530; margin: 0; opacity: 0.6; align-self: center; }
     .pill { border-radius: 8px; padding: 6px 14px; font-size: 13px; border: 1.5px solid #e8e0d6; background: #f1ede8; color: #c4b8ad; font-family: inherit; font-weight: 600; cursor: pointer; transition: none; }
     .pill.done { background: #dcfce7; color: #15803d; border-color: #86efac; font-weight: 700; }
 
@@ -236,7 +239,7 @@
     .display-card .provider-name-btn.requesting-name { color: #34d399; }
 
     .display-card .pill {
-      font-size: 0.9em; padding: 0.35em 0.75em; font-weight: 800;
+      font-size: 0.78em; padding: 0.28em 0.45em; font-weight: 800;
       background: #2d2825; border-color: #4a4240; color: #6b5e57;
     }
     .display-card .pill.done {
@@ -582,6 +585,8 @@ function roomId(loc) {
   return loc.replace(/[^a-zA-Z0-9]/g, "_");
 }
 
+function isDivider(loc) { return typeof loc === "string" && loc.startsWith("__divider__"); }
+
 // ─── Provider history helpers ─────────────────────────────────────────────────
 function providerKey(name) {
   return "_hist_" + name.replace(/[^a-zA-Z0-9]/g, "_");
@@ -769,6 +774,10 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       clearOpt.addEventListener("mousedown", async e => {
         e.preventDefault();
         closeDropdown();
+        // Optimistic local update so coordinator display refreshes instantly
+        const rid = roomId(loc);
+        if (boardData[rid]) boardData[rid] = { ...boardData[rid], provider: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false };
+        if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
         await clearProvider(loc);
         onDone();
       });
@@ -780,6 +789,11 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       opt.addEventListener("mousedown", async e => {
         e.preventDefault();
         closeDropdown();
+        // Optimistic local update so coordinator display refreshes instantly
+        const rid = roomId(loc);
+        const restoredBreaks = getProviderHistory(name);
+        boardData[rid] = { ...(boardData[rid] || {}), provider: name, breaks: restoredBreaks, hold: false, holdAt: null, holdDuration: null, requesting: false };
+        if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
         await assignProvider(loc, name);
         onDone();
       });
@@ -1260,7 +1274,8 @@ function renderBoard() {
   const visibleLocs = locations;
 
   // Summary counts
-  const allRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const realLocs  = locations.filter(l => !isDivider(l));
+  const allRooms  = realLocs.map(l => boardData[roomId(l)] || {});
   const occupied  = allRooms.filter(r => r.provider).length;
   const amLeft    = allRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
   const lunchLeft = allRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
@@ -1294,8 +1309,12 @@ function renderBoard() {
   ];
 
   const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, i));
-  const cards = visibleLocs.map((loc, i) => {
-    const card = renderCard(loc, false, noBreakSlots.length + i);
+  let cardTabIdx = noBreakSlots.length;
+  const cards = visibleLocs.map(loc => {
+    if (isDivider(loc)) {
+      return el("div", { class: "board-divider" });
+    }
+    const card = renderCard(loc, false, cardTabIdx++);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
       if (!room.provider || (room.breaks||{})[activeFilter]) {
@@ -1365,7 +1384,7 @@ function layoutDisplay(forceRemeasure = false) {
   const wrap = document.querySelector(".display-wrap");
   if (!wrap) return;
 
-  const cardCount = wrap.children.length;
+  const cardCount = Array.from(wrap.children).filter(c => !c.classList.contains("display-divider-break")).length;
   if (!cardCount) return;
 
   const vw = window.innerWidth;
@@ -1498,6 +1517,7 @@ function patchFilter() {
     const lbl = card.querySelector(".room-label");
     if (!lbl) return;
     const loc = lbl.textContent.trim();
+    if (isDivider(loc)) return;
     const room = boardData[roomId(loc)] || {};
     if (!room.provider) return;
     if ((room.breaks || {})[activeFilter]) {
@@ -1508,7 +1528,8 @@ function patchFilter() {
   });
 
   // Update chip counts to reflect current break state
-  const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const dRealLocs  = locations.filter(l => !isDivider(l));
+  const dAllRooms  = dRealLocs.map(l => boardData[roomId(l)] || {});
   const dOccupied  = dAllRooms.filter(r => r.provider).length;
   const dAmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
   const dLunchLeft = dAllRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
@@ -1543,6 +1564,7 @@ function patchDisplay() {
   if (!wrap) { renderDisplay(); return; } // fallback if display not rendered yet
 
   locations.forEach(loc => {
+    if (isDivider(loc)) return; // dividers have no card to patch
     const id   = roomId(loc);
     const room = boardData[id] || {};
     const provider  = room.provider || null;
@@ -1738,8 +1760,13 @@ function renderDisplay() {
   const visibleLocs = locations;
 
   const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, true, i));
-  const cards = visibleLocs.map((loc, i) => {
-    const card = renderCard(loc, true, noBreakSlots.length + i);
+  let dCardTabIdx = noBreakSlots.length;
+  const cards = visibleLocs.map(loc => {
+    if (isDivider(loc)) {
+      // Divider: full-width element that forces a new row in CSS grid
+      return el("div", { class: "display-divider-break" });
+    }
+    const card = renderCard(loc, true, dCardTabIdx++);
     if (activeFilter) {
       const room = boardData[roomId(loc)] || {};
       if (room.provider) {
@@ -1753,7 +1780,8 @@ function renderDisplay() {
     return card;
   });
 
-  const dAllRooms  = locations.map(l => boardData[roomId(l)] || {});
+  const dRealLocs  = locations.filter(l => !isDivider(l));
+  const dAllRooms  = dRealLocs.map(l => boardData[roomId(l)] || {});
   const dOccupied  = dAllRooms.filter(r => r.provider).length;
   const dAmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).am).length;
   const dLunchLeft = dAllRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
@@ -2113,13 +2141,28 @@ function renderAdminPage(deptCode) {
     const { list, rebuild } = buildDraggableList(
       locs,
       async (newOrder) => { locs = newOrder; await saveLocations(newOrder); },
-      (loc, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-        el("span", {}, loc),
-        el("button", { class: "btn-danger", onClick: async () => {
-          locs = locs.filter(l => l !== loc);
-          await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
-        }}, "Remove"),
-      )
+      (loc, arr, rebuildFn) => {
+        if (isDivider(loc)) {
+          return el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
+            el("span", { style: { fontSize:"11px", color:"#a39688", fontStyle:"italic", display:"flex", alignItems:"center", gap:"6px" } },
+              el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
+              "section divider",
+              el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
+            ),
+            el("button", { class: "btn-danger", onClick: async () => {
+              locs = locs.filter(l => l !== loc);
+              await saveLocations(locs); rebuildFn(locs); showToast("Divider removed");
+            }}, "Remove"),
+          );
+        }
+        return el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
+          el("span", {}, loc),
+          el("button", { class: "btn-danger", onClick: async () => {
+            locs = locs.filter(l => l !== loc);
+            await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
+          }}, "Remove"),
+        );
+      }
     );
 
     const locIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Cardiac OR 1", style: { flex:"1" } });
@@ -2131,11 +2174,22 @@ function renderAdminPage(deptCode) {
     }
     locIn.addEventListener("keydown", e => { if (e.key === "Enter") addLoc(); });
 
+    async function addDivider() {
+      // Use a unique key so multiple dividers can coexist
+      const key = "__divider__" + Date.now();
+      const newLocs = [...locs, key];
+      await saveLocations(newLocs); locs = newLocs; rebuild(newLocs); showToast("Section divider added — drag to position");
+    }
+
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Locations"),
-      el("div", { class: "admin-section-sub"   }, "Drag ⠿ to reorder. Changes apply immediately for all users."),
+      el("div", { class: "admin-section-sub"   }, "Drag ⠿ to reorder. Use dividers to separate sections on the board."),
       list,
       el("div", { class: "admin-add-row" }, locIn, el("button", { class: "btn-primary", onClick: addLoc }, "Add")),
+      el("div", { class: "admin-add-row", style: { marginTop: "6px" } },
+        el("button", { class: "btn-ghost", style: { fontSize:"12px", padding:"6px 12px" }, onClick: addDivider }, "＋ Add Section Divider"),
+        el("span", { style: { fontSize:"11px", color:"#a39688", alignSelf:"center", flex:"1" } }, "Drag into position after adding"),
+      ),
     );
   }
 
