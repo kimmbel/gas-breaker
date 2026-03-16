@@ -1208,7 +1208,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const note = provider ? getProviderNote(provider) : null;
   if (isDisplay && (note || isReq) && provider) {
     const badges = el("div", { class: "display-badges" });
-    if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
+    if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color, style: { cursor:"pointer" }, onClick: () => openNoteEdit() }, note.text));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
     body.appendChild(
       el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
@@ -1273,7 +1273,17 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       if (e.key === "Escape") { editingNote = false; wrap.remove(); }
     });
     noteInput.addEventListener("blur", () => setTimeout(() => {
-      if (editingNote) { editingNote = false; wrap.remove(); }
+      if (editingNote) {
+        // Save on blur (e.g. clicking away or clicking a color dot then elsewhere)
+        // This preserves the selected color even without pressing Enter
+        const val = noteInput.value.trim().slice(0, 15);
+        const hadNote = !!currentNoteObj;
+        if (val || hadNote) {
+          saveNote(); // saveNote sets editingNote=false and removes wrap
+        } else {
+          editingNote = false; wrap.remove();
+        }
+      }
     }, 200));
 
     const wrap = el("div", { class: "note-input-wrap" }, noteInput, colorRow);
@@ -1949,9 +1959,14 @@ function patchDisplay() {
     if (!card) return;
 
     // Detect structural change: provider added/removed or swapped
-    const domNameBtn = card.querySelector(".provider-name-btn");
-    const domProvider = domNameBtn && !domNameBtn.classList.contains("empty")
-      ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null;
+    const domNameBtn  = card.querySelector(".provider-name-btn");
+    const domIsEditing = !!card.querySelector(".provider-input-wrap");
+    // When editing, nameBtn is absent — treat card as occupied (non-null provider)
+    // so a clear/change still triggers a rebuild rather than matching null===null
+    const domProvider = domIsEditing
+      ? "__editing__"
+      : (domNameBtn && !domNameBtn.classList.contains("empty")
+          ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null);
     if (domProvider !== provider) {
       // Provider changed — rebuild just this card in-place
       const tabIdx = card.getAttribute("data-tab-idx");
@@ -2052,7 +2067,15 @@ function patchDisplay() {
           labelRow.appendChild(badges);
         }
         badges.innerHTML = "";
-        if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
+        if (note) {
+          const noteBadge = el("div", { class: "display-note-badge note-" + note.color, style: { cursor:"pointer" } }, note.text);
+          noteBadge.addEventListener("click", () => {
+            // Delegate to the Note side button which has openNoteEdit in its closure
+            const noteBtn = card.querySelector(".card-side [data-role='note']");
+            if (noteBtn) noteBtn.click();
+          });
+          badges.appendChild(noteBadge);
+        }
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
       } else {
         // Remove badges if present; unwrap labelRow back to direct child if needed
