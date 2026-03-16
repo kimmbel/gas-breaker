@@ -89,6 +89,45 @@
     .provider-input-wrap { position: relative; margin-bottom: 7px; }
     .provider-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
     .roster-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto; margin-top: 2px; }
+
+    /* ── On-Call panel ── */
+    .call-panel-wrap { position: relative; }
+    .call-chip { background: #f0fdf4; color: #166534; cursor: pointer; user-select: none; }
+    .call-chip.has-call { background: #dcfce7; color: #15803d; }
+    .call-panel {
+      position: absolute; top: calc(100% + 6px); left: 0;
+      min-width: 260px; max-width: 340px;
+      background: #fff; border: 1.5px solid #e8e0d6; border-radius: 12px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.13); z-index: 200;
+      padding: 10px 0 6px; overflow: hidden;
+    }
+    .call-panel-title { font-size: 11px; font-weight: 800; color: #a39688; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 14px 6px; border-bottom: 1px solid #f1ede8; margin-bottom: 4px; }
+    .call-row { display: flex; align-items: center; gap: 8px; padding: 5px 14px; min-height: 36px; }
+    .call-position-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 90px; flex-shrink: 0; }
+    .call-provider-btn { flex: 1; text-align: left; font-size: 13px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .call-provider-btn.empty { color: #b0a49a; font-weight: 600; font-style: italic; }
+    .call-provider-btn:hover { background: #f1ede8; }
+    .call-input-wrap { flex: 1; position: relative; }
+    .call-input { width: 100%; font-size: 13px; font-weight: 700; color: #2d2420; background: #fff; border: 1.5px solid #b45309; border-radius: 8px; padding: 4px 10px; outline: none; font-family: inherit; }
+    .call-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 300; max-height: 160px; overflow-y: auto; }
+    .call-dropdown-opt { padding: 7px 12px; font-size: 13px; cursor: pointer; }
+    .call-dropdown-opt:hover, .call-dropdown-opt.highlighted { background: #f8f4ef; }
+    .call-dropdown-opt.clear-opt { color: #dc2626; border-bottom: 1px solid #f1ede8; }
+    /* Display-mode call panel — dark theme */
+    body.display-mode .call-panel { background: #1e1a17; border-color: #4a4240; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
+    body.display-mode .call-panel-title { color: #6b5e57; border-color: #3d3530; }
+    body.display-mode .call-row { border-bottom: none; }
+    body.display-mode .call-position-label { color: #9a8880; }
+    body.display-mode .call-provider-btn { background: #2d2825; border-color: #4a4240; color: #f5f0eb; }
+    body.display-mode .call-provider-btn.empty { color: #4a4240; }
+    body.display-mode .call-provider-btn:hover { background: #3d3530; }
+    body.display-mode .call-input { background: #2d2825; border-color: #fb923c; color: #f5f0eb; }
+    body.display-mode .call-dropdown { background: #1e1a17; border-color: #4a4240; }
+    body.display-mode .call-dropdown-opt:hover, body.display-mode .call-dropdown-opt.highlighted { background: #2d2825; }
+    body.display-mode .call-dropdown-opt { color: #f5f0eb; }
+    body.display-mode .call-dropdown-opt.clear-opt { color: #f87171; border-color: #3d3530; }
+    body.display-mode .call-chip { background: #052e16; color: #4ade80; }
+    body.display-mode .call-chip.has-call { background: #052e16; color: #4ade80; }
     .roster-option { padding: 9px 12px; font-size: 13px; font-weight: 700; color: #2d2420; cursor: pointer; border: none; background: none; width: 100%; text-align: left; border-bottom: 1px solid #f1ede8; }
     .roster-option:last-child { border-bottom: none; }
     .roster-option:hover { background: #f8f4ef; }
@@ -335,6 +374,7 @@ let session     = null;   // { deptCode, deptName, isAdmin? }
 let boardData   = {};     // { [roomId]: { provider, breaks, hold, holdAt, requesting, hidden } }
 let locations     = [...DEFAULT_LOCATIONS];
 let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
+let callPositions = [];   // e.g. ["First Call", "Second Call", "OB Call"]
 let roster        = [];
 let departments   = {};
 let isDisplayMode = false;
@@ -426,6 +466,7 @@ function subscribeToBoard(deptCode) {
     Object.entries(boardData).forEach(([k, v]) => {
       if (k.startsWith("_hist_") && v?.provider) providerHistory[v.provider] = v.breaks || {};
     });
+    // _call_ key is also in boardData — already accessible via getCallAssignments()
     checkAutoUnhold();
     if (!boardInitialized) {
       boardInitialized = true;
@@ -440,9 +481,10 @@ function subscribeToBoard(deptCode) {
 
   unsubConfig = onValue(configRef(deptCode), snap => {
     const cfg = snap.val() || {};
-    locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
-    noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
-    roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
+    locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
+    noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
+    callPositions = cfg.callPositions ? Object.values(cfg.callPositions) : [];
+    roster        = cfg.roster        ? Object.values(cfg.roster).sort() : [];
     // Only re-render if board is showing — not if on admin page
     if (document.querySelector(".main"))              renderBoard();
     else if (document.querySelector(".display-outer")) renderDisplay();
@@ -453,7 +495,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_")) return;
+    if (rid.startsWith("_hist_") || rid === "_call_") return;
     const duration = room.holdDuration || HOLD_CLEAR_MS;
     if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
@@ -478,6 +520,26 @@ async function saveLocations(locs) {
 async function saveNoBreakSlots(slots) {
   const obj = {}; slots.forEach((s, i) => { obj[i] = s; });
   await set(ref(db, `config/${session.deptCode}/noBreakSlots`), obj);
+}
+
+async function saveCallPositions(positions) {
+  const obj = {}; positions.forEach((p, i) => { obj[i] = p; });
+  await set(ref(db, `config/${session.deptCode}/callPositions`), obj);
+}
+
+async function saveCallAssignment(positionIdx, providerName) {
+  // Stored under boards/{code}/{date}/_call_/{positionIdx}
+  const r = ref(db, `boards/${session.deptCode}/${tsDay()}/_call_/${positionIdx}`);
+  if (providerName) {
+    await set(r, providerName);
+  } else {
+    await remove(r);
+  }
+}
+
+function getCallAssignments() {
+  // Returns { [positionIdx]: providerName }
+  return boardData["_call_"] || {};
 }
 
 async function saveRosterEntry(name) {
@@ -1267,6 +1329,203 @@ function showRequestNotification(loc, providerName) {
   const autoTimer = setTimeout(() => { if (notif.parentNode) notif.remove(); }, DURATION);
 }
 
+// ─── On-Call chip builder ─────────────────────────────────────────────────────
+function buildCallChip() {
+  if (!callPositions.length) return null;
+
+  const assignments = getCallAssignments();
+  const filledCount = Object.values(assignments).filter(Boolean).length;
+  const hasAny = filledCount > 0;
+
+  let panelOpen = false;
+  let panel = null;
+
+  const chip = el("div", {
+    class: "chip call-chip" + (hasAny ? " has-call" : ""),
+  },
+    el("span", { style: { fontSize: "13px" } }, "📞"),
+    el("span", { class: "chip-count" }, String(filledCount)),
+    el("span", {}, "On Call"),
+  );
+
+  const wrap = el("div", { class: "call-panel-wrap" }, chip);
+
+  function closePanel() {
+    if (panel) { panel.remove(); panel = null; }
+    panelOpen = false;
+  }
+
+  function buildPanel() {
+    const p = el("div", { class: "call-panel" });
+    p.appendChild(el("div", { class: "call-panel-title" }, "On Call Tonight"));
+
+    callPositions.forEach((position, idx) => {
+      const currentProvider = getCallAssignments()[idx] || null;
+      let editing = false;
+      let inputWrap = null;
+
+      const row = el("div", { class: "call-row" });
+      const label = el("div", { class: "call-position-label" }, position);
+      row.appendChild(label);
+
+      function renderProviderArea() {
+        // Remove existing provider widget
+        if (inputWrap) { inputWrap.remove(); inputWrap = null; }
+        const existingBtn = row.querySelector(".call-provider-btn");
+        if (existingBtn) existingBtn.remove();
+
+        if (editing) {
+          inputWrap = el("div", { class: "call-input-wrap" });
+          const input = el("input", {
+            class: "call-input",
+            type: "text",
+            placeholder: "Search roster…",
+            autocomplete: "off",
+          });
+          let callDropdown = null;
+          let highlightIdx = -1;
+
+          function closeCallDropdown() {
+            if (callDropdown) { callDropdown.remove(); callDropdown = null; }
+            highlightIdx = -1;
+          }
+
+          function showCallDropdown(query) {
+            closeCallDropdown();
+            const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
+            callDropdown = el("div", { class: "call-dropdown" });
+
+            if (currentProvider) {
+              const clearOpt = el("div", { class: "call-dropdown-opt clear-opt" }, "✕ Remove");
+              clearOpt.addEventListener("mousedown", async e => {
+                e.preventDefault();
+                closeCallDropdown();
+                await saveCallAssignment(idx, null);
+                editing = false;
+                renderProviderArea();
+                refreshChipCount();
+              });
+              callDropdown.appendChild(clearOpt);
+            }
+
+            matches.slice(0, 12).forEach((name, mi) => {
+              const opt = el("div", { class: "call-dropdown-opt" }, name);
+              opt.addEventListener("mousedown", async e => {
+                e.preventDefault();
+                closeCallDropdown();
+                await saveCallAssignment(idx, name);
+                editing = false;
+                renderProviderArea();
+                refreshChipCount();
+              });
+              callDropdown.appendChild(opt);
+            });
+
+            if (!matches.length && !currentProvider) {
+              callDropdown.appendChild(
+                el("div", { style: { padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches in roster.")
+              );
+            }
+            inputWrap.appendChild(callDropdown);
+
+            function setHighlight(i) {
+              const opts = Array.from(callDropdown.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
+              opts.forEach((o, j) => o.classList.toggle("highlighted", j === i));
+              highlightIdx = i;
+              if (opts[i]) opts[i].scrollIntoView({ block: "nearest" });
+            }
+
+            input._setHighlight = setHighlight;
+            input._getOpts = () => Array.from(callDropdown.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
+          }
+
+          input.addEventListener("focus", () => showCallDropdown(input.value));
+          input.addEventListener("input", () => showCallDropdown(input.value));
+          input.addEventListener("blur", () => setTimeout(() => {
+            closeCallDropdown();
+            editing = false;
+            renderProviderArea();
+          }, 150));
+          input.addEventListener("keydown", async e => {
+            if (e.key === "Escape") { closeCallDropdown(); editing = false; renderProviderArea(); return; }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              if (!callDropdown) showCallDropdown(input.value);
+              const opts = input._getOpts ? input._getOpts() : [];
+              const ni = Math.min(highlightIdx + 1, opts.length - 1);
+              if (input._setHighlight) input._setHighlight(ni);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              if (input._setHighlight) input._setHighlight(Math.max(highlightIdx - 1, 0));
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              const query = input.value.trim();
+              const opts = input._getOpts ? input._getOpts() : [];
+              let selected = null;
+              if (highlightIdx >= 0 && opts[highlightIdx]) {
+                selected = opts[highlightIdx].textContent.trim();
+              } else if (query) {
+                const m = roster.filter(n => rosterMatches(n, query));
+                if (m.length) selected = m[0];
+              }
+              if (selected) {
+                await saveCallAssignment(idx, selected);
+                refreshChipCount();
+              }
+              closeCallDropdown();
+              editing = false;
+              renderProviderArea();
+            }
+          });
+
+          inputWrap.appendChild(input);
+          row.appendChild(inputWrap);
+          setTimeout(() => input.focus(), 20);
+        } else {
+          const liveProvider = getCallAssignments()[idx] || null;
+          const btn = el("button", {
+            class: "call-provider-btn" + (!liveProvider ? " empty" : ""),
+            onClick: () => { editing = true; renderProviderArea(); }
+          }, liveProvider || "Tap to assign");
+          row.appendChild(btn);
+        }
+      }
+
+      renderProviderArea();
+      p.appendChild(row);
+    });
+
+    return p;
+  }
+
+  function refreshChipCount() {
+    const freshAssign = getCallAssignments();
+    const n = Object.values(freshAssign).filter(Boolean).length;
+    chip.querySelector(".chip-count").textContent = String(n);
+    chip.classList.toggle("has-call", n > 0);
+  }
+
+  chip.addEventListener("click", e => {
+    e.stopPropagation();
+    if (panelOpen) { closePanel(); return; }
+    panelOpen = true;
+    panel = buildPanel();
+    wrap.appendChild(panel);
+    // Close when clicking outside
+    setTimeout(() => {
+      document.addEventListener("click", function outsideClick(ev) {
+        if (!wrap.contains(ev.target)) { closePanel(); document.removeEventListener("click", outsideClick); }
+      });
+    }, 0);
+  });
+
+  return wrap;
+}
+
 // ─── Render: Board ────────────────────────────────────────────────────────────
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
@@ -1303,11 +1562,13 @@ function renderBoard() {
     return chip;
   }
 
+  const callChipEl = buildCallChip();
   const chips = [
     makeChip(occupied,  "Rooms Running",  "#fef3c7", "#b45309", "#f59e0b", null),
     makeChip(amLeft,    "AM remaining",   "#fee2e2", "#dc2626", "#f87171", "am"),
     makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8", "lunch"),
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
+    ...(callChipEl ? [callChipEl] : []),
   ];
 
   const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, i));
@@ -1788,6 +2049,8 @@ function renderDisplay() {
   const dLunchLeft = dAllRooms.filter(r => r.provider && !(r.breaks||{}).lunch).length;
   const dPmLeft    = dAllRooms.filter(r => r.provider && !(r.breaks||{}).pm).length;
 
+  const dCallChipEl = buildCallChip();
+
   const app = document.getElementById("app");
   app.innerHTML = "";
   app.appendChild(el("div", {},
@@ -1812,7 +2075,7 @@ function renderDisplay() {
         );
         if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; patchFilter(); });
         return chip;
-      })
+      }).concat(dCallChipEl ? [dCallChipEl] : [])
     ),
     el("div", { class: "display-outer" },
       noBreakSlots.length ? el("div", { class: "display-nobreak-row" }, ...noBreakCards) : null,
@@ -1978,9 +2241,10 @@ async function loadConfig(code) {
     let done = false;
     const unsub = onValue(configRef(code), snap => {
       const cfg = snap.val() || {};
-      locations    = cfg.locations    ? Object.values(cfg.locations)    : [...DEFAULT_LOCATIONS];
-      noBreakSlots = cfg.noBreakSlots ? Object.values(cfg.noBreakSlots) : [];
-      roster       = cfg.roster       ? Object.values(cfg.roster).sort() : [];
+      locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
+      noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
+      callPositions = cfg.callPositions ? Object.values(cfg.callPositions) : [];
+      roster        = cfg.roster        ? Object.values(cfg.roster).sort() : [];
       if (!done) { done = true; unsub(); resolve(); }
     });
     setTimeout(() => { if (!done) { done = true; resolve(); } }, 3000);
@@ -2214,6 +2478,40 @@ function renderAdminPage(deptCode) {
     );
   }
 
+  // ── Call Positions section ──
+  function buildCallPositionsSection() {
+    let positions = [...callPositions];
+    const { list, rebuild } = buildDraggableList(
+      positions,
+      async (newOrder) => { positions = newOrder; await saveCallPositions(newOrder); },
+      (pos, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
+        el("span", {}, pos),
+        el("button", { class: "btn-danger", onClick: async () => {
+          positions = positions.filter(p => p !== pos);
+          await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos} removed`);
+        }}, "Remove"),
+      )
+    );
+
+    const posIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. First Call, OB Call", style: { flex:"1" } });
+    async function addPosition() {
+      const val = posIn.value.trim();
+      if (!val || positions.includes(val)) return;
+      const newPositions = [...positions, val];
+      await saveCallPositions(newPositions); positions = newPositions; rebuild(newPositions); posIn.value = ""; showToast(`${val} added`);
+    }
+    posIn.addEventListener("keydown", e => { if (e.key === "Enter") addPosition(); });
+
+    const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No call positions yet.");
+    if (!positions.length) list.appendChild(emptyMsg);
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "On-Call Positions"),
+      el("div", { class: "admin-section-sub" }, "Define call positions (e.g. First Call, OB Call). Staff can assign providers nightly from the board."),
+      list,
+      el("div", { class: "admin-add-row" }, posIn, el("button", { class: "btn-primary", onClick: addPosition }, "Add")),
+    );
+  }
+
   // ── Roster section ──
   function buildRosterSection() {
     let ros = [...roster];
@@ -2303,6 +2601,7 @@ function renderAdminPage(deptCode) {
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
       isDept ? buildLocSection()           : buildDeptSection(),
       isDept ? buildNoBreakSection()       : buildAdminPasscodeSection(),
+      isDept ? buildCallPositionsSection() : null,
       isDept ? buildRosterSection()        : null,
       isDept ? buildClearSection()         : null,
     ),
