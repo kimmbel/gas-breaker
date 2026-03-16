@@ -1337,212 +1337,209 @@ function showRequestNotification(loc, providerName) {
 function buildCallChip() {
   if (!callPositions.length) return null;
 
-  const assignments = getCallAssignments();
-  const filledCount = Object.values(assignments).filter(Boolean).length;
-  const hasAny = filledCount > 0;
-
   let panelOpen = false;
   let panel = null;
+  // Track whether a mousedown on the panel is in progress
+  // so the outsideClick handler doesn't fire on the same interaction
+  let panelMousedown = false;
 
-  const chip = el("div", {
-    class: "chip call-chip" + (hasAny ? " has-call" : ""),
-  },
+  const chip = el("div", { class: "chip call-chip" },
     el("span", { style: { fontSize: "13px" } }, "📞"),
-    el("span", { class: "chip-count" }, String(filledCount)),
+    el("span", { class: "chip-count" }, "0"),
     el("span", {}, "On Call"),
   );
 
   const wrap = el("div", { class: "call-panel-wrap" }, chip);
+
+  function refreshChipCount() {
+    const n = Object.values(getCallAssignments()).filter(Boolean).length;
+    chip.querySelector(".chip-count").textContent = String(n);
+    chip.classList.toggle("has-call", n > 0);
+  }
+  refreshChipCount();
 
   function closePanel() {
     if (panel) { panel.remove(); panel = null; }
     panelOpen = false;
   }
 
+  // ── Build a single position row ──
+  function buildRow(position, posIdx) {
+    const row = el("div", { class: "call-row" });
+    row.appendChild(el("div", { class: "call-position-label" }, position));
+
+    let editing = false;
+    let inputWrap = null;
+
+    function renderArea() {
+      // Clean up previous widgets
+      if (inputWrap) { inputWrap.remove(); inputWrap = null; }
+      const old = row.querySelector(".call-provider-btn, .call-input-wrap");
+      if (old) old.remove();
+
+      // Always read live assignments — never use a stale closure
+      const liveProvider = getCallAssignments()[posIdx] || null;
+
+      if (editing) {
+        inputWrap = el("div", { class: "call-input-wrap" });
+        const input = el("input", {
+          class: "call-input",
+          type: "text",
+          placeholder: "Search roster…",
+          autocomplete: "off",
+        });
+
+        let dd = null;
+        let hiIdx = -1;
+
+        function closeDd() { if (dd) { dd.remove(); dd = null; } hiIdx = -1; }
+
+        function showDd(query) {
+          closeDd();
+          const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
+          dd = el("div", { class: "call-dropdown" });
+
+          // Remove option — uses liveProvider captured at renderArea() call time
+          if (liveProvider) {
+            const clearOpt = el("div", { class: "call-dropdown-opt clear-opt" }, "✕ Remove");
+            clearOpt.addEventListener("mousedown", async e => {
+              e.preventDefault();
+              closeDd();
+              if (!boardData["_call_"]) boardData["_call_"] = {};
+              delete boardData["_call_"][posIdx];
+              editing = false;
+              renderArea();
+              refreshChipCount();
+              await saveCallAssignment(posIdx, null);
+            });
+            dd.appendChild(clearOpt);
+          }
+
+          matches.slice(0, 12).forEach(name => {
+            const opt = el("div", { class: "call-dropdown-opt" }, name);
+            opt.addEventListener("mousedown", async e => {
+              e.preventDefault();
+              closeDd();
+              if (!boardData["_call_"]) boardData["_call_"] = {};
+              boardData["_call_"][posIdx] = name;
+              editing = false;
+              renderArea();
+              refreshChipCount();
+              await saveCallAssignment(posIdx, name);
+            });
+            dd.appendChild(opt);
+          });
+
+          if (!matches.length && !liveProvider) {
+            dd.appendChild(el("div", { style: { padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches in roster."));
+          }
+
+          inputWrap.appendChild(dd);
+        }
+
+        input.addEventListener("focus", () => showDd(input.value));
+        input.addEventListener("input", () => showDd(input.value));
+        input.addEventListener("blur", () => setTimeout(() => {
+          closeDd();
+          editing = false;
+          renderArea();
+        }, 150));
+
+        input.addEventListener("keydown", async e => {
+          if (e.key === "Escape") { closeDd(); editing = false; renderArea(); return; }
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            if (!dd) showDd(input.value);
+            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            hiIdx = Math.min(hiIdx + 1, opts.length - 1);
+            opts.forEach((o, i) => o.classList.toggle("highlighted", i === hiIdx));
+            if (opts[hiIdx]) opts[hiIdx].scrollIntoView({ block: "nearest" });
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            hiIdx = Math.max(hiIdx - 1, 0);
+            opts.forEach((o, i) => o.classList.toggle("highlighted", i === hiIdx));
+            if (opts[hiIdx]) opts[hiIdx].scrollIntoView({ block: "nearest" });
+            return;
+          }
+          if (e.key === "Enter" || e.key === "Tab") {
+            e.preventDefault();
+            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            let selected = null;
+            if (hiIdx >= 0 && opts[hiIdx]) {
+              selected = opts[hiIdx].textContent.trim();
+            } else if (input.value.trim()) {
+              const m = roster.filter(n => rosterMatches(n, input.value.trim()));
+              if (m.length) selected = m[0];
+            }
+            if (selected) {
+              if (!boardData["_call_"]) boardData["_call_"] = {};
+              boardData["_call_"][posIdx] = selected;
+              refreshChipCount();
+              saveCallAssignment(posIdx, selected);
+            }
+            closeDd();
+            editing = false;
+            renderArea();
+          }
+        });
+
+        inputWrap.appendChild(input);
+        row.appendChild(inputWrap);
+        setTimeout(() => input.focus(), 20);
+
+      } else {
+        const btn = el("button", {
+          class: "call-provider-btn" + (!liveProvider ? " empty" : ""),
+        }, liveProvider || "Tap to assign");
+        // Use mousedown to set editing — fires before the outsideClick check
+        btn.addEventListener("mousedown", e => {
+          e.preventDefault();   // prevent blur on any open input
+          e.stopPropagation();  // don't bubble to outsideClick handler
+          editing = true;
+          renderArea();
+        });
+        row.appendChild(btn);
+      }
+    }
+
+    renderArea();
+    return row;
+  }
+
+  // ── Build the full panel ──
   function buildPanel() {
     const p = el("div", { class: "call-panel" });
     p.appendChild(el("div", { class: "call-panel-title" }, "On Call Tonight"));
-
-    callPositions.forEach((position, idx) => {
-      const currentProvider = getCallAssignments()[idx] || null;
-      let editing = false;
-      let inputWrap = null;
-
-      const row = el("div", { class: "call-row" });
-      const label = el("div", { class: "call-position-label" }, position);
-      row.appendChild(label);
-
-      function renderProviderArea() {
-        // Remove existing provider widget
-        if (inputWrap) { inputWrap.remove(); inputWrap = null; }
-        const existingBtn = row.querySelector(".call-provider-btn");
-        if (existingBtn) existingBtn.remove();
-
-        if (editing) {
-          inputWrap = el("div", { class: "call-input-wrap" });
-          const input = el("input", {
-            class: "call-input",
-            type: "text",
-            placeholder: "Search roster…",
-            autocomplete: "off",
-          });
-          let callDropdown = null;
-          let highlightIdx = -1;
-
-          function closeCallDropdown() {
-            if (callDropdown) { callDropdown.remove(); callDropdown = null; }
-            highlightIdx = -1;
-          }
-
-          function showCallDropdown(query) {
-            closeCallDropdown();
-            const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
-            callDropdown = el("div", { class: "call-dropdown" });
-
-            if (currentProvider) {
-              const clearOpt = el("div", { class: "call-dropdown-opt clear-opt" }, "✕ Remove");
-              clearOpt.addEventListener("mousedown", async e => {
-                e.preventDefault();
-                closeCallDropdown();
-                // Optimistic update — patch local boardData before Firebase round-trip
-                if (!boardData["_call_"]) boardData["_call_"] = {};
-                delete boardData["_call_"][idx];
-                editing = false;
-                renderProviderArea();
-                refreshChipCount();
-                await saveCallAssignment(idx, null);
-              });
-              callDropdown.appendChild(clearOpt);
-            }
-
-            matches.slice(0, 12).forEach((name, mi) => {
-              const opt = el("div", { class: "call-dropdown-opt" }, name);
-              opt.addEventListener("mousedown", async e => {
-                e.preventDefault();
-                closeCallDropdown();
-                // Optimistic update — patch local boardData before Firebase round-trip
-                if (!boardData["_call_"]) boardData["_call_"] = {};
-                boardData["_call_"][idx] = name;
-                editing = false;
-                renderProviderArea();
-                refreshChipCount();
-                await saveCallAssignment(idx, name);
-              });
-              callDropdown.appendChild(opt);
-            });
-
-            if (!matches.length && !currentProvider) {
-              callDropdown.appendChild(
-                el("div", { style: { padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches in roster.")
-              );
-            }
-            inputWrap.appendChild(callDropdown);
-
-            function setHighlight(i) {
-              const opts = Array.from(callDropdown.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
-              opts.forEach((o, j) => o.classList.toggle("highlighted", j === i));
-              highlightIdx = i;
-              if (opts[i]) opts[i].scrollIntoView({ block: "nearest" });
-            }
-
-            input._setHighlight = setHighlight;
-            input._getOpts = () => Array.from(callDropdown.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
-          }
-
-          input.addEventListener("focus", () => showCallDropdown(input.value));
-          input.addEventListener("input", () => showCallDropdown(input.value));
-          input.addEventListener("blur", () => setTimeout(() => {
-            closeCallDropdown();
-            editing = false;
-            renderProviderArea();
-          }, 150));
-          input.addEventListener("keydown", async e => {
-            if (e.key === "Escape") { closeCallDropdown(); editing = false; renderProviderArea(); return; }
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              if (!callDropdown) showCallDropdown(input.value);
-              const opts = input._getOpts ? input._getOpts() : [];
-              const ni = Math.min(highlightIdx + 1, opts.length - 1);
-              if (input._setHighlight) input._setHighlight(ni);
-              return;
-            }
-            if (e.key === "ArrowUp") {
-              e.preventDefault();
-              if (input._setHighlight) input._setHighlight(Math.max(highlightIdx - 1, 0));
-              return;
-            }
-            if (e.key === "Enter" || e.key === "Tab") {
-              e.preventDefault();
-              const query = input.value.trim();
-              const opts = input._getOpts ? input._getOpts() : [];
-              let selected = null;
-              if (highlightIdx >= 0 && opts[highlightIdx]) {
-                selected = opts[highlightIdx].textContent.trim();
-              } else if (query) {
-                const m = roster.filter(n => rosterMatches(n, query));
-                if (m.length) selected = m[0];
-              }
-              if (selected) {
-                // Optimistic update
-                if (!boardData["_call_"]) boardData["_call_"] = {};
-                boardData["_call_"][idx] = selected;
-                refreshChipCount();
-                saveCallAssignment(idx, selected); // fire-and-forget, UI already updated
-              }
-              closeCallDropdown();
-              editing = false;
-              renderProviderArea();
-            }
-          });
-
-          inputWrap.appendChild(input);
-          row.appendChild(inputWrap);
-          setTimeout(() => input.focus(), 20);
-        } else {
-          const liveProvider = getCallAssignments()[idx] || null;
-          const btn = el("button", {
-            class: "call-provider-btn" + (!liveProvider ? " empty" : ""),
-            onClick: () => { editing = true; renderProviderArea(); }
-          }, liveProvider || "Tap to assign");
-          row.appendChild(btn);
-        }
-      }
-
-      renderProviderArea();
-      p.appendChild(row);
-    });
-
+    callPositions.forEach((position, i) => p.appendChild(buildRow(position, i)));
+    // Swallow mousedown on panel so outsideClick doesn't fire
+    p.addEventListener("mousedown", () => { panelMousedown = true; setTimeout(() => { panelMousedown = false; }, 0); });
     return p;
   }
 
-  function refreshChipCount() {
-    const freshAssign = getCallAssignments();
-    const n = Object.values(freshAssign).filter(Boolean).length;
-    chip.querySelector(".chip-count").textContent = String(n);
-    chip.classList.toggle("has-call", n > 0);
-  }
-
+  // ── Chip click: toggle panel ──
   chip.addEventListener("click", e => {
     e.stopPropagation();
     if (panelOpen) { closePanel(); return; }
     panelOpen = true;
     panel = buildPanel();
     document.body.appendChild(panel);
-    // Position panel below the chip using fixed coords
     requestAnimationFrame(() => {
       const rect = chip.getBoundingClientRect();
       panel.style.top  = (rect.bottom + 6) + "px";
-      // Align left edge with chip, but keep within viewport
       const leftEdge = Math.min(rect.left, window.innerWidth - 280);
       panel.style.left = Math.max(4, leftEdge) + "px";
     });
-    // Close when clicking outside
+    // Close on outside click — but not if mousedown originated inside panel
     setTimeout(() => {
       document.addEventListener("click", function outsideClick(ev) {
-        if (!panel || !panel.contains(ev.target)) {
-          closePanel();
-          document.removeEventListener("click", outsideClick);
-        }
+        if (panelMousedown) return; // click originated in panel, ignore
+        if (panel && panel.contains(ev.target)) return; // inside panel
+        if (wrap.contains(ev.target)) return; // inside chip wrap
+        closePanel();
+        document.removeEventListener("click", outsideClick);
       });
     }, 0);
   });
