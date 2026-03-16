@@ -15,6 +15,7 @@
     body.display-mode .logo-sub  { color: #7c6c62; }
     body.display-mode .sync-pip  { box-shadow: 0 0 8px #4ade8099; }
     body.display-mode .chip { border: 1.5px solid #3d3530; }
+    body.display-mode .chip span:last-child { font-weight: 800; }
     body.display-mode .summary-bar { max-width: none; background: #1e1a17; padding: 8px 14px; border-bottom: 1px solid #3d3530; }
     button, select, input { font-family: inherit; }
     button { cursor: pointer; }
@@ -1400,13 +1401,12 @@ function layoutDisplay(forceRemeasure = false) {
   }
 
   // ── Full measure pass ──
-  const header     = document.querySelector(".header");
   const summary    = document.querySelector(".summary-bar");
   const outer      = document.querySelector(".display-outer");
   const noBreakRow = document.querySelector(".display-nobreak-row");
   const divider    = document.querySelector(".display-divider");
 
-  const headerH  = header  ? header.offsetHeight  : 0;
+  const headerH  = 0;
   const summaryH = summary ? summary.offsetHeight : 0;
   const noBreakH = noBreakRow
     ? noBreakRow.offsetHeight + (divider ? divider.offsetHeight : 0) + 12
@@ -1790,21 +1790,7 @@ function renderDisplay() {
   const app = document.getElementById("app");
   app.innerHTML = "";
   app.appendChild(el("div", {},
-    el("header", { class: "header" },
-      el("div", { class: "header-inner" },
-        el("div", { class: "logo-wrap" },
-          el("div", { class: "logo-icon" }, "💨"),
-          el("div", {},
-            el("div", { class: "logo-text" }, "Gas Breaker — " + session.deptName),
-            el("div", { class: "logo-sub"  }, "Coordinator Display · " + new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
-          ),
-        ),
-        el("div", { class: "header-right" },
-          el("div", { class: "sync-pip" }),
 
-        ),
-      )
-    ),
     el("div", { class: "summary-bar", style: { maxWidth: "none" } },
       ...[
         [dOccupied,  "Rooms Running",   "#fef3c7", "#b45309", "#f59e0b", null],
