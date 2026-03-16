@@ -98,31 +98,39 @@
 .call-chip.has-call { background: #dcfce7; color: #15803d; }
 .call-panel {
   position: fixed;
-  min-width: 260px; max-width: 340px;
+  min-width: 480px; max-width: 600px;
   background: #fff; border: 1.5px solid #e8e0d6; border-radius: 12px;
   box-shadow: 0 6px 24px rgba(0,0,0,0.13); z-index: 1000;
-  padding: 10px 0 6px; overflow: hidden;
+  padding: 10px 0 6px; overflow: visible;
 }
 .call-panel-title { font-size: 11px; font-weight: 800; color: #a39688; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 14px 6px; border-bottom: 1px solid #f1ede8; margin-bottom: 4px; }
-.call-row { display: flex; align-items: center; gap: 8px; padding: 5px 14px; min-height: 36px; }
+.call-col-headers { display: flex; gap: 8px; padding: 0 14px 4px; border-bottom: 1px solid #f1ede8; margin-bottom: 2px; }
+.call-col-header { flex: 1; font-size: 10px; font-weight: 800; color: #b0a49a; text-transform: uppercase; letter-spacing: 0.05em; text-align: center; }
+.call-col-header-label { min-width: 90px; flex-shrink: 0; }
+.call-row { display: flex; align-items: center; gap: 8px; padding: 4px 14px; min-height: 34px; }
 .call-position-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 90px; flex-shrink: 0; }
-.call-provider-btn { flex: 1; text-align: left; font-size: 13px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.call-col { flex: 1; position: relative; display: flex; align-items: center; }
+.call-provider-btn { flex: 1; text-align: left; font-size: 13px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .call-provider-btn.empty { color: #b0a49a; font-weight: 600; font-style: italic; }
 .call-provider-btn:hover { background: #f1ede8; }
+.call-provider-btn.postcall-auto { border-color: #a78bfa; color: #6d28d9; background: #f5f3ff; }
 .call-input-wrap { flex: 1; position: relative; }
 .call-input { width: 100%; font-size: 13px; font-weight: 700; color: #2d2420; background: #fff; border: 1.5px solid #b45309; border-radius: 8px; padding: 4px 10px; outline: none; font-family: inherit; }
-.call-dropdown { position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 300; max-height: 160px; overflow-y: auto; }
+.call-dropdown { position: fixed; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 2000; max-height: 160px; overflow-y: auto; min-width: 160px; }
 .call-dropdown-opt { padding: 7px 12px; font-size: 13px; cursor: pointer; }
 .call-dropdown-opt:hover, .call-dropdown-opt.highlighted { background: #f8f4ef; }
 .call-dropdown-opt.clear-opt { color: #dc2626; border-bottom: 1px solid #f1ede8; }
 /* Display-mode call panel — dark theme */
 body.display-mode .call-panel { background: #1e1a17; border-color: #4a4240; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
 body.display-mode .call-panel-title { color: #6b5e57; border-color: #3d3530; }
+body.display-mode .call-col-headers { border-color: #3d3530; }
+body.display-mode .call-col-header { color: #6b5e57; }
 body.display-mode .call-row { border-bottom: none; }
 body.display-mode .call-position-label { color: #9a8880; }
 body.display-mode .call-provider-btn { background: #2d2825; border-color: #4a4240; color: #f5f0eb; }
 body.display-mode .call-provider-btn.empty { color: #4a4240; }
 body.display-mode .call-provider-btn:hover { background: #3d3530; }
+body.display-mode .call-provider-btn.postcall-auto { background: #2e1065; border-color: #7c3aed; color: #c4b5fd; }
 body.display-mode .call-input { background: #2d2825; border-color: #fb923c; color: #f5f0eb; }
 body.display-mode .call-dropdown { background: #1e1a17; border-color: #4a4240; }
 body.display-mode .call-dropdown-opt:hover, body.display-mode .call-dropdown-opt.highlighted { background: #2d2825; }
@@ -474,6 +482,7 @@ function subscribeToBoard(deptCode) {
     checkAutoUnhold();
     if (!boardInitialized) {
       boardInitialized = true;
+      maybeAutoPopulatePostCall(); // async — runs in background after 6am
       if (isDisplayMode) renderDisplay();
       else renderBoard();
     } else if (document.querySelector(".main"))              renderBoard();
@@ -499,7 +508,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_") || rid === "_call_") return;
+    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_") return;
     const duration = room.holdDuration || HOLD_CLEAR_MS;
     if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
@@ -542,8 +551,43 @@ async function saveCallAssignment(positionIdx, providerName) {
 }
 
 function getCallAssignments() {
-  // Returns { [positionIdx]: providerName }
   return boardData["_call_"] || {};
+}
+
+function getPostCallAssignments() {
+  return boardData["_postcall_"] || {};
+}
+
+async function savePostCallAssignment(positionIdx, providerName) {
+  const r = ref(db, `boards/${session.deptCode}/${tsDay()}/_postcall_/${positionIdx}`);
+  if (providerName) {
+    await set(r, providerName);
+  } else {
+    await remove(r);
+  }
+}
+
+async function maybeAutoPopulatePostCall() {
+  // After 6am: if _postcall_ is empty/missing and yesterday's _call_ has data,
+  // copy it to today's _postcall_ automatically.
+  const now = new Date();
+  if (now.getHours() < 6) return;
+  if (Object.keys(getPostCallAssignments()).length) return;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yKey = yesterday.getFullYear() + "-" + (yesterday.getMonth()+1) + "-" + yesterday.getDate();
+  try {
+    const snap = await get(ref(db, "boards/" + session.deptCode + "/" + yKey + "/_call_"));
+    const yCall = snap.val();
+    if (!yCall || !Object.keys(yCall).length) return;
+    const writes = Object.entries(yCall).map(([i, name]) =>
+      set(ref(db, "boards/" + session.deptCode + "/" + tsDay() + "/_postcall_/" + i), name)
+    );
+    await Promise.all(writes);
+  } catch (e) {
+    console.warn("Post-call auto-populate failed:", e);
+  }
 }
 
 async function saveRosterEntry(name) {
@@ -1339,8 +1383,6 @@ function buildCallChip() {
 
   let panelOpen = false;
   let panel = null;
-  // Track whether a mousedown on the panel is in progress
-  // so the outsideClick handler doesn't fire on the same interaction
   let panelMousedown = false;
 
   const chip = el("div", { class: "chip call-chip" },
@@ -1348,7 +1390,6 @@ function buildCallChip() {
     el("span", { class: "chip-count" }, "0"),
     el("span", {}, "On Call"),
   );
-
   const wrap = el("div", { class: "call-panel-wrap" }, chip);
 
   function refreshChipCount() {
@@ -1363,110 +1404,129 @@ function buildCallChip() {
     panelOpen = false;
   }
 
-  // ── Build a single position row ──
-  function buildRow(position, posIdx) {
-    const row = el("div", { class: "call-row" });
-    row.appendChild(el("div", { class: "call-position-label" }, position));
-
+  // ── Build a provider picker cell (used for both call and post-call columns) ──
+  function buildPickerCell(posIdx, getAssignments, saveAssignment, boardKey, isPostCall) {
+    const cell = el("div", { class: "call-col" });
     let editing = false;
-    let inputWrap = null;
+    let openDd = null;
 
-    function renderArea() {
-      // Clean up previous widgets
-      if (inputWrap) { inputWrap.remove(); inputWrap = null; }
-      const old = row.querySelector(".call-provider-btn, .call-input-wrap");
-      if (old) old.remove();
+    function closeDd() { if (openDd) { openDd.remove(); openDd = null; } }
 
-      // Always read live assignments — never use a stale closure
-      const liveProvider = getCallAssignments()[posIdx] || null;
+    function renderCell() {
+      // Clean up
+      closeDd();
+      cell.innerHTML = "";
+      editing = false;
 
-      if (editing) {
-        inputWrap = el("div", { class: "call-input-wrap" });
+      const liveProvider = getAssignments()[posIdx] || null;
+      const wasAutoPop   = isPostCall && liveProvider && !boardData["_postcall_"]?.["_manual_" + posIdx];
+
+      if (editing) return; // safety — renderCell sets editing=false above
+
+      const btn = el("button", {
+        class: "call-provider-btn" + (!liveProvider ? " empty" : "") + (isPostCall && liveProvider ? " postcall-auto" : ""),
+      }, liveProvider || (isPostCall ? "—" : "Tap to assign"));
+
+      btn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        e.stopPropagation();
+        editing = true;
+        cell.innerHTML = "";
+
+        const inputWrap = el("div", { class: "call-input-wrap" });
         const input = el("input", {
           class: "call-input",
           type: "text",
-          placeholder: "Search roster…",
+          placeholder: "Search…",
           autocomplete: "off",
         });
 
-        let dd = null;
         let hiIdx = -1;
-
-        function closeDd() { if (dd) { dd.remove(); dd = null; } hiIdx = -1; }
 
         function showDd(query) {
           closeDd();
           const matches = query ? roster.filter(n => rosterMatches(n, query)) : roster;
-          dd = el("div", { class: "call-dropdown" });
+          const dd = el("div", { class: "call-dropdown" });
 
-          // Remove option — uses liveProvider captured at renderArea() call time
           if (liveProvider) {
             const clearOpt = el("div", { class: "call-dropdown-opt clear-opt" }, "✕ Remove");
-            clearOpt.addEventListener("mousedown", async e => {
-              e.preventDefault();
+            clearOpt.addEventListener("mousedown", async ev => {
+              ev.preventDefault();
               closeDd();
-              if (!boardData["_call_"]) boardData["_call_"] = {};
-              delete boardData["_call_"][posIdx];
-              editing = false;
-              renderArea();
-              refreshChipCount();
-              await saveCallAssignment(posIdx, null);
+              if (!boardData[boardKey]) boardData[boardKey] = {};
+              delete boardData[boardKey][posIdx];
+              if (isPostCall) refreshChipCount(); else refreshChipCount();
+              renderCell();
+              if (!isPostCall) refreshChipCount();
+              await saveAssignment(posIdx, null);
             });
             dd.appendChild(clearOpt);
           }
 
           matches.slice(0, 12).forEach(name => {
             const opt = el("div", { class: "call-dropdown-opt" }, name);
-            opt.addEventListener("mousedown", async e => {
-              e.preventDefault();
+            opt.addEventListener("mousedown", async ev => {
+              ev.preventDefault();
               closeDd();
-              if (!boardData["_call_"]) boardData["_call_"] = {};
-              boardData["_call_"][posIdx] = name;
-              editing = false;
-              renderArea();
-              refreshChipCount();
-              await saveCallAssignment(posIdx, name);
+              if (!boardData[boardKey]) boardData[boardKey] = {};
+              boardData[boardKey][posIdx] = name;
+              if (!isPostCall) refreshChipCount();
+              renderCell();
+              await saveAssignment(posIdx, name);
             });
             dd.appendChild(opt);
           });
 
           if (!matches.length && !liveProvider) {
-            dd.appendChild(el("div", { style: { padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches in roster."));
+            dd.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches."));
           }
 
-          inputWrap.appendChild(dd);
+          // Position dropdown with fixed coords to escape panel overflow
+          document.body.appendChild(dd);
+          openDd = dd;
+          requestAnimationFrame(() => {
+            const r = input.getBoundingClientRect();
+            dd.style.top   = (r.bottom + 2) + "px";
+            dd.style.left  = r.left + "px";
+            dd.style.width = r.width + "px";
+          });
+
+          function setHi(i) {
+            const opts = Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
+            opts.forEach((o, j) => o.classList.toggle("highlighted", j === i));
+            hiIdx = i;
+            if (opts[i]) opts[i].scrollIntoView({ block:"nearest" });
+          }
+          input._setHi  = setHi;
+          input._getOpts = () => Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)"));
         }
 
         input.addEventListener("focus", () => showDd(input.value));
         input.addEventListener("input", () => showDd(input.value));
         input.addEventListener("blur", () => setTimeout(() => {
           closeDd();
-          editing = false;
-          renderArea();
+          renderCell();
         }, 150));
-
         input.addEventListener("keydown", async e => {
-          if (e.key === "Escape") { closeDd(); editing = false; renderArea(); return; }
+          if (e.key === "Escape") { closeDd(); renderCell(); return; }
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            if (!dd) showDd(input.value);
-            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            if (!openDd) showDd(input.value);
+            const opts = input._getOpts ? input._getOpts() : [];
             hiIdx = Math.min(hiIdx + 1, opts.length - 1);
-            opts.forEach((o, i) => o.classList.toggle("highlighted", i === hiIdx));
-            if (opts[hiIdx]) opts[hiIdx].scrollIntoView({ block: "nearest" });
+            if (input._setHi) input._setHi(hiIdx);
             return;
           }
           if (e.key === "ArrowUp") {
             e.preventDefault();
-            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            const opts = input._getOpts ? input._getOpts() : [];
             hiIdx = Math.max(hiIdx - 1, 0);
-            opts.forEach((o, i) => o.classList.toggle("highlighted", i === hiIdx));
-            if (opts[hiIdx]) opts[hiIdx].scrollIntoView({ block: "nearest" });
+            if (input._setHi) input._setHi(hiIdx);
             return;
           }
           if (e.key === "Enter" || e.key === "Tab") {
             e.preventDefault();
-            const opts = dd ? Array.from(dd.querySelectorAll(".call-dropdown-opt:not(.clear-opt)")) : [];
+            const opts = input._getOpts ? input._getOpts() : [];
             let selected = null;
             if (hiIdx >= 0 && opts[hiIdx]) {
               selected = opts[hiIdx].textContent.trim();
@@ -1475,51 +1535,51 @@ function buildCallChip() {
               if (m.length) selected = m[0];
             }
             if (selected) {
-              if (!boardData["_call_"]) boardData["_call_"] = {};
-              boardData["_call_"][posIdx] = selected;
-              refreshChipCount();
-              saveCallAssignment(posIdx, selected);
+              if (!boardData[boardKey]) boardData[boardKey] = {};
+              boardData[boardKey][posIdx] = selected;
+              if (!isPostCall) refreshChipCount();
+              saveAssignment(posIdx, selected);
             }
             closeDd();
-            editing = false;
-            renderArea();
+            renderCell();
           }
         });
 
         inputWrap.appendChild(input);
-        row.appendChild(inputWrap);
+        cell.appendChild(inputWrap);
         setTimeout(() => input.focus(), 20);
+      });
 
-      } else {
-        const btn = el("button", {
-          class: "call-provider-btn" + (!liveProvider ? " empty" : ""),
-        }, liveProvider || "Tap to assign");
-        // Use mousedown to set editing — fires before the outsideClick check
-        btn.addEventListener("mousedown", e => {
-          e.preventDefault();   // prevent blur on any open input
-          e.stopPropagation();  // don't bubble to outsideClick handler
-          editing = true;
-          renderArea();
-        });
-        row.appendChild(btn);
-      }
+      cell.appendChild(btn);
     }
 
-    renderArea();
+    renderCell();
+    return cell;
+  }
+
+  // ── Build a single position row ──
+  function buildRow(position, posIdx) {
+    const row = el("div", { class: "call-row" });
+    row.appendChild(el("div", { class: "call-position-label" }, position));
+    row.appendChild(buildPickerCell(posIdx, getCallAssignments,     saveCallAssignment,     "_call_",     false));
+    row.appendChild(buildPickerCell(posIdx, getPostCallAssignments, savePostCallAssignment, "_postcall_", true));
     return row;
   }
 
-  // ── Build the full panel ──
   function buildPanel() {
     const p = el("div", { class: "call-panel" });
-    p.appendChild(el("div", { class: "call-panel-title" }, "On Call Tonight"));
+    p.appendChild(el("div", { class: "call-panel-title" }, "On Call Schedule"));
+    // Column headers
+    p.appendChild(el("div", { class: "call-col-headers" },
+      el("div", { class: "call-col-header-label" }),
+      el("div", { class: "call-col-header" }, "On Call Tonight"),
+      el("div", { class: "call-col-header" }, "Post Call Today"),
+    ));
     callPositions.forEach((position, i) => p.appendChild(buildRow(position, i)));
-    // Swallow mousedown on panel so outsideClick doesn't fire
     p.addEventListener("mousedown", () => { panelMousedown = true; setTimeout(() => { panelMousedown = false; }, 0); });
     return p;
   }
 
-  // ── Chip click: toggle panel ──
   chip.addEventListener("click", e => {
     e.stopPropagation();
     if (panelOpen) { closePanel(); return; }
@@ -1529,15 +1589,14 @@ function buildCallChip() {
     requestAnimationFrame(() => {
       const rect = chip.getBoundingClientRect();
       panel.style.top  = (rect.bottom + 6) + "px";
-      const leftEdge = Math.min(rect.left, window.innerWidth - 280);
+      const leftEdge = Math.min(rect.left, window.innerWidth - 500);
       panel.style.left = Math.max(4, leftEdge) + "px";
     });
-    // Close on outside click — but not if mousedown originated inside panel
     setTimeout(() => {
       document.addEventListener("click", function outsideClick(ev) {
-        if (panelMousedown) return; // click originated in panel, ignore
-        if (panel && panel.contains(ev.target)) return; // inside panel
-        if (wrap.contains(ev.target)) return; // inside chip wrap
+        if (panelMousedown) return;
+        if (panel && panel.contains(ev.target)) return;
+        if (wrap.contains(ev.target)) return;
         closePanel();
         document.removeEventListener("click", outsideClick);
       });
