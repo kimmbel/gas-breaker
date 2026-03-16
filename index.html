@@ -554,6 +554,22 @@ function getCallAssignments() {
   return boardData["_call_"] || {};
 }
 
+function getProviderCallStatus(name) {
+  if (!name) return null;
+  const calls     = getCallAssignments();
+  const postCalls = getPostCallAssignments();
+  if (Object.values(calls).some(n => n === name))     return "call";
+  if (Object.values(postCalls).some(n => n === name)) return "postcall";
+  return null;
+}
+
+function callStatusPrefix(name) {
+  const s = getProviderCallStatus(name);
+  if (s === "call")     return "📞 ";
+  if (s === "postcall") return "🌙 ";
+  return "";
+}
+
 function getPostCallAssignments() {
   return boardData["_postcall_"] || {};
 }
@@ -1293,7 +1309,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         renderProviderArea();
       }, onTab, isDisplay));
     } else {
-      const nameLabel = provider || "Tap to assign provider";
+      const nameLabel = provider
+        ? callStatusPrefix(provider) + provider
+        : "Tap to assign provider";
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
         onClick: openEdit
@@ -1933,7 +1951,7 @@ function patchDisplay() {
     // Detect structural change: provider added/removed or swapped
     const domNameBtn = card.querySelector(".provider-name-btn");
     const domProvider = domNameBtn && !domNameBtn.classList.contains("empty")
-      ? domNameBtn.textContent.trim() : null;
+      ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null;
     if (domProvider !== provider) {
       // Provider changed — rebuild just this card in-place
       const tabIdx = card.getAttribute("data-tab-idx");
@@ -1995,11 +2013,14 @@ function patchDisplay() {
       reqBtn.textContent = isReq ? "🔔 Sent" : "Request";
     }
 
-    // ── Update provider name color ──
+    // ── Update provider name color and call status emoji ──
     const nameBtn = card.querySelector(".provider-name-btn");
-    if (nameBtn) {
+    if (nameBtn && provider) {
       if (isReq) nameBtn.classList.add("requesting-name");
       else nameBtn.classList.remove("requesting-name");
+      // Sync text — prefix may have changed if call assignments updated
+      const expectedText = callStatusPrefix(provider) + provider;
+      if (nameBtn.textContent !== expectedText) nameBtn.textContent = expectedText;
     }
 
     // ── Update badges (note + requesting) in room label row ──
