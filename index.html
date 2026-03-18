@@ -94,7 +94,8 @@
 
 /* ── On-Call panel ── */
 .call-panel-wrap { position: relative; }
-.eod-chip { background: #fef3c7; color: #92400e; cursor: pointer; user-select: none; margin-left: auto; }
+.eod-wrap { margin-left: auto; position: relative; }
+.eod-chip { background: #fef3c7; color: #92400e; cursor: pointer; user-select: none; }
 .eod-chip.has-concern { background: #fde68a; color: #78350f; }
 .eod-panel {
   position: fixed;
@@ -600,8 +601,8 @@ async function saveEodTime(rid, timeStr) {
 }
 
 async function saveEodConcernTime(timeStr) {
+  eodConcernTime = timeStr || "";  // update locally first so UI reflects immediately
   await set(ref(db, "config/" + session.deptCode + "/eodConcernTime"), timeStr || "");
-  eodConcernTime = timeStr || "";
 }
 
 // Parse a time string like "3:45", "345", "3:45pm", "1545", "15:45" → "HH:MM" 24h or ""
@@ -1523,7 +1524,7 @@ function buildEodChip() {
     el("span", {}, "End Times"),
   );
   chip.classList.toggle("has-concern", !!eodConcernTime);
-  const wrap = el("div", { class: "call-panel-wrap" }, chip);
+  const wrap = el("div", { class: "eod-wrap" }, chip);
 
   function closePanel() {
     if (panel) { panel.remove(); panel = null; }
@@ -1545,11 +1546,12 @@ function buildEodChip() {
 
     async function saveConcern() {
       const parsed = parseTime(concernInput.value);
-      concernInput.value = parsed ? formatTime(parsed) : concernInput.value;
-      await saveEodConcernTime(parsed);
+      if (!parsed && concernInput.value.trim()) return; // invalid input — don't clear
+      concernInput.value = parsed ? formatTime(parsed) : "";
+      eodConcernTime = parsed || "";  // update immediately so patchDisplay uses new value
       chip.classList.toggle("has-concern", !!parsed);
-      // Refresh all room label badges
       if (document.querySelector(".display-outer")) patchDisplay();
+      await saveEodConcernTime(parsed); // persist to Firebase (already updated local var)
     }
     concernInput.addEventListener("blur", saveConcern);
     concernInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); concernInput.blur(); } });
