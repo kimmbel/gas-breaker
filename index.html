@@ -1146,7 +1146,7 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       if (isTab && !selected && card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
         card.classList.add("empty"); card.classList.remove("editing");
       }
-      if (isTab && onTab) setTimeout(() => onTab(), 80);
+      if (isTab && onTab) setTimeout(() => onTab(e.shiftKey), 80);
     }
   });
 
@@ -1174,11 +1174,10 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
     editingProvider = true; renderProviderArea();
   }
 
-  function onTab() {
+  function onTab(reverse) {
     if (tabIdx === null || tabIdx === undefined) return;
-    const nextIdx = tabIdx + 1;
-    const nextBtn = document.querySelector(`[data-tab-idx="${nextIdx}"] .provider-name-btn`);
-    if (nextBtn) setTimeout(() => nextBtn.click(), 60);
+    const targetBtn = document.querySelector(`[data-tab-idx="${reverse ? tabIdx - 1 : tabIdx + 1}"] .provider-name-btn`);
+    if (targetBtn) setTimeout(() => targetBtn.click(), 60);
   }
 
   function renderProviderArea() {
@@ -1446,10 +1445,10 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
     editingProvider = true; renderProviderArea();
   }
 
-  function onTab() {
+  function onTab(reverse) {
     if (tabIdx === null) return;
-    const nextBtn = document.querySelector(`[data-tab-idx="${tabIdx + 1}"] .provider-name-btn`);
-    if (nextBtn) setTimeout(() => nextBtn.click(), 60);
+    const targetBtn = document.querySelector(`[data-tab-idx="${reverse ? tabIdx - 1 : tabIdx + 1}"] .provider-name-btn`);
+    if (targetBtn) setTimeout(() => targetBtn.click(), 60);
   }
 
   function renderProviderArea() {
