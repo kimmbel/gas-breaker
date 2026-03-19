@@ -2661,7 +2661,7 @@ async function loadConfig(code) {
       roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
       if (!done) { done = true; unsub(); resolve(); }
     });
-    setTimeout(() => { if (!done) { done = true; resolve(); } }, 3000);
+    setTimeout(() => { if (!done) { done = true; unsub(); resolve(); } }, 5000);
   });
 }
 
@@ -3087,6 +3087,12 @@ function renderAdminPage(deptCode) {
       return;
     }
 
+    // Guard: if already subscribed with this dept code, don't re-init.
+    // Firebase fires onAuthStateChanged on token refresh (~hourly) which
+    // would otherwise re-run loadConfig and reset all state.
+    if (session && session.deptCode === code && unsubBoard) {
+      return; // already running — token refresh, ignore
+    }
     session = { deptCode: code, deptName };
     await loadConfig(code);
     if (isDisplay) isDisplayMode = true;
