@@ -1861,10 +1861,12 @@ function buildCallChip() {
             if (e.key === "Tab") {
               const panel = cell.closest(".call-panel");
               if (panel) {
-                const btns = Array.from(panel.querySelectorAll(".call-provider-btn"));
+                const tonightBtns = Array.from(panel.querySelectorAll(".call-col[data-label='On Call Tonight'] .call-provider-btn"));
+                const postcallBtns = Array.from(panel.querySelectorAll(".call-col[data-label='Post Call Today'] .call-provider-btn"));
+                const ordered = [...tonightBtns, ...postcallBtns];
                 const thisBtn = cell.querySelector(".call-provider-btn");
-                const idx = btns.indexOf(thisBtn);
-                const nextBtn = idx >= 0 ? btns[idx + 1] : null;
+                const idx = ordered.indexOf(thisBtn);
+                const nextBtn = idx >= 0 ? ordered[idx + 1] : null;
                 if (nextBtn) setTimeout(() => nextBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })), 30);
               }
             }
