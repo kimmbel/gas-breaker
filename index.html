@@ -1607,8 +1607,16 @@ function buildEodChip() {
         concernSaving = false;
       }
     }
+    concernInput.addEventListener("focus", () => concernInput.select());
     concernInput.addEventListener("blur", saveConcern);
-    concernInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); saveConcern(); } });
+    concernInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); saveConcern(); }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const first = p.querySelector(".eod-room-input");
+        if (first) { first.focus(); first.select(); }
+      }
+    });
 
     p.appendChild(el("div", { class: "eod-concern-row" },
       el("div", { class: "eod-concern-label" }, "⚠️ Concern after:"),
@@ -1645,6 +1653,7 @@ function buildEodChip() {
         await saveEodTime(rid, parsed);
       }
 
+      input.addEventListener("focus", () => input.select());
       input.addEventListener("blur", saveRoom);
       input.addEventListener("keydown", e => {
         if (e.key === "Enter") { e.preventDefault(); input.blur(); }
@@ -1653,7 +1662,7 @@ function buildEodChip() {
           // Move to next room input
           const inputs = Array.from(p.querySelectorAll(".eod-room-input"));
           const next = inputs[inputs.indexOf(input) + 1];
-          if (next) next.focus(); else concernInput.focus();
+          if (next) { next.focus(); next.select(); } else { concernInput.focus(); concernInput.select(); }
         }
       });
 
