@@ -1737,7 +1737,6 @@ function buildCallChip() {
       editing = false;
 
       const liveProvider = getAssignments()[posIdx] || null;
-      const wasAutoPop   = isPostCall && liveProvider && !boardData["_postcall_"]?.["_manual_" + posIdx];
 
       if (editing) return; // safety — renderCell sets editing=false above
 
@@ -1773,7 +1772,6 @@ function buildCallChip() {
               closeDd();
               if (!boardData[boardKey]) boardData[boardKey] = {};
               delete boardData[boardKey][posIdx];
-              if (isPostCall) refreshChipCount(); else refreshChipCount();
               renderCell();
               if (!isPostCall) refreshChipCount();
               await saveAssignment(posIdx, null);
