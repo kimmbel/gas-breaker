@@ -506,9 +506,16 @@ function subscribeToDepartments(cb) {
   });
 }
 
+function scheduleMidnightReload() {
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+  setTimeout(() => location.reload(), midnight - now);
+}
+
 function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
+  scheduleMidnightReload();
 
   let boardInitialized = false;
 
