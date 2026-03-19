@@ -170,6 +170,16 @@
     body.display-mode .call-dropdown-opt.clear-opt { color: #f87171; border-color: #3d3530; }
     body.display-mode .call-chip { background: #052e16; color: #4ade80; }
     body.display-mode .call-chip.has-call { background: #052e16; color: #4ade80; }
+
+    /* ── Call panel: mobile responsive ── */
+    @media (max-width: 520px) {
+      .call-panel { min-width: 0; width: calc(100vw - 16px); }
+      .call-col-headers { display: none; }
+      .call-row { flex-direction: column; align-items: stretch; gap: 3px; padding: 6px 14px; }
+      .call-position-label { min-width: unset; border-bottom: 1px solid #f1ede8; padding-bottom: 4px; margin-bottom: 2px; }
+      .call-col::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 800; color: #b0a49a; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+    }
+
     .roster-option { padding: 9px 12px; font-size: 13px; font-weight: 700; color: #2d2420; cursor: pointer; border: none; background: none; width: 100%; text-align: left; border-bottom: 1px solid #f1ede8; }
     .roster-option:last-child { border-bottom: none; }
     .roster-option:hover { background: #f8f4ef; }
@@ -1714,7 +1724,7 @@ function buildCallChip() {
 
   // ── Build a provider picker cell (used for both call and post-call columns) ──
   function buildPickerCell(posIdx, getAssignments, saveAssignment, boardKey, isPostCall) {
-    const cell = el("div", { class: "call-col" });
+    const cell = el("div", { class: "call-col", "data-label": isPostCall ? "Post Call Today" : "On Call Tonight" });
     let editing = false;
     let openDd = null;
 
@@ -1850,6 +1860,16 @@ function buildCallChip() {
             }
             closeDd();
             renderCell();
+            if (e.key === "Tab") {
+              const panel = cell.closest(".call-panel");
+              if (panel) {
+                const btns = Array.from(panel.querySelectorAll(".call-provider-btn"));
+                const thisBtn = cell.querySelector(".call-provider-btn");
+                const idx = btns.indexOf(thisBtn);
+                const nextBtn = idx >= 0 ? btns[idx + 1] : null;
+                if (nextBtn) setTimeout(() => nextBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })), 30);
+              }
+            }
           }
         });
 
@@ -1896,9 +1916,14 @@ function buildCallChip() {
     document.body.appendChild(panel);
     requestAnimationFrame(() => {
       const rect = chip.getBoundingClientRect();
-      panel.style.top  = (rect.bottom + 6) + "px";
-      const leftEdge = Math.min(rect.left, window.innerWidth - 500);
-      panel.style.left = Math.max(4, leftEdge) + "px";
+      panel.style.top = (rect.bottom + 6) + "px";
+      if (window.innerWidth <= 520) {
+        panel.style.left  = "8px";
+        panel.style.width = (window.innerWidth - 16) + "px";
+      } else {
+        const leftEdge = Math.min(rect.left, window.innerWidth - 500);
+        panel.style.left = Math.max(4, leftEdge) + "px";
+      }
     });
     setTimeout(() => {
       document.addEventListener("click", function outsideClick(ev) {
