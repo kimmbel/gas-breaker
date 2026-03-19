@@ -529,6 +529,7 @@ function subscribeToBoard(deptCode) {
     noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
     eodConcernTime = cfg.eodConcernTime || "";
+    console.log('[config listener] eodConcernTime set to:', eodConcernTime, 'from cfg:', cfg.eodConcernTime);
     roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
@@ -614,7 +615,8 @@ async function saveEodTime(rid, timeStr) {
 }
 
 async function saveEodConcernTime(timeStr) {
-  eodConcernTime = timeStr || "";  // update locally first so UI reflects immediately
+  eodConcernTime = timeStr || "";
+  console.log('[saveEodConcernTime] setting to:', eodConcernTime);  // update locally first so UI reflects immediately
   await set(ref(db, "config/" + session.deptCode + "/eodConcernTime"), timeStr || "");
 }
 
@@ -1576,6 +1578,7 @@ function buildEodChip() {
         }
         concernInput.value = parsed ? formatTime(parsed) : "";
         eodConcernTime = parsed;
+        console.log('[saveConcern] eodConcernTime set to:', parsed);
         chip.classList.toggle("has-concern", !!parsed);
         // Update card badges immediately using current eodConcernTime
         document.querySelectorAll(".eod-time-badge").forEach(badge => {
@@ -2358,6 +2361,7 @@ function patchDisplay() {
         // Update eod time badge
         const existingEodBadge = labelRow.querySelector(".eod-time-badge");
         if (existingEodBadge) existingEodBadge.remove();
+        console.log('[patchDisplay] hasEod:', hasEod, 'eodConcernTime:', eodConcernTime, 'id:', id);
         if (hasEod) {
           const cls = !eodConcernTime ? "no-concern" : (timeAfter(eodTime, eodConcernTime) ? "after" : "before");
           const eb = el("span", { class: "eod-time-badge " + cls }, "(" + formatTime(eodTime) + ")");
