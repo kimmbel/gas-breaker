@@ -2822,13 +2822,49 @@ function renderAdminPage(deptCode) {
             }}, "Remove"),
           );
         }
-        return el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-          el("span", {}, loc),
-          el("button", { class: "btn-danger", onClick: async () => {
-            locs = locs.filter(l => l !== loc);
-            await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
-          }}, "Remove"),
-        );
+        // ── Editable location row ──
+        const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
+        const nameSpan = el("span", { style: { flex:"1" } }, loc);
+        let editing = false;
+
+        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
+          locs = locs.filter(l => l !== loc);
+          await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
+        }}, "Remove");
+
+        editBtn.addEventListener("click", () => {
+          if (editing) return;
+          editing = true;
+          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+          input.value = loc;
+          nameSpan.replaceWith(input);
+          editBtn.textContent = "Cancel";
+          input.focus(); input.select();
+
+          async function saveEdit() {
+            const val = input.value.trim();
+            if (val && val !== loc && !locs.includes(val)) {
+              const idx = locs.indexOf(loc);
+              if (idx !== -1) { locs[idx] = val; await saveLocations(locs); rebuildFn(locs); showToast(`Renamed to ${val}`); return; }
+            }
+            editing = false;
+            input.replaceWith(nameSpan);
+            editBtn.textContent = "Edit";
+          }
+          input.addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+          });
+          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
+
+          editBtn.onclick = () => { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; editBtn.onclick = null; editBtn.addEventListener("click", arguments.callee); };
+        });
+
+        rowDiv.appendChild(nameSpan);
+        rowDiv.appendChild(editBtn);
+        rowDiv.appendChild(removeBtn);
+        return rowDiv;
       }
     );
 
@@ -2866,13 +2902,40 @@ function renderAdminPage(deptCode) {
     const { list, rebuild } = buildDraggableList(
       slots,
       async (newOrder) => { slots = newOrder; await saveNoBreakSlots(newOrder); },
-      (slot, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-        el("span", {}, slot),
-        el("button", { class: "btn-danger", onClick: async () => {
+      (slot, arr, rebuildFn) => {
+        const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
+        const nameSpan = el("span", { style: { flex:"1" } }, slot);
+        let editing = false;
+        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
           slots = slots.filter(s => s !== slot);
           await saveNoBreakSlots(slots); rebuildFn(slots); showToast(`${slot} removed`);
-        }}, "Remove"),
-      )
+        }}, "Remove");
+        editBtn.addEventListener("click", () => {
+          if (editing) return;
+          editing = true;
+          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+          input.value = slot;
+          nameSpan.replaceWith(input);
+          editBtn.textContent = "Cancel";
+          input.focus(); input.select();
+          async function saveEdit() {
+            const val = input.value.trim();
+            if (val && val !== slot && !slots.includes(val)) {
+              const i = slots.indexOf(slot);
+              if (i !== -1) { slots[i] = val; await saveNoBreakSlots(slots); rebuildFn(slots); showToast(`Renamed to ${val}`); return; }
+            }
+            editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
+          }
+          input.addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+          });
+          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
+        });
+        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+        return rowDiv;
+      }
     );
 
     const slotIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Breaker 1, Float", style: { flex:"1" } });
@@ -2900,13 +2963,40 @@ function renderAdminPage(deptCode) {
     const { list, rebuild } = buildDraggableList(
       positions,
       async (newOrder) => { positions = newOrder; await saveCallPositions(newOrder); },
-      (pos, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-        el("span", {}, pos),
-        el("button", { class: "btn-danger", onClick: async () => {
+      (pos, arr, rebuildFn) => {
+        const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
+        const nameSpan = el("span", { style: { flex:"1" } }, pos);
+        let editing = false;
+        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
           positions = positions.filter(p => p !== pos);
           await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos} removed`);
-        }}, "Remove"),
-      )
+        }}, "Remove");
+        editBtn.addEventListener("click", () => {
+          if (editing) return;
+          editing = true;
+          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+          input.value = pos;
+          nameSpan.replaceWith(input);
+          editBtn.textContent = "Cancel";
+          input.focus(); input.select();
+          async function saveEdit() {
+            const val = input.value.trim();
+            if (val && val !== pos && !positions.includes(val)) {
+              const i = positions.indexOf(pos);
+              if (i !== -1) { positions[i] = val; await saveCallPositions(positions); rebuildFn(positions); showToast(`Renamed to ${val}`); return; }
+            }
+            editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
+          }
+          input.addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+          });
+          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
+        });
+        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+        return rowDiv;
+      }
     );
 
     const posIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. First Call, OB Call", style: { flex:"1" } });
@@ -2934,12 +3024,44 @@ function renderAdminPage(deptCode) {
     const { list, rebuild } = buildDraggableList(
       ros,
       () => {},
-      (name, arr, rebuildFn) => el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-        el("span", {}, name),
-        el("button", { class: "btn-danger", onClick: async () => {
+      (name, arr, rebuildFn) => {
+        const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
+        const nameSpan = el("span", { style: { flex:"1" } }, name);
+        let editing = false;
+        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
           await deleteRosterEntry(name); ros = ros.filter(n => n !== name); rebuildFn([...ros]); showToast(`${name} removed`);
-        }}, "Remove"),
-      )
+        }}, "Remove");
+        editBtn.addEventListener("click", () => {
+          if (editing) return;
+          editing = true;
+          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+          input.value = name;
+          nameSpan.replaceWith(input);
+          editBtn.textContent = "Cancel";
+          input.focus(); input.select();
+          async function saveEdit() {
+            const val = input.value.trim();
+            if (val && val !== name && !ros.includes(val)) {
+              // Delete old Firebase key, push new name
+              await deleteRosterEntry(name);
+              await saveRosterEntry(val);
+              ros = ros.filter(n => n !== name).concat(val).sort();
+              rebuildFn([...ros]);
+              showToast(`Renamed to ${val}`);
+              return;
+            }
+            editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
+          }
+          input.addEventListener("keydown", e => {
+            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+          });
+          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
+        });
+        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+        return rowDiv;
+      }
     );
 
     const nameIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Last, First (e.g. Smith, John)", style: { flex:"1" } });
