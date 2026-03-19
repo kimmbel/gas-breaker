@@ -1618,10 +1618,16 @@ function buildEodChip() {
     concernInput.addEventListener("blur", saveConcern);
     concernInput.addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); saveConcern(); }
-      if (e.key === "Tab") {
+      if (e.key === "Tab" && !e.shiftKey) {
         e.preventDefault();
         const first = p.querySelector(".eod-room-input");
         if (first) { first.focus(); first.select(); }
+      }
+      if (e.key === "Tab" && e.shiftKey) {
+        e.preventDefault();
+        const all = Array.from(p.querySelectorAll(".eod-room-input"));
+        const last = all[all.length - 1];
+        if (last) { last.focus(); last.select(); }
       }
     });
 
@@ -1666,10 +1672,15 @@ function buildEodChip() {
         if (e.key === "Enter") { e.preventDefault(); input.blur(); }
         if (e.key === "Tab") {
           e.preventDefault();
-          // Move to next room input
           const inputs = Array.from(p.querySelectorAll(".eod-room-input"));
-          const next = inputs[inputs.indexOf(input) + 1];
-          if (next) { next.focus(); next.select(); } else { concernInput.focus(); concernInput.select(); }
+          const idx = inputs.indexOf(input);
+          if (e.shiftKey) {
+            const prev = inputs[idx - 1];
+            if (prev) { prev.focus(); prev.select(); } else { concernInput.focus(); concernInput.select(); }
+          } else {
+            const next = inputs[idx + 1];
+            if (next) { next.focus(); next.select(); } else { concernInput.focus(); concernInput.select(); }
+          }
         }
       });
 
@@ -1882,8 +1893,8 @@ function buildCallChip() {
                 const ordered = [...tonightBtns, ...postcallBtns];
                 const thisBtn = cell.querySelector(".call-provider-btn");
                 const idx = ordered.indexOf(thisBtn);
-                const nextBtn = idx >= 0 ? ordered[idx + 1] : null;
-                if (nextBtn) setTimeout(() => nextBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })), 30);
+                const targetBtn = e.shiftKey ? (idx > 0 ? ordered[idx - 1] : null) : (idx >= 0 ? ordered[idx + 1] : null);
+                if (targetBtn) setTimeout(() => targetBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })), 30);
               }
             }
           }
