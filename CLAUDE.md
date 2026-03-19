@@ -162,6 +162,4 @@ async function saveSomething(items) {
 - The phone board does NOT show: EOD times button, note badges, call/post-call panel (these are display-only)
 
 ## Current To-Do List
-1. Mobile call panel — currently 480px min-width, too wide for phone screens; needs responsive stacked layout
-2. Tab navigation in call panel — Tab should move to next position down
-3. Code audit — thorough review of all recent additions
+*(no open items)*
