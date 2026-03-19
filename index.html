@@ -417,7 +417,7 @@ let boardData   = {};     // { [roomId]: { provider, breaks, hold, holdAt, reque
 let locations     = [...DEFAULT_LOCATIONS];
 let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
 let callPositions = [];   // e.g. ["First Call", "Second Call", "OB Call"]
-let eodConcernTime = "";  // "HH:MM" 24h — stored in config, persists daily
+let eodConcernTime = "";  // "HH:MM" 24h — stored in boards (daily), not config
 let roster        = [];
 let departments   = {};
 let isDisplayMode = false;
@@ -509,6 +509,8 @@ function subscribeToBoard(deptCode) {
     Object.entries(boardData).forEach(([k, v]) => {
       if (k.startsWith("_hist_") && v?.provider) providerHistory[v.provider] = v.breaks || {};
     });
+    // Sync eodConcernTime from boardData (stored daily, not in config)
+    eodConcernTime = boardData["_eodconcern_"] || "";
     // _call_ key is also in boardData — already accessible via getCallAssignments()
     checkAutoUnhold();
     if (!boardInitialized) {
@@ -528,8 +530,6 @@ function subscribeToBoard(deptCode) {
     locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
     noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
-    eodConcernTime = cfg.eodConcernTime || "";
-    console.log('[config listener] eodConcernTime set to:', eodConcernTime, 'from cfg:', cfg.eodConcernTime);
     roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
@@ -558,7 +558,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_") return;
+    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_" || rid === "_eodconcern_") return;
     const duration = room.holdDuration || HOLD_CLEAR_MS;
     if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
@@ -616,8 +616,9 @@ async function saveEodTime(rid, timeStr) {
 
 async function saveEodConcernTime(timeStr) {
   eodConcernTime = timeStr || "";
-  console.log('[saveEodConcernTime] setting to:', eodConcernTime);  // update locally first so UI reflects immediately
-  await set(ref(db, "config/" + session.deptCode + "/eodConcernTime"), timeStr || "");
+  const r = ref(db, "boards/" + session.deptCode + "/" + tsDay() + "/_eodconcern_");
+  if (timeStr) await set(r, timeStr);
+  else await remove(r);
 }
 
 // Parse a time string like "3:45", "345", "3:45pm", "1545", "15:45" → "HH:MM" 24h or ""
@@ -1578,7 +1579,6 @@ function buildEodChip() {
         }
         concernInput.value = parsed ? formatTime(parsed) : "";
         eodConcernTime = parsed;
-        console.log('[saveConcern] eodConcernTime set to:', parsed);
         chip.classList.toggle("has-concern", !!parsed);
         // Update card badges immediately using current eodConcernTime
         document.querySelectorAll(".eod-time-badge").forEach(badge => {
@@ -2361,7 +2361,6 @@ function patchDisplay() {
         // Update eod time badge
         const existingEodBadge = labelRow.querySelector(".eod-time-badge");
         if (existingEodBadge) existingEodBadge.remove();
-        console.log('[patchDisplay] hasEod:', hasEod, 'eodConcernTime:', eodConcernTime, 'id:', id);
         if (hasEod) {
           const cls = !eodConcernTime ? "no-concern" : (timeAfter(eodTime, eodConcernTime) ? "after" : "before");
           const eb = el("span", { class: "eod-time-badge " + cls }, "(" + formatTime(eodTime) + ")");
@@ -2661,7 +2660,6 @@ async function loadConfig(code) {
       locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
       noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
       callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
-      eodConcernTime = cfg.eodConcernTime || "";
       roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
       if (!done) { done = true; unsub(); resolve(); }
     });
