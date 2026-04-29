@@ -2434,8 +2434,23 @@ function patchDisplay() {
         return lbl && lbl.textContent.trim() === slot;
       });
       if (!existing) return;
-      // Skip if user is actively editing this card
-      if (existing.querySelector(".provider-input-wrap")) return;
+      // Skip if user is actively editing this card, but schedule rebuild on blur
+      if (existing.querySelector(".provider-input-wrap")) {
+        const inp = existing.querySelector("input");
+        if (inp && !inp._rebuildScheduled) {
+          inp._rebuildScheduled = true;
+          inp.addEventListener("blur", () => {
+            const nbRow2 = document.querySelector(".display-nobreak-row");
+            if (!nbRow2) return;
+            const cards2 = Array.from(nbRow2.querySelectorAll(".or-card.no-break-card"));
+            const target = cards2.find(c => c.querySelector(".no-break-label")?.textContent.trim() === slot);
+            if (!target || target.querySelector(".provider-input-wrap")) return;
+            const ti = target.getAttribute("data-tab-idx");
+            nbRow2.replaceChild(renderNoBreakCard(slot, true, ti !== null ? parseInt(ti) : cards2.indexOf(target)), target);
+          }, { once: true });
+        }
+        return;
+      }
       const tabIdx = existing.getAttribute("data-tab-idx");
       const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : i);
       nbRow.replaceChild(newCard, existing);
@@ -2552,7 +2567,23 @@ function renderDisplay() {
       if (!nbRow) return;
       const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
       const existing = cards.find(c => c.querySelector(".no-break-label")?.textContent === slot);
-      if (!existing || existing.querySelector(".provider-input-wrap")) return;
+      if (!existing) return;
+      if (existing.querySelector(".provider-input-wrap")) {
+        const inp = existing.querySelector("input");
+        if (inp && !inp._rebuildScheduled) {
+          inp._rebuildScheduled = true;
+          inp.addEventListener("blur", () => {
+            const nbRow2 = document.querySelector(".display-nobreak-row");
+            if (!nbRow2) return;
+            const cards2 = Array.from(nbRow2.querySelectorAll(".or-card.no-break-card"));
+            const target = cards2.find(c => c.querySelector(".no-break-label")?.textContent === slot);
+            if (!target || target.querySelector(".provider-input-wrap")) return;
+            const ti = target.getAttribute("data-tab-idx");
+            nbRow2.replaceChild(renderNoBreakCard(slot, true, ti != null ? +ti : cards2.indexOf(target)), target);
+          }, { once: true });
+        }
+        return;
+      }
       const tabIdx = existing.getAttribute("data-tab-idx");
       nbRow.replaceChild(renderNoBreakCard(slot, true, tabIdx != null ? +tabIdx : cards.indexOf(existing)), existing);
     });
