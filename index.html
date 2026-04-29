@@ -1191,15 +1191,17 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
   function renderProviderArea() {
     const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
     if (existing) existing.remove();
+    // Always read live from boardData so out-of-band updates are reflected when editing opens
+    const currentProvider = (boardData[id] || {}).provider || null;
     if (editingProvider) {
-      body.appendChild(buildProviderInput(provider, "nb_" + slot, card, () => {
+      body.appendChild(buildProviderInput(currentProvider, "nb_" + slot, card, () => {
         editingProvider = false; renderProviderArea();
       }, onTab, isDisplay));
     } else {
       const nameBtn = el("button", {
-        class: "provider-name-btn" + (!provider ? " empty" : ""),
+        class: "provider-name-btn" + (!currentProvider ? " empty" : ""),
         onClick: openEdit
-      }, provider || "Tap to assign");
+      }, currentProvider || "Tap to assign");
       body.appendChild(nameBtn);
     }
   }
@@ -2417,43 +2419,25 @@ function patchDisplay() {
   });
 
   // ── Patch no-break slot cards ──
-  // Rebuild each no-break card whenever its provider differs from the DOM.
-  // These cards are cheap to rebuild (no break pills or hold state).
-  // If the nobreak row doesn't exist but slots are configured, do a full rebuild.
+  // Surgical update: just flip text/class on the existing name button in place.
+  // This mirrors how regular cards are patched and avoids replaceChild complexity.
   if (noBreakSlots.length > 0) {
     const nbRow = document.querySelector(".display-nobreak-row");
     if (!nbRow) { renderDisplay(); return; }
-    noBreakSlots.forEach((slot, i) => {
+    noBreakSlots.forEach(slot => {
       const id       = roomId("nb_" + slot);
-      const room     = boardData[id] || {};
-      const provider = room.provider || null;
-      // Find existing card
+      const provider = (boardData[id] || {}).provider || null;
       const existingCards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
       const existing = existingCards.find(c => {
         const lbl = c.querySelector(".no-break-label");
         return lbl && lbl.textContent.trim() === slot;
       });
-      if (!existing) return;
-      // Skip if user is actively editing this card, but schedule rebuild on blur
-      if (existing.querySelector(".provider-input-wrap")) {
-        const inp = existing.querySelector("input");
-        if (inp && !inp._rebuildScheduled) {
-          inp._rebuildScheduled = true;
-          inp.addEventListener("blur", () => {
-            const nbRow2 = document.querySelector(".display-nobreak-row");
-            if (!nbRow2) return;
-            const cards2 = Array.from(nbRow2.querySelectorAll(".or-card.no-break-card"));
-            const target = cards2.find(c => c.querySelector(".no-break-label")?.textContent.trim() === slot);
-            if (!target || target.querySelector(".provider-input-wrap")) return;
-            const ti = target.getAttribute("data-tab-idx");
-            nbRow2.replaceChild(renderNoBreakCard(slot, true, ti !== null ? parseInt(ti) : cards2.indexOf(target)), target);
-          }, { once: true });
-        }
-        return;
-      }
-      const tabIdx = existing.getAttribute("data-tab-idx");
-      const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : i);
-      nbRow.replaceChild(newCard, existing);
+      if (!existing || existing.querySelector(".provider-input-wrap")) return;
+      const nameBtn = existing.querySelector(".provider-name-btn");
+      if (!nameBtn) return;
+      nameBtn.textContent = provider || "Tap to assign";
+      nameBtn.classList.toggle("empty", !provider);
+      existing.classList.toggle("empty", !provider);
     });
   }
 
@@ -2563,29 +2547,17 @@ function renderDisplay() {
     const slotRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
     return onValue(slotRef, snap => {
       boardData[id] = snap.val() || {};
+      const provider = boardData[id].provider || null;
       const nbRow = document.querySelector(".display-nobreak-row");
       if (!nbRow) return;
       const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
       const existing = cards.find(c => c.querySelector(".no-break-label")?.textContent === slot);
-      if (!existing) return;
-      if (existing.querySelector(".provider-input-wrap")) {
-        const inp = existing.querySelector("input");
-        if (inp && !inp._rebuildScheduled) {
-          inp._rebuildScheduled = true;
-          inp.addEventListener("blur", () => {
-            const nbRow2 = document.querySelector(".display-nobreak-row");
-            if (!nbRow2) return;
-            const cards2 = Array.from(nbRow2.querySelectorAll(".or-card.no-break-card"));
-            const target = cards2.find(c => c.querySelector(".no-break-label")?.textContent === slot);
-            if (!target || target.querySelector(".provider-input-wrap")) return;
-            const ti = target.getAttribute("data-tab-idx");
-            nbRow2.replaceChild(renderNoBreakCard(slot, true, ti != null ? +ti : cards2.indexOf(target)), target);
-          }, { once: true });
-        }
-        return;
-      }
-      const tabIdx = existing.getAttribute("data-tab-idx");
-      nbRow.replaceChild(renderNoBreakCard(slot, true, tabIdx != null ? +tabIdx : cards.indexOf(existing)), existing);
+      if (!existing || existing.querySelector(".provider-input-wrap")) return;
+      const nameBtn = existing.querySelector(".provider-name-btn");
+      if (!nameBtn) return;
+      nameBtn.textContent = provider || "Tap to assign";
+      nameBtn.classList.toggle("empty", !provider);
+      existing.classList.toggle("empty", !provider);
     });
   });
 
