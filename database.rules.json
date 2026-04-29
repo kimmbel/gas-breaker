@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "boards": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth.token.email === 'admin@gasbreaker.app'"
+    },
+    "departments": {
+      ".read": "auth != null",
+      ".write": "auth.token.email === 'admin@gasbreaker.app'"
+    }
+  }
+}
