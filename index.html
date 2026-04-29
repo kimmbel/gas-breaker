@@ -53,6 +53,8 @@
     /* Display board: filtered-out cards dim, needed cards get bright border */
     .or-card.display-card.filter-done  { opacity: 0.18; }
     .or-card.display-card.filter-needs { border-color: #facc15 !important; box-shadow: 0 0 0 3px #facc1550; }
+    .or-card.display-card.drag-over    { border-color: #fb923c !important; box-shadow: 0 0 0 3px #fb923c60; opacity: 1 !important; }
+    .or-card.display-card.dragging     { opacity: 0.4; }
 
     /* ── Main board ── */
     .main { max-width: 780px; margin: 0 auto; padding: 10px 16px; }
@@ -103,29 +105,25 @@
       padding: 10px 0 6px; overflow: visible;
     }
     .eod-panel-title { font-size: 11px; font-weight: 800; color: #a39688; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 14px 6px; border-bottom: 1px solid #f1ede8; margin-bottom: 4px; }
-    .eod-concern-row { display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; border-bottom: 1px solid #f1ede8; margin-bottom: 4px; }
-    .eod-concern-label { font-size: 12px; font-weight: 700; color: #b45309; flex-shrink: 0; }
-    .eod-time-input { flex: 1; font-size: 13px; font-weight: 700; color: #2d2420; background: #fff; border: 1.5px solid #f59e0b; border-radius: 8px; padding: 4px 10px; outline: none; font-family: inherit; }
-    .eod-row { display: flex; align-items: center; gap: 8px; padding: 4px 14px; min-height: 32px; }
-    .eod-room-label { font-size: 12px; font-weight: 700; color: #7c6c62; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .eod-room-input { width: 80px; flex-shrink: 0; font-size: 13px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; outline: none; font-family: inherit; text-align: center; }
-    .eod-room-input:focus { border-color: #f59e0b; background: #fff; }
-    /* Time badge on display cards */
-    .eod-time-badge { font-size: 0.78em; font-weight: 800; margin-left: 4px; flex-shrink: 0; }
-    .eod-time-badge.before { color: #16a34a; }
-    .eod-time-badge.after  { color: #dc2626; }
-    .eod-time-badge.no-concern { color: #9a8880; }
+    .eod-col-headers { display: grid; grid-template-columns: 1fr 58px 58px; gap: 4px; padding: 4px 14px 6px; border-bottom: 1px solid #f1ede8; margin-bottom: 2px; }
+    .eod-col-header { font-size: 10px; font-weight: 800; color: #a39688; text-align: center; letter-spacing: 0.04em; text-transform: uppercase; }
+    .eod-row { display: grid; grid-template-columns: 1fr 58px 58px; gap: 4px; align-items: center; padding: 4px 14px; min-height: 32px; }
+    .eod-room-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .eod-cb-cell { display: flex; justify-content: center; }
+    .eod-cb { width: 18px; height: 18px; cursor: pointer; }
+    .eod-cb.ok   { accent-color: #16a34a; }
+    .eod-cb.late { accent-color: #dc2626; }
+    /* Status badge on display cards */
+    .eod-status-badge { font-size: 0.85em; font-weight: 900; margin-left: 4px; flex-shrink: 0; }
+    .eod-status-badge.ok   { color: #16a34a; }
+    .eod-status-badge.late { color: #dc2626; }
     /* Dark mode */
     body.display-mode .eod-panel { background: #1e1a17; border-color: #4a4240; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
     body.display-mode .eod-panel-title { color: #6b5e57; border-color: #3d3530; }
-    body.display-mode .eod-concern-row { border-color: #3d3530; }
-    body.display-mode .eod-concern-label { color: #f59e0b; }
-    body.display-mode .eod-time-input { background: #2d2825; border-color: #f59e0b; color: #f5f0eb; }
+    body.display-mode .eod-col-headers { border-color: #3d3530; }
+    body.display-mode .eod-col-header { color: #6b5e57; }
     body.display-mode .eod-room-label { color: #9a8880; }
-    body.display-mode .eod-room-input { background: #2d2825; border-color: #4a4240; color: #f5f0eb; }
-    body.display-mode .eod-room-input:focus { border-color: #f59e0b; background: #1e1a17; }
     body.display-mode .eod-chip { background: #2d2200; color: #fbbf24; }
-    body.display-mode .eod-chip.has-concern { background: #3d2e00; color: #fcd34d; }
     .call-chip { background: #f0fdf4; color: #166534; cursor: pointer; user-select: none; }
     .call-chip.has-call { background: #dcfce7; color: #15803d; }
     .call-panel {
@@ -439,6 +437,7 @@ let callPositions = [];   // e.g. ["First Call", "Second Call", "OB Call"]
 let eodConcernTime = "";  // "HH:MM" 24h — stored in boards (daily), not config
 let roster        = [];
 let departments   = {};
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 let isDisplayMode = false;
 let activeFilter    = null;   // null | "am" | "lunch" | "pm"
 let providerHistory = {};    // { [nameKey]: { am?, lunch?, pm? } } — persists all day
@@ -1151,11 +1150,11 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       closeDropdown();
       if (isTab) tabHandled = true;
       onDone();
-      // If tabbing out with nothing assigned, immediately restore card empty state
-      if (isTab && !selected && card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
+      // If tabbing/entering out with nothing assigned, immediately restore card empty state
+      if (!selected && card && !currentName && !(boardData[roomId(loc)]||{}).provider) {
         card.classList.add("empty"); card.classList.remove("editing");
       }
-      if (isTab && onTab) setTimeout(() => onTab(e.shiftKey), 80);
+      if (onTab) setTimeout(() => onTab(isTab ? e.shiftKey : false), 80);
     }
   });
 
@@ -1346,11 +1345,10 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
 
   // Room label row — badges stack vertically on right (note on top, requesting below)
   const note = provider ? getProviderNote(provider) : null;
-  const eodTime = isDisplay ? (getEodTimes()[roomId(loc)] || "") : "";
-  const eodBadge = isDisplay && eodTime ? (() => {
-    const cls = !eodConcernTime ? "no-concern" : (timeAfter(eodTime, eodConcernTime) ? "after" : "before");
-    return el("span", { class: "eod-time-badge " + cls }, "(" + formatTime(eodTime) + ")");
-  })() : null;
+  const eodStatus = isDisplay ? (getEodTimes()[roomId(loc)] || null) : null;
+  const eodBadge = isDisplay && (eodStatus === "ok" || eodStatus === "late")
+    ? el("span", { class: "eod-status-badge " + eodStatus }, eodStatus === "ok" ? "✓" : "✗")
+    : null;
   if (isDisplay && (note || isReq || eodBadge) && provider) {
     const badges = el("div", { class: "display-badges" });
     if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color, style: { cursor:"pointer" }, onClick: () => openNoteEdit() }, note.text));
@@ -1503,6 +1501,37 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   }
   renderProviderArea();
 
+  // ── Drag-to-swap (display mode only, occupied cards only) ──
+  if (isDisplay && provider) {
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain", loc);
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(() => card.classList.add("dragging"), 0);
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      document.querySelectorAll(".drag-over").forEach(c => c.classList.remove("drag-over"));
+    });
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", e => {
+      if (!card.contains(e.relatedTarget)) card.classList.remove("drag-over");
+    });
+    card.addEventListener("drop", async e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const srcLoc = e.dataTransfer.getData("text/plain");
+      if (!srcLoc || srcLoc === loc) return;
+      const srcProvider = (boardData[roomId(srcLoc)] || {}).provider;
+      if (!srcProvider) return;
+      await assignProvider(loc, srcProvider);
+    });
+  }
+
   card.appendChild(el("div", { class: "card-inner" }, body, side));
   return card;
 }
@@ -1559,7 +1588,7 @@ function showRequestNotification(loc, providerName) {
   const autoTimer = setTimeout(() => { if (notif.parentNode) notif.remove(); }, DURATION);
 }
 
-// ─── End-of-Day time chip (coordinator display only) ─────────────────────────
+// ─── End-of-Day status chip (coordinator display only) ───────────────────────
 function buildEodChip() {
   let panelOpen = false;
   let panel = null;
@@ -1567,9 +1596,8 @@ function buildEodChip() {
 
   const chip = el("div", { class: "chip eod-chip" },
     el("span", { style: { fontSize: "13px" } }, "🕐"),
-    el("span", {}, "End Times"),
+    el("span", {}, "End of Day"),
   );
-  chip.classList.toggle("has-concern", !!eodConcernTime);
   const wrap = el("div", { class: "eod-wrap" }, chip);
 
   function closePanel() {
@@ -1577,128 +1605,56 @@ function buildEodChip() {
     panelOpen = false;
   }
 
+  async function saveEodStatus(rid, status) {
+    if (!boardData["_eod_"]) boardData["_eod_"] = {};
+    if (status) boardData["_eod_"][rid] = status;
+    else delete boardData["_eod_"][rid];
+    if (document.querySelector(".display-outer")) patchDisplay();
+    await saveEodTime(rid, status || null);
+  }
+
   function buildPanel() {
     const p = el("div", { class: "eod-panel" });
-    p.appendChild(el("div", { class: "eod-panel-title" }, "End of Day Relief Times"));
+    p.appendChild(el("div", { class: "eod-panel-title" }, "End of Day Status"));
 
-    // ── Concern time row ──
-    const concernInput = el("input", {
-      class: "eod-time-input",
-      type: "text",
-      placeholder: "e.g. 3:30p",
-      autocomplete: "off",
-    });
-    concernInput.value = eodConcernTime ? formatTime(eodConcernTime) : "";
-
-    let concernSaving = false;
-    async function saveConcern() {
-      if (concernSaving) return;
-      concernSaving = true;
-      try {
-        const val = concernInput.value.trim();
-        const parsed = val ? parseTime(val) : "";
-        if (val && !parsed) {
-          // Unparseable — restore previous value and bail
-          concernInput.value = eodConcernTime ? formatTime(eodConcernTime) : "";
-          return;
-        }
-        concernInput.value = parsed ? formatTime(parsed) : "";
-        eodConcernTime = parsed;
-        chip.classList.toggle("has-concern", !!parsed);
-        // Update card badges immediately using current eodConcernTime
-        document.querySelectorAll(".eod-time-badge").forEach(badge => {
-          const card = badge.closest(".or-card");
-          if (!card) return;
-          const lbl = card.querySelector(".room-label");
-          if (!lbl) return;
-          const rid = roomId(lbl.textContent.trim());
-          const t = getEodTimes()[rid] || "";
-          if (!t) return;
-          const cls = !parsed ? "no-concern" : (timeAfter(t, parsed) ? "after" : "before");
-          badge.className = "eod-time-badge " + cls;
-        });
-        await saveEodConcernTime(parsed);
-      } finally {
-        concernSaving = false;
-      }
-    }
-    concernInput.addEventListener("focus", () => concernInput.select());
-    concernInput.addEventListener("blur", saveConcern);
-    concernInput.addEventListener("keydown", e => {
-      if (e.key === "Enter") { e.preventDefault(); saveConcern(); }
-      if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
-        const first = p.querySelector(".eod-room-input");
-        if (first) { first.focus(); first.select(); }
-      }
-      if (e.key === "Tab" && e.shiftKey) {
-        e.preventDefault();
-        const all = Array.from(p.querySelectorAll(".eod-room-input"));
-        const last = all[all.length - 1];
-        if (last) { last.focus(); last.select(); }
-      }
-    });
-
-    p.appendChild(el("div", { class: "eod-concern-row" },
-      el("div", { class: "eod-concern-label" }, "⚠️ Concern after:"),
-      concernInput,
-    ));
-
-    // ── Per-room rows — only occupied rooms ──
-    const eodTimes = getEodTimes();
     const occupiedLocs = locations.filter(l => !isDivider(l) && (boardData[roomId(l)] || {}).provider);
 
     if (!occupiedLocs.length) {
       p.appendChild(el("div", { style: { padding:"10px 14px", fontSize:"12px", color:"#a39688" } }, "No rooms currently assigned."));
-    }
-
-    occupiedLocs.forEach((loc, i) => {
-      const rid = roomId(loc);
-      const input = el("input", {
-        class: "eod-room-input",
-        type: "text",
-        placeholder: "--:--",
-        autocomplete: "off",
-      });
-      const stored = eodTimes[rid] || "";
-      input.value = stored ? formatTime(stored) : "";
-
-      async function saveRoom() {
-        const parsed = parseTime(input.value);
-        input.value = parsed ? formatTime(parsed) : "";
-        // Optimistic update
-        if (!boardData["_eod_"]) boardData["_eod_"] = {};
-        if (parsed) boardData["_eod_"][rid] = parsed;
-        else delete boardData["_eod_"][rid];
-        if (document.querySelector(".display-outer")) patchDisplay();
-        await saveEodTime(rid, parsed);
-      }
-
-      input.addEventListener("focus", () => input.select());
-      input.addEventListener("blur", saveRoom);
-      input.addEventListener("keydown", e => {
-        if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-        if (e.key === "Tab") {
-          e.preventDefault();
-          const inputs = Array.from(p.querySelectorAll(".eod-room-input"));
-          const idx = inputs.indexOf(input);
-          if (e.shiftKey) {
-            const prev = inputs[idx - 1];
-            if (prev) { prev.focus(); prev.select(); } else { concernInput.focus(); concernInput.select(); }
-          } else {
-            const next = inputs[idx + 1];
-            if (next) { next.focus(); next.select(); } else { concernInput.focus(); concernInput.select(); }
-          }
-        }
-      });
-
-      const room = boardData[rid] || {};
-      const providerName = room.provider || "";
-      p.appendChild(el("div", { class: "eod-row" },
-        el("div", { class: "eod-room-label", title: loc }, loc + (providerName ? " — " + providerName : "")),
-        input,
+    } else {
+      p.appendChild(el("div", { class: "eod-col-headers" },
+        el("div", { class: "eod-col-header" }, ""),
+        el("div", { class: "eod-col-header" }, "On Time"),
+        el("div", { class: "eod-col-header" }, "Running Over"),
       ));
-    });
+
+      occupiedLocs.forEach(loc => {
+        const rid = roomId(loc);
+        const room = boardData[rid] || {};
+        const status = getEodTimes()[rid] || null;
+
+        const cbOk   = el("input", { class: "eod-cb ok",   type: "checkbox" });
+        const cbLate = el("input", { class: "eod-cb late", type: "checkbox" });
+        cbOk.checked   = status === "ok";
+        cbLate.checked = status === "late";
+
+        cbOk.addEventListener("change", async () => {
+          cbLate.checked = false;
+          await saveEodStatus(rid, cbOk.checked ? "ok" : null);
+        });
+        cbLate.addEventListener("change", async () => {
+          cbOk.checked = false;
+          await saveEodStatus(rid, cbLate.checked ? "late" : null);
+        });
+
+        const providerName = room.provider || "";
+        p.appendChild(el("div", { class: "eod-row" },
+          el("div", { class: "eod-room-label", title: loc }, loc + (providerName ? " — " + providerName : "")),
+          el("div", { class: "eod-cb-cell" }, cbOk),
+          el("div", { class: "eod-cb-cell" }, cbLate),
+        ));
+      });
+    }
 
     p.addEventListener("mousedown", () => { panelMousedown = true; setTimeout(() => { panelMousedown = false; }, 0); });
     return p;
@@ -2251,6 +2207,14 @@ function patchFilter() {
   // Update Rooms Running chip count
   const roomsChip = document.querySelector(".summary-bar .chip.filter-rooms .chip-count");
   if (roomsChip) roomsChip.textContent = String(dOccupied);
+  // Update on-call chip count (may change when another device updates call assignments)
+  const callChip = document.querySelector(".summary-bar .call-chip");
+  if (callChip) {
+    const callN = Object.values(getCallAssignments()).filter(Boolean).length;
+    const callCountEl = callChip.querySelector(".chip-count");
+    if (callCountEl) callCountEl.textContent = String(callN);
+    callChip.classList.toggle("has-call", callN > 0);
+  }
   // Update break chips
   document.querySelectorAll(".summary-bar .chip[data-filter]").forEach(chip => {
     const fid   = chip.getAttribute("data-filter");
@@ -2378,10 +2342,10 @@ function patchDisplay() {
       if (nameBtn.textContent !== expectedText) nameBtn.textContent = expectedText;
     }
 
-    // ── Update badges (note + requesting + eod time) in room label row ──
-    const note    = provider ? getProviderNote(provider) : null;
-    const eodTime = getEodTimes()[id] || "";
-    const hasEod  = !!eodTime;
+    // ── Update badges (note + requesting + eod status) in room label row ──
+    const note      = provider ? getProviderNote(provider) : null;
+    const eodStatus = getEodTimes()[id] || null;
+    const hasEod    = eodStatus === "ok" || eodStatus === "late";
     const cardBody = card.querySelector(".card-body");
     if (cardBody) {
       // The room label may be either directly in cardBody, or inside a flex wrapper
@@ -2418,19 +2382,18 @@ function patchDisplay() {
           badges.appendChild(noteBadge);
         }
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
-        // Update eod time badge
-        const existingEodBadge = labelRow.querySelector(".eod-time-badge");
+        // Update eod status badge
+        const existingEodBadge = labelRow.querySelector(".eod-status-badge");
         if (existingEodBadge) existingEodBadge.remove();
         if (hasEod) {
-          const cls = !eodConcernTime ? "no-concern" : (timeAfter(eodTime, eodConcernTime) ? "after" : "before");
-          const eb = el("span", { class: "eod-time-badge " + cls }, "(" + formatTime(eodTime) + ")");
+          const eb = el("span", { class: "eod-status-badge " + eodStatus }, eodStatus === "ok" ? "✓" : "✗");
           labelRow.insertBefore(eb, badges);
         }
       } else {
         // Remove badges and eod badge if present; unwrap labelRow
         const badges = cardBody.querySelector(".display-badges");
         if (badges) badges.remove();
-        const eodBadgeEl = cardBody.querySelector(".eod-time-badge");
+        const eodBadgeEl = cardBody.querySelector(".eod-status-badge");
         if (eodBadgeEl) eodBadgeEl.remove();
         // If labelRow is a wrapper (not cardBody), unwrap the room-label back
         if (labelRow && labelRow !== cardBody && !labelRow.querySelector(".display-badges")) {
@@ -2467,13 +2430,6 @@ function patchDisplay() {
       if (!existing) return;
       // Skip if user is actively editing this card
       if (existing.querySelector(".provider-input-wrap")) return;
-      // Check what the DOM currently shows
-      const nameBtn   = existing.querySelector(".provider-name-btn");
-      const domProvider = nameBtn
-        ? (nameBtn.classList.contains("empty") ? null : nameBtn.textContent.trim())
-        : "__unknown__";
-      // Rebuild if provider changed
-      if (domProvider === provider) return;
       const tabIdx = existing.getAttribute("data-tab-idx");
       const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : i);
       nbRow.replaceChild(newCard, existing);
@@ -2552,6 +2508,11 @@ function renderDisplay() {
         return chip;
       }).concat(dCallChipEl ? [dCallChipEl] : [])
        .concat([buildEodChip()])
+       .concat([(() => {
+         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer" } }, "📱 Phone View");
+         btn.addEventListener("click", () => { isDisplayMode = false; renderBoard(); });
+         return btn;
+       })()])
     ),
     el("div", { class: "display-outer" },
       noBreakSlots.length ? el("div", { class: "display-nobreak-row" }, ...noBreakCards) : null,
@@ -2635,8 +2596,8 @@ function renderCodeScreen(errorMsg = "") {
         if (!deptName) throw new Error("Dept not found");
         session = { deptCode: code, deptName };
         await loadConfig(code);
-        const goDisplay = window._postLoginDisplay || new URLSearchParams(window.location.search).has("display");
-        if (goDisplay) isDisplayMode = true;
+        const explicitDisplay = window._postLoginDisplay || new URLSearchParams(window.location.search).has("display");
+        if (explicitDisplay || !isMobile) isDisplayMode = true;
         subscribeToBoard(code);
       }
     } catch (err) {
@@ -3279,7 +3240,7 @@ function renderAdminPage(deptCode) {
     }
     session = { deptCode: code, deptName };
     await loadConfig(code);
-    if (isDisplay) isDisplayMode = true;
+    if (isDisplay || !isMobile) isDisplayMode = true;
     subscribeToBoard(code);
   });
 })();
