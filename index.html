@@ -114,7 +114,7 @@
     .eod-cb.ok   { accent-color: #16a34a; }
     .eod-cb.late { accent-color: #dc2626; }
     /* Status badge on display cards */
-    .eod-status-badge { font-size: 0.85em; font-weight: 900; margin-left: 4px; flex-shrink: 0; }
+    .eod-status-badge { font-size: 1.5em; font-weight: 900; margin-left: 4px; flex-shrink: 0; line-height: 1; }
     .eod-status-badge.ok   { color: #16a34a; }
     .eod-status-badge.late { color: #dc2626; }
     /* Dark mode */
@@ -1501,18 +1501,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   }
   renderProviderArea();
 
-  // ── Drag-to-swap (display mode only, occupied cards only) ──
-  if (isDisplay && provider) {
-    card.setAttribute("draggable", "true");
-    card.addEventListener("dragstart", e => {
-      e.dataTransfer.setData("text/plain", loc);
-      e.dataTransfer.effectAllowed = "move";
-      setTimeout(() => card.classList.add("dragging"), 0);
-    });
-    card.addEventListener("dragend", () => {
-      card.classList.remove("dragging");
-      document.querySelectorAll(".drag-over").forEach(c => c.classList.remove("drag-over"));
-    });
+  // ── Drag-to-swap (display mode only) ──
+  if (isDisplay) {
+    // All display cards are drop targets
     card.addEventListener("dragover", e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
@@ -1530,6 +1521,19 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       if (!srcProvider) return;
       await assignProvider(loc, srcProvider);
     });
+    // Only occupied cards can be dragged
+    if (provider) {
+      card.setAttribute("draggable", "true");
+      card.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", loc);
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => card.classList.add("dragging"), 0);
+      });
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        document.querySelectorAll(".drag-over").forEach(c => c.classList.remove("drag-over"));
+      });
+    }
   }
 
   card.appendChild(el("div", { class: "card-inner" }, body, side));
@@ -1934,6 +1938,8 @@ function buildCallChip() {
 function renderBoard() {
   if (!session?.deptCode) { renderCodeScreen(); return; }
   document.body.classList.remove("display-mode");
+  (window._nbSlotListeners || []).forEach(u => u());
+  window._nbSlotListeners = [];
   checkRequestNotifications();
 
   const visibleLocs = locations;
@@ -2006,7 +2012,7 @@ function renderBoard() {
           ),
         ),
         el("div", { class: "header-right" },
-          el("a", { class: "display-link", href: `?display=1&code=${session.deptCode}`, target: "_blank" }, "🖥 Display"),
+          el("a", { class: "display-link", href: `?display=1&code=${session.deptCode}`, target: "_blank" }, "Change Display"),
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
             session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; activeFilter = null; providerHistory = {};
@@ -2509,7 +2515,7 @@ function renderDisplay() {
       }).concat(dCallChipEl ? [dCallChipEl] : [])
        .concat([buildEodChip()])
        .concat([(() => {
-         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer" } }, "📱 Phone View");
+         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer" } }, "Change Display");
          btn.addEventListener("click", () => { isDisplayMode = false; renderBoard(); });
          return btn;
        })()])
@@ -2532,6 +2538,28 @@ function renderDisplay() {
     window._resizeLayoutTimer = setTimeout(() => layoutDisplay(true), 80);
   };
   window.addEventListener("resize", window._displayResizeHandler);
+
+  // ── Per-slot Firebase listeners for instant no-break card refresh ──
+  // The main board onValue delivers a full snapshot which can lag on slow connections.
+  // Targeted listeners on each nb_ key fire immediately when only that slot changes.
+  (window._nbSlotListeners || []).forEach(u => u());
+  window._nbSlotListeners = noBreakSlots.map(slot => {
+    const id = roomId("nb_" + slot);
+    const slotRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
+    return onValue(slotRef, snap => {
+      const data = snap.val() || {};
+      if (!boardData[id] || boardData[id].provider !== data.provider) {
+        boardData[id] = data;
+        const nbRow = document.querySelector(".display-nobreak-row");
+        if (!nbRow) return;
+        const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
+        const existing = cards.find(c => c.querySelector(".no-break-label")?.textContent === slot);
+        if (!existing || existing.querySelector(".provider-input-wrap")) return;
+        const tabIdx = existing.getAttribute("data-tab-idx");
+        nbRow.replaceChild(renderNoBreakCard(slot, true, tabIdx != null ? +tabIdx : cards.indexOf(existing)), existing);
+      }
+    });
+  });
 
   clearTimeout(window._holdRefreshTimer);
   window._holdRefreshTimer = setTimeout(function tickDisplay() {
