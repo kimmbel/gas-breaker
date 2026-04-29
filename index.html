@@ -389,7 +389,8 @@ import { getDatabase, ref, onValue, set, get, remove, push, off } from "https://
 import { getAuth, signInWithEmailAndPassword, signOut, updatePassword, createUserWithEmailAndPassword, deleteUser, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
-const firebaseConfig = {
+const isProd = location.hostname === "gasbreaker.net";
+const firebaseConfig = isProd ? {
   apiKey:            "AIzaSyBzSQU4RoSGGoPgbcMDUHIDxAl3PAqBqsk",
   authDomain:        "gas-breaker.firebaseapp.com",
   databaseURL:       "https://gas-breaker-default-rtdb.firebaseio.com",
@@ -397,6 +398,14 @@ const firebaseConfig = {
   storageBucket:     "gas-breaker.firebasestorage.app",
   messagingSenderId: "502120571871",
   appId:             "1:502120571871:web:710d607cbc4bb0fb52da6a"
+} : {
+  apiKey:            "AIzaSyBJlHBvHIeYizfeBhg5CvtQlLIDKAkzbx4",
+  authDomain:        "gas-breaker-test.firebaseapp.com",
+  databaseURL:       "https://gas-breaker-test-default-rtdb.firebaseio.com",
+  projectId:         "gas-breaker-test",
+  storageBucket:     "gas-breaker-test.firebasestorage.app",
+  messagingSenderId: "975321726985",
+  appId:             "1:975321726985:web:a9f6bf06e775ae70eeb8d8"
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db          = getDatabase(firebaseApp);
