@@ -2515,7 +2515,7 @@ function renderDisplay() {
       }).concat(dCallChipEl ? [dCallChipEl] : [])
        .concat([buildEodChip()])
        .concat([(() => {
-         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer" } }, "Change Display");
+         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Change Display");
          btn.addEventListener("click", () => { isDisplayMode = false; renderBoard(); });
          return btn;
        })()])
@@ -2547,17 +2547,14 @@ function renderDisplay() {
     const id = roomId("nb_" + slot);
     const slotRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${id}`);
     return onValue(slotRef, snap => {
-      const data = snap.val() || {};
-      if (!boardData[id] || boardData[id].provider !== data.provider) {
-        boardData[id] = data;
-        const nbRow = document.querySelector(".display-nobreak-row");
-        if (!nbRow) return;
-        const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
-        const existing = cards.find(c => c.querySelector(".no-break-label")?.textContent === slot);
-        if (!existing || existing.querySelector(".provider-input-wrap")) return;
-        const tabIdx = existing.getAttribute("data-tab-idx");
-        nbRow.replaceChild(renderNoBreakCard(slot, true, tabIdx != null ? +tabIdx : cards.indexOf(existing)), existing);
-      }
+      boardData[id] = snap.val() || {};
+      const nbRow = document.querySelector(".display-nobreak-row");
+      if (!nbRow) return;
+      const cards = Array.from(nbRow.querySelectorAll(".or-card.no-break-card"));
+      const existing = cards.find(c => c.querySelector(".no-break-label")?.textContent === slot);
+      if (!existing || existing.querySelector(".provider-input-wrap")) return;
+      const tabIdx = existing.getAttribute("data-tab-idx");
+      nbRow.replaceChild(renderNoBreakCard(slot, true, tabIdx != null ? +tabIdx : cards.indexOf(existing)), existing);
     });
   });
 
