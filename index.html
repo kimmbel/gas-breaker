@@ -434,7 +434,12 @@ let session     = null;   // { deptCode, deptName, isAdmin? }
 let boardData   = {};     // { [roomId]: { provider, breaks, hold, holdAt, requesting, hidden } }
 let locations     = [...DEFAULT_LOCATIONS];
 let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
-let callPositions = [];   // e.g. ["First Call", "Second Call", "OB Call"]
+let callPositions = [];   // e.g. [{ name: "First Call", callIcon: "📞", postCallIcon: "🌙" }]
+
+function normalizeCallPosition(p) {
+  if (typeof p === "string") return { name: p, callIcon: "📞", postCallIcon: "🌙" };
+  return { name: p.name || "", callIcon: p.callIcon ?? "📞", postCallIcon: p.postCallIcon ?? "🌙" };
+}
 let eodConcernTime = "";  // "HH:MM" 24h — stored in boards (daily), not config
 let roster        = [];
 let departments   = {};
@@ -564,7 +569,7 @@ function subscribeToBoard(deptCode) {
     const cfg = snap.val() || {};
     locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
     noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
-    callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
+    callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions).map(normalizeCallPosition)  : [];
     roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
@@ -714,9 +719,20 @@ function getProviderCallStatus(name) {
 }
 
 function callStatusPrefix(name) {
-  const s = getProviderCallStatus(name);
-  if (s === "call")     return "📞 ";
-  if (s === "postcall") return "🌙 ";
+  const calls     = getCallAssignments();
+  const postCalls = getPostCallAssignments();
+  const callEntry = Object.entries(calls).find(([, n]) => n === name);
+  if (callEntry) {
+    const pos  = callPositions[parseInt(callEntry[0])];
+    const icon = pos ? (pos.callIcon ?? "📞") : "📞";
+    return icon ? icon + " " : "";
+  }
+  const postEntry = Object.entries(postCalls).find(([, n]) => n === name);
+  if (postEntry) {
+    const pos  = callPositions[parseInt(postEntry[0])];
+    const icon = pos ? (pos.postCallIcon ?? "🌙") : "🌙";
+    return icon ? icon + " " : "";
+  }
   return "";
 }
 
@@ -1488,7 +1504,8 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         : "Tap to assign provider";
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
-        onClick: openEdit
+        onClick: openEdit,
+        "data-provider": provider || ""
       }, nameLabel);
       // On mobile, show requesting banner above name
       if (isReq && provider && !isDisplay) {
@@ -1899,7 +1916,7 @@ function buildCallChip() {
   // ── Build a single position row ──
   function buildRow(position, posIdx) {
     const row = el("div", { class: "call-row" });
-    row.appendChild(el("div", { class: "call-position-label" }, position));
+    row.appendChild(el("div", { class: "call-position-label" }, position.name));
     row.appendChild(buildPickerCell(posIdx, getCallAssignments,     saveCallAssignment,     "_call_",     false));
     row.appendChild(buildPickerCell(posIdx, getPostCallAssignments, savePostCallAssignment, "_postcall_", true));
     return row;
@@ -2292,7 +2309,7 @@ function patchDisplay() {
     const domProvider = domIsEditing
       ? "__editing__"
       : (domNameBtn && !domNameBtn.classList.contains("empty")
-          ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null);
+          ? (domNameBtn.getAttribute("data-provider") || null) : null);
     if (domProvider !== provider) {
       // Provider changed — rebuild just this card in-place
       const tabIdx = card.getAttribute("data-tab-idx");
@@ -2774,7 +2791,7 @@ async function loadConfig(code) {
       const cfg = snap.val() || {};
       locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
       noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
-      callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
+      callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions).map(normalizeCallPosition)  : [];
       roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
       if (!done) { done = true; unsub(); resolve(); }
     });
@@ -3081,36 +3098,75 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       async (newOrder) => { positions = newOrder; await saveCallPositions(newOrder); },
       (pos, arr, rebuildFn) => {
         const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
-        const nameSpan = el("span", { style: { flex:"1" } }, pos);
         let editing = false;
-        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
-        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
-          positions = positions.filter(p => p !== pos);
-          await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos} removed`);
-        }}, "Remove");
-        editBtn.addEventListener("click", () => {
-          if (editing) return;
+
+        function showView() {
+          editing = false;
+          rowDiv.innerHTML = "";
+          rowDiv.style.cssText = "display:flex;align-items:center;flex:1;gap:8px;";
+          const callIconDisplay    = pos.callIcon    || "—";
+          const postIconDisplay    = pos.postCallIcon || "—";
+          const iconBadge = el("span", { style: { fontSize:"12px", color:"#9c8a7e", whiteSpace:"nowrap" } },
+            callIconDisplay + " / " + postIconDisplay);
+          const nameSpan = el("span", { style: { flex:"1" } }, pos.name);
+          const editBtn  = el("button", { class:"btn-ghost",  style:{ fontSize:"11px", padding:"4px 8px" }, onClick: showEdit  }, "Edit");
+          const removeBtn= el("button", { class:"btn-danger", style:{ fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
+            positions = positions.filter(p => p !== pos);
+            await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos.name} removed`);
+          }}, "Remove");
+          rowDiv.append(nameSpan, iconBadge, editBtn, removeBtn);
+        }
+
+        function showEdit() {
           editing = true;
-          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
-          input.value = pos;
-          nameSpan.replaceWith(input);
-          editBtn.textContent = "Cancel";
-          input.focus(); input.select();
-          async function saveEdit() {
-            const val = input.value.trim();
-            if (val && val !== pos && !positions.includes(val)) {
-              const i = positions.indexOf(pos);
-              if (i !== -1) { positions[i] = val; await saveCallPositions(positions); rebuildFn(positions); showToast(`Renamed to ${val}`); return; }
-            }
-            editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
+          rowDiv.innerHTML = "";
+          rowDiv.style.cssText = "display:flex;flex-direction:column;flex:1;gap:6px;";
+
+          const nameInput = el("input", { class:"admin-add-input", type:"text",
+            style:{ width:"100%", fontSize:"13px", padding:"4px 8px", boxSizing:"border-box" } });
+          nameInput.value = pos.name;
+
+          function iconInput(val) {
+            const inp = el("input", { class:"admin-add-input", type:"text",
+              style:{ width:"52px", fontSize:"18px", textAlign:"center", padding:"2px 4px" } });
+            inp.value = val || "";
+            return inp;
           }
-          input.addEventListener("keydown", e => {
-            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
-            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+          const callIn     = iconInput(pos.callIcon);
+          const postIn     = iconInput(pos.postCallIcon);
+          const clearStyle = { fontSize:"11px", padding:"2px 6px" };
+
+          const iconRow = el("div", { style:"display:flex;gap:8px;align-items:center;flex-wrap:wrap;" },
+            el("span", { style:"font-size:12px;color:#7c6c62;" }, "Tonight icon:"),
+            callIn,
+            el("button", { class:"btn-ghost", style:clearStyle, onClick:() => { callIn.value = ""; } }, "None"),
+            el("span", { style:"font-size:12px;color:#7c6c62;margin-left:6px;" }, "Post-call icon:"),
+            postIn,
+            el("button", { class:"btn-ghost", style:clearStyle, onClick:() => { postIn.value = ""; } }, "None"),
+          );
+
+          const btnRow = el("div", { style:"display:flex;gap:8px;justify-content:flex-end;" },
+            el("button", { class:"btn-ghost",   style:{ fontSize:"12px", padding:"4px 12px" }, onClick: showView }, "Cancel"),
+            el("button", { class:"btn-primary",  style:{ fontSize:"12px", padding:"4px 12px" }, onClick: async () => {
+              const newName = nameInput.value.trim();
+              if (!newName) { showView(); return; }
+              const i = positions.indexOf(pos);
+              if (i !== -1) {
+                positions[i] = { name: newName, callIcon: callIn.value.trim(), postCallIcon: postIn.value.trim() };
+                await saveCallPositions(positions); rebuildFn(positions); showToast("Updated");
+              } else { showView(); }
+            }}, "Save"),
+          );
+
+          rowDiv.append(nameInput, iconRow, btnRow);
+          nameInput.focus(); nameInput.select();
+          nameInput.addEventListener("keydown", e => {
+            if (e.key === "Enter")  { e.preventDefault(); btnRow.querySelector(".btn-primary").click(); }
+            if (e.key === "Escape") showView();
           });
-          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
-        });
-        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+        }
+
+        showView();
         return rowDiv;
       }
     );
@@ -3118,8 +3174,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     const posIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. First Call, OB Call", style: { flex:"1" } });
     async function addPosition() {
       const val = posIn.value.trim();
-      if (!val || positions.includes(val)) return;
-      const newPositions = [...positions, val];
+      if (!val || positions.some(p => p.name === val)) return;
+      const newPositions = [...positions, { name: val, callIcon: "📞", postCallIcon: "🌙" }];
       await saveCallPositions(newPositions); positions = newPositions; rebuild(newPositions); posIn.value = ""; showToast(`${val} added`);
     }
     posIn.addEventListener("keydown", e => { if (e.key === "Enter") addPosition(); });
@@ -3128,7 +3184,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     if (!positions.length) list.appendChild(emptyMsg);
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "On-Call Positions"),
-      el("div", { class: "admin-section-sub" }, "Define call positions (e.g. First Call, OB Call). Staff can assign providers nightly from the board."),
+      el("div", { class: "admin-section-sub" }, "Define call positions (e.g. First Call, OB Call). Tap Edit to customize the Tonight and Post-call icons, or set to None."),
       list,
       el("div", { class: "admin-add-row" }, posIn, el("button", { class: "btn-primary", onClick: addPosition }, "Add")),
     );
