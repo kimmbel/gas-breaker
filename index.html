@@ -724,10 +724,10 @@ async function savePostCallAssignment(positionIdx, providerName) {
 }
 
 async function maybeAutoPopulatePostCall() {
-  // After 6am: if _postcall_ is empty/missing and yesterday's _call_ has data,
-  // copy it to today's _postcall_ automatically.
+  // If _postcall_ is empty/missing and yesterday's _call_ has data, copy it over.
+  // No hour gate — the midnight auto-reload fires at hour 0, so gating on 6am
+  // would prevent post-call from ever populating on page load.
   const now = new Date();
-  if (now.getHours() < 6) return;
   if (Object.keys(getPostCallAssignments()).length) return;
 
   const yesterday = new Date(now);
@@ -1654,8 +1654,12 @@ function buildEodChip() {
         });
 
         const providerName = room.provider || "";
+        const providerNote = providerName ? getProviderNote(providerName) : null;
         p.appendChild(el("div", { class: "eod-row" },
-          el("div", { class: "eod-room-label", title: loc }, loc + (providerName ? " — " + providerName : "")),
+          el("div", { class: "eod-room-label", title: loc },
+            loc + (providerName ? " — " + providerName : ""),
+            providerNote ? el("span", { class: "display-note-badge note-" + providerNote.color, style: { fontSize: "0.75em", marginLeft: "5px", verticalAlign: "middle" } }, providerNote.text) : null
+          ),
           el("div", { class: "eod-cb-cell" }, cbOk),
           el("div", { class: "eod-cb-cell" }, cbLate),
         ));
