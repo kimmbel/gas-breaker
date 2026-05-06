@@ -108,7 +108,8 @@
     .eod-col-headers { display: grid; grid-template-columns: 1fr 58px 58px; gap: 4px; padding: 4px 14px 6px; border-bottom: 1px solid #f1ede8; margin-bottom: 2px; }
     .eod-col-header { font-size: 10px; font-weight: 800; color: #a39688; text-align: center; letter-spacing: 0.04em; text-transform: uppercase; }
     .eod-row { display: grid; grid-template-columns: 1fr 58px 58px; gap: 4px; align-items: center; padding: 4px 14px; min-height: 32px; }
-    .eod-room-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .eod-room-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 0; display: flex; align-items: center; gap: 5px; }
+    .eod-room-label .eod-room-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
     .eod-cb-cell { display: flex; justify-content: center; }
     .eod-cb { width: 18px; height: 18px; cursor: pointer; }
     .eod-cb.ok   { accent-color: #16a34a; }
@@ -1656,9 +1657,9 @@ function buildEodChip() {
         const providerName = room.provider || "";
         const providerNote = providerName ? getProviderNote(providerName) : null;
         p.appendChild(el("div", { class: "eod-row" },
-          el("div", { class: "eod-room-label", title: loc },
-            loc + (providerName ? " — " + providerName : ""),
-            providerNote ? el("span", { class: "display-note-badge note-" + providerNote.color, style: { fontSize: "0.75em", marginLeft: "5px", verticalAlign: "middle" } }, providerNote.text) : null
+          el("div", { class: "eod-room-label", title: loc + (providerName ? " — " + providerName : "") },
+            el("span", { class: "eod-room-text" }, loc + (providerName ? " — " + providerName : "")),
+            providerNote ? el("span", { class: "display-note-badge note-" + providerNote.color, style: { fontSize: "0.75em", flexShrink: "0" } }, providerNote.text) : null
           ),
           el("div", { class: "eod-cb-cell" }, cbOk),
           el("div", { class: "eod-cb-cell" }, cbLate),
