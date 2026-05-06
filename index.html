@@ -2465,7 +2465,8 @@ function patchDisplay() {
 
 // ─── Dept admin prompt (display board entry point) ───────────────────────────
 async function showDeptAdminPrompt() {
-  const stored = await getDeptAdminPasscode(session.deptCode);
+  let stored = null;
+  try { stored = await getDeptAdminPasscode(session.deptCode); } catch (e) { /* rules not yet deployed — treat as unset */ }
   if (!stored) { renderAdminPage(session.deptCode, true); return; }
 
   const overlay   = el("div", { class: "confirm-overlay" });
