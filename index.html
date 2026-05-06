@@ -2464,43 +2464,50 @@ function patchDisplay() {
 }
 
 // ─── Dept admin prompt (display board entry point) ───────────────────────────
-async function showDeptAdminPrompt() {
-  let stored = null;
-  try { stored = await getDeptAdminPasscode(session.deptCode); } catch (e) { /* rules not yet deployed — treat as unset */ }
-  if (!stored) { renderAdminPage(session.deptCode, true); return; }
+// Passcode is stored in localStorage — device-specific, no Firebase rules needed.
+function showDeptAdminPrompt() {
+  const storageKey = `gbadmin_${session.deptCode}`;
+  const stored     = localStorage.getItem(storageKey);
+  const isFirst    = !stored;
 
-  const overlay   = el("div", { class: "confirm-overlay" });
-  const passIn    = el("input", { class: "text-input", type: "password", placeholder: "Admin passcode", autocomplete: "off", style: { marginBottom: "8px", width: "100%", boxSizing: "border-box" } });
-  const statusMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", minHeight: "16px", marginBottom: "6px" } });
-  const submitBtn = el("button", { class: "btn-primary", style: { flex: "1", padding: "10px" } }, "Enter");
-  const cancelBtn = el("button", { class: "btn-ghost",   style: { flex: "1" } }, "Cancel");
+  const overlay    = el("div", { class: "confirm-overlay" });
+  const inputStyle = { marginBottom: "8px", width: "100%", boxSizing: "border-box" };
+  const passIn1    = el("input", { class: "text-input", type: "password", placeholder: isFirst ? "New passcode (min 4 chars)" : "Admin passcode", autocomplete: "off", style: inputStyle });
+  const passIn2    = isFirst ? el("input", { class: "text-input", type: "password", placeholder: "Confirm passcode", autocomplete: "off", style: inputStyle }) : null;
+  const statusMsg  = el("div", { style: { fontSize: "12px", color: "#dc2626", minHeight: "16px", marginBottom: "6px" } });
+  const submitBtn  = el("button", { class: "btn-primary", style: { flex: "1", padding: "10px" } }, isFirst ? "Set Passcode" : "Enter");
+  const cancelBtn  = el("button", { class: "btn-ghost",   style: { flex: "1" } }, "Cancel");
 
-  async function attempt() {
-    const entered = passIn.value.trim();
-    if (!entered) { statusMsg.textContent = "Enter a passcode."; return; }
-    submitBtn.disabled = true; submitBtn.textContent = "Checking…";
-    if (entered.toUpperCase() === stored.toUpperCase()) {
+  function attempt() {
+    const p1 = passIn1.value.trim();
+    if (isFirst) {
+      const p2 = passIn2.value.trim();
+      if (p1.length < 4)  { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
+      if (p1 !== p2)       { statusMsg.textContent = "Passcodes do not match."; return; }
+      localStorage.setItem(storageKey, p1);
       overlay.remove();
       renderAdminPage(session.deptCode, true);
     } else {
-      statusMsg.textContent = "Incorrect passcode.";
-      submitBtn.disabled = false; submitBtn.textContent = "Enter";
-      passIn.value = ""; passIn.focus();
+      if (!p1)             { statusMsg.textContent = "Enter your passcode."; return; }
+      if (p1 !== stored)   { statusMsg.textContent = "Incorrect passcode."; passIn1.value = ""; passIn1.focus(); return; }
+      overlay.remove();
+      renderAdminPage(session.deptCode, true);
     }
   }
 
+  passIn1.addEventListener("keydown", e => { if (e.key === "Enter") { isFirst ? passIn2.focus() : attempt(); } });
+  if (passIn2) passIn2.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
   submitBtn.addEventListener("click", attempt);
   cancelBtn.addEventListener("click", () => overlay.remove());
-  passIn.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
 
   overlay.appendChild(el("div", { class: "confirm-box" },
-    el("div", { class: "confirm-title" }, "Admin Access"),
-    el("div", { class: "confirm-msg" }, session.deptName + " · Admin Panel"),
-    passIn, statusMsg,
+    el("div", { class: "confirm-title" }, isFirst ? "Create Admin Passcode" : "Admin Access"),
+    el("div", { class: "confirm-msg" }, isFirst ? "Set a passcode to secure admin access from this display board." : session.deptName + " · Admin Panel"),
+    passIn1, passIn2, statusMsg,
     el("div", { class: "btn-row" }, submitBtn, cancelBtn),
   ));
   document.body.appendChild(overlay);
-  setTimeout(() => passIn.focus(), 50);
+  setTimeout(() => passIn1.focus(), 50);
 }
 
 // ─── Render: Coordinator display ──────────────────────────────────────────────
@@ -2778,6 +2785,7 @@ async function loadConfig(code) {
 // ─── Admin page ───────────────────────────────────────────────────────────────
 function renderAdminPage(deptCode, fromDisplay = false) {
   const isDept = !!deptCode;
+  document.body.classList.remove("display-mode"); // allow normal scroll in admin
   const app = document.getElementById("app");
   app.innerHTML = "";
 
@@ -3255,37 +3263,34 @@ function renderAdminPage(deptCode, fromDisplay = false) {
   ));
 
   function buildDeptAdminPasscodeSection() {
-    const newPassIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode (min 4 chars)", style: { flex: "1" } });
-    const confirmIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex: "1" } });
-    const statusMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", marginTop: "4px", minHeight: "16px" } });
+    const storageKey = `gbadmin_${session.deptCode}`;
+    const isSet      = !!localStorage.getItem(storageKey);
+    const newPassIn  = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode (min 4 chars)", style: { flex: "1" } });
+    const confirmIn  = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex: "1" } });
+    const statusMsg  = el("div", { style: { fontSize: "12px", color: "#dc2626", marginTop: "4px", minHeight: "16px" } });
 
-    async function doChange() {
+    function doChange() {
       const np = newPassIn.value.trim();
       const cp = confirmIn.value.trim();
       if (!np || np.length < 4) { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
       if (np !== cp)             { statusMsg.textContent = "Passcodes do not match."; return; }
-      statusMsg.textContent = "";
-      try {
-        await saveDeptAdminPasscode(session.deptCode, np);
-        newPassIn.value = ""; confirmIn.value = "";
-        showToast("Admin passcode updated ✓");
-      } catch (err) {
-        statusMsg.textContent = "Error: " + (err.message || "Could not update.");
-      }
+      localStorage.setItem(storageKey, np);
+      newPassIn.value = ""; confirmIn.value = "";
+      showToast("Admin passcode updated ✓");
     }
     confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
 
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Display Board Admin Passcode"),
-      el("div", { class: "admin-section-sub" }, "Set the passcode required to access this page from the display board. If no passcode is set, the Admin button grants open access."),
+      el("div", { class: "admin-section-sub" }, isSet ? "A passcode is currently set. Enter a new one below to change it." : "No passcode set — the Admin button currently grants open access from the display board."),
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
-      el("div", { style: { marginTop: "8px" } },
+      isSet ? el("div", { style: { marginTop: "8px" } },
         el("button", { class: "btn-warn", onClick: () => showConfirm(
           "Remove Admin Passcode",
           "This will allow anyone at the display board to open Admin without a passcode. Continue?",
-          async () => { await saveDeptAdminPasscode(session.deptCode, null); showToast("Admin passcode removed"); }
+          () => { localStorage.removeItem(storageKey); showToast("Admin passcode removed"); }
         )}, "Remove Passcode"),
-      ),
+      ) : null,
       statusMsg,
     );
   }
