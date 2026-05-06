@@ -6,11 +6,19 @@
     },
     "config": {
       ".read": "auth != null",
-      ".write": "auth.token.email === 'admin@gasbreaker.app'"
+      "$code": {
+        ".write": "auth.token.email === 'admin@gasbreaker.app' || auth.token.email.toLowerCase() === ($code.toLowerCase() + '@gasbreaker.app')"
+      }
     },
     "departments": {
       ".read": "auth != null",
       ".write": "auth.token.email === 'admin@gasbreaker.app'"
+    },
+    "deptAdmin": {
+      "$code": {
+        ".read": "auth != null && (auth.token.email === 'admin@gasbreaker.app' || auth.token.email.toLowerCase() === ($code.toLowerCase() + '@gasbreaker.app'))",
+        ".write": "auth != null && (auth.token.email === 'admin@gasbreaker.app' || auth.token.email.toLowerCase() === ($code.toLowerCase() + '@gasbreaker.app'))"
+      }
     }
   }
 }

@@ -449,9 +449,18 @@ let unsubDepts  = null;
 
 // ─── Firebase refs ────────────────────────────────────────────────────────────
 const tsDay      = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; };
-const boardRef   = (code) => ref(db, `boards/${code}/${tsDay()}`);
-const configRef  = (code) => ref(db, `config/${code}`);
-const deptsRef   = ()     => ref(db, `departments`);
+const boardRef      = (code) => ref(db, `boards/${code}/${tsDay()}`);
+const configRef     = (code) => ref(db, `config/${code}`);
+const deptsRef      = ()     => ref(db, `departments`);
+const deptAdminRef  = (code) => ref(db, `deptAdmin/${code}/passcode`);
+
+async function getDeptAdminPasscode(code) {
+  const snap = await get(deptAdminRef(code));
+  return snap.val();
+}
+async function saveDeptAdminPasscode(code, passcode) {
+  await set(deptAdminRef(code), passcode || null);
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function rosterMatches(name, query) {
@@ -2454,6 +2463,45 @@ function patchDisplay() {
   checkRequestNotifications();
 }
 
+// ─── Dept admin prompt (display board entry point) ───────────────────────────
+async function showDeptAdminPrompt() {
+  const stored = await getDeptAdminPasscode(session.deptCode);
+  if (!stored) { renderAdminPage(session.deptCode, true); return; }
+
+  const overlay   = el("div", { class: "confirm-overlay" });
+  const passIn    = el("input", { class: "text-input", type: "password", placeholder: "Admin passcode", autocomplete: "off", style: { marginBottom: "8px", width: "100%", boxSizing: "border-box" } });
+  const statusMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", minHeight: "16px", marginBottom: "6px" } });
+  const submitBtn = el("button", { class: "btn-primary", style: { flex: "1", padding: "10px" } }, "Enter");
+  const cancelBtn = el("button", { class: "btn-ghost",   style: { flex: "1" } }, "Cancel");
+
+  async function attempt() {
+    const entered = passIn.value.trim();
+    if (!entered) { statusMsg.textContent = "Enter a passcode."; return; }
+    submitBtn.disabled = true; submitBtn.textContent = "Checking…";
+    if (entered.toUpperCase() === stored.toUpperCase()) {
+      overlay.remove();
+      renderAdminPage(session.deptCode, true);
+    } else {
+      statusMsg.textContent = "Incorrect passcode.";
+      submitBtn.disabled = false; submitBtn.textContent = "Enter";
+      passIn.value = ""; passIn.focus();
+    }
+  }
+
+  submitBtn.addEventListener("click", attempt);
+  cancelBtn.addEventListener("click", () => overlay.remove());
+  passIn.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
+
+  overlay.appendChild(el("div", { class: "confirm-box" },
+    el("div", { class: "confirm-title" }, "Admin Access"),
+    el("div", { class: "confirm-msg" }, session.deptName + " · Admin Panel"),
+    passIn, statusMsg,
+    el("div", { class: "btn-row" }, submitBtn, cancelBtn),
+  ));
+  document.body.appendChild(overlay);
+  setTimeout(() => passIn.focus(), 50);
+}
+
 // ─── Render: Coordinator display ──────────────────────────────────────────────
 function renderDisplay() {
   isDisplayMode = true;
@@ -2519,7 +2567,12 @@ function renderDisplay() {
       }).concat(dCallChipEl ? [dCallChipEl] : [])
        .concat([buildEodChip()])
        .concat([(() => {
-         const btn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Change Display");
+         const adminBtn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Admin");
+         adminBtn.addEventListener("click", showDeptAdminPrompt);
+         return adminBtn;
+       })()])
+       .concat([(() => {
+         const btn = el("div", { class: "chip", style: { cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Change Display");
          btn.addEventListener("click", () => { isDisplayMode = false; renderBoard(); });
          return btn;
        })()])
@@ -2722,7 +2775,7 @@ async function loadConfig(code) {
 }
 
 // ─── Admin page ───────────────────────────────────────────────────────────────
-function renderAdminPage(deptCode) {
+function renderAdminPage(deptCode, fromDisplay = false) {
   const isDept = !!deptCode;
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -3182,7 +3235,7 @@ function renderAdminPage(deptCode) {
   app.appendChild(el("div", {},
     el("header", { class: "header" },
       el("div", { class: "header-inner" },
-        el("button", { class: "admin-back-btn", onClick: () => isDept ? renderAdminDeptSelect() : renderCodeScreen() }, isDept ? "← Departments" : "← Back"),
+        el("button", { class: "admin-back-btn", onClick: () => fromDisplay ? renderDisplay() : (isDept ? renderAdminDeptSelect() : renderCodeScreen()) }, fromDisplay ? "← Display Board" : (isDept ? "← Departments" : "← Back")),
         el("div", { class: "header-right" },
           el("span", { class: "dept-name" }, isDept ? `Admin · ${session.deptName}` : "Admin · Departments"),
         ),
@@ -3196,8 +3249,45 @@ function renderAdminPage(deptCode) {
       isDept ? buildCallPositionsSection() : null,
       isDept ? buildRosterSection()        : null,
       isDept ? buildClearSection()         : null,
+      fromDisplay ? buildDeptAdminPasscodeSection() : null,
     ),
   ));
+
+  function buildDeptAdminPasscodeSection() {
+    const newPassIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode (min 4 chars)", style: { flex: "1" } });
+    const confirmIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex: "1" } });
+    const statusMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", marginTop: "4px", minHeight: "16px" } });
+
+    async function doChange() {
+      const np = newPassIn.value.trim();
+      const cp = confirmIn.value.trim();
+      if (!np || np.length < 4) { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
+      if (np !== cp)             { statusMsg.textContent = "Passcodes do not match."; return; }
+      statusMsg.textContent = "";
+      try {
+        await saveDeptAdminPasscode(session.deptCode, np);
+        newPassIn.value = ""; confirmIn.value = "";
+        showToast("Admin passcode updated ✓");
+      } catch (err) {
+        statusMsg.textContent = "Error: " + (err.message || "Could not update.");
+      }
+    }
+    confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Display Board Admin Passcode"),
+      el("div", { class: "admin-section-sub" }, "Set the passcode required to access this page from the display board. If no passcode is set, the Admin button grants open access."),
+      el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
+      el("div", { style: { marginTop: "8px" } },
+        el("button", { class: "btn-warn", onClick: () => showConfirm(
+          "Remove Admin Passcode",
+          "This will allow anyone at the display board to open Admin without a passcode. Continue?",
+          async () => { await saveDeptAdminPasscode(session.deptCode, null); showToast("Admin passcode removed"); }
+        )}, "Remove Passcode"),
+      ),
+      statusMsg,
+    );
+  }
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
