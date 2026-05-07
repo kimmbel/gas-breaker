@@ -2822,7 +2822,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         row.setAttribute("draggable", "true");
         const handle = el("span", { class: "drag-handle" }, "⠿");
         row.appendChild(handle);
-        const content = renderItem(item, arr, () => rebuild(arr));
+        const content = renderItem(item, arr, (a) => rebuild(a ?? arr));
         row.appendChild(content);
         row.addEventListener("dragstart", e => { dragSrc = i; setTimeout(() => row.classList.add("dragging"), 0); e.dataTransfer.effectAllowed = "move"; });
         row.addEventListener("dragend",   () => row.classList.remove("dragging"));
