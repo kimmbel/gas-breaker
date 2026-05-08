@@ -953,25 +953,27 @@ async function assignProvider(loc, name) {
 
   // Who is currently in the target room (may be displaced)?
   const targetRoom = boardData[targetId] || {};
-  const displacedProvider = (targetRoom.provider && targetRoom.provider !== name)
+  const displacedProvider  = (targetRoom.provider && targetRoom.provider !== name)
     ? targetRoom.provider : null;
+  const displacedSupervisor = targetRoom.supervisor || null; // travels with displaced provider
 
   // Where is the incoming provider currently (may need to be cleared or swapped)?
   const existingEntry = Object.entries(boardData).find(
     ([id, room]) => room.provider === name && id !== targetId
       && !id.startsWith("nb_") && !id.startsWith("_hist_")
   );
-  const incomingOldId = existingEntry ? existingEntry[0] : null;
+  const incomingOldId       = existingEntry ? existingEntry[0] : null;
+  const incomingSupervisor  = incomingOldId ? ((boardData[incomingOldId] || {}).supervisor || null) : null;
 
   if (displacedProvider && incomingOldId) {
-    // SWAP: move displaced provider into the incoming provider's old room
+    // SWAP: displaced provider goes to incoming's old room, keeping their supervisor
     const displacedBreaks = getProviderHistory(displacedProvider);
     const swapRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const swapSnap = await get(swapRef);
     await set(swapRef, {
       ...(swapSnap.val()||{}),
       provider: displacedProvider,
-      supervisor: null,
+      supervisor: displacedSupervisor,
       breaks: displacedBreaks,
       hold: false, holdAt: null, holdDuration: null, requesting: false,
     });
@@ -985,12 +987,13 @@ async function assignProvider(loc, name) {
     // (their breaks are already saved in history, they can be reassigned)
   }
 
-  // Write the target room with the new provider (clear supervisor — new provider may have different role)
+  // Supervisor travels with the incoming provider from their previous room.
+  // If they have no previous room (fresh assignment), supervisor starts null.
   await writeRoom(targetId, r => ({
     ...r,
     location: loc,
     provider: name,
-    supervisor: null,
+    supervisor: incomingSupervisor,
     breaks: restoredBreaks,
     hold: false, holdAt: null, holdDuration: null, requesting: false,
   }));
@@ -1112,7 +1115,12 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
         // Optimistic local update so coordinator display refreshes instantly
         const rid = roomId(loc);
         const restoredBreaks = getProviderHistory(name);
-        boardData[rid] = { ...(boardData[rid] || {}), provider: name, supervisor: null, breaks: restoredBreaks, hold: false, holdAt: null, holdDuration: null, requesting: false };
+        // Preserve the incoming provider's supervisor (they travel together)
+        const incomingEntry = Object.entries(boardData).find(
+          ([id, room]) => room.provider === name && id !== rid && !id.startsWith("nb_") && !id.startsWith("_hist_")
+        );
+        const incomingSup = incomingEntry ? (incomingEntry[1].supervisor || null) : null;
+        boardData[rid] = { ...(boardData[rid] || {}), provider: name, supervisor: incomingSup, breaks: restoredBreaks, hold: false, holdAt: null, holdDuration: null, requesting: false };
         if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
         await assignProvider(loc, name);
         onDone();
@@ -1985,7 +1993,8 @@ function buildCallChip() {
             dd.appendChild(clearOpt);
           }
 
-          matches.slice(0, 12).forEach(name => {
+          matches.slice(0, 12).forEach(entry => {
+            const name = entry.name;
             const opt = el("div", { class: "call-dropdown-opt" }, name);
             opt.addEventListener("mousedown", async ev => {
               ev.preventDefault();
@@ -2053,8 +2062,8 @@ function buildCallChip() {
             if (hiIdx >= 0 && opts[hiIdx]) {
               selected = opts[hiIdx].textContent.trim();
             } else if (input.value.trim()) {
-              const m = roster.filter(n => rosterMatches(n, input.value.trim()));
-              if (m.length) selected = m[0];
+              const m = roster.filter(e => rosterMatches(e, input.value.trim()));
+              if (m.length) selected = m[0].name;
             }
             if (selected) {
               if (!boardData[boardKey]) boardData[boardKey] = {};
@@ -2480,21 +2489,22 @@ function patchDisplay() {
     if (!card) return;
 
     // Detect structural change: provider added/removed/swapped, or supervisor changed
-    const domNameBtn   = card.querySelector(".provider-name-btn");
-    const domIsEditing = !!card.querySelector(".provider-input-wrap, .supervisor-input-wrap");
-    // When editing, nameBtn is absent — treat card as occupied (non-null provider)
-    // so a clear/change still triggers a rebuild rather than matching null===null
-    const domProvider = domIsEditing
+    const domNameBtn         = card.querySelector(".provider-name-btn");
+    // Provider picker removes the name button from the DOM — use sentinel to avoid null===null match.
+    // Supervisor picker leaves the name button in place, so no sentinel needed there.
+    const domProviderEditing = !!card.querySelector(".provider-input-wrap");
+    const domAnyEditing      = domProviderEditing || !!card.querySelector(".supervisor-input-wrap");
+    const domProvider = domProviderEditing
       ? "__editing__"
       : (domNameBtn && !domNameBtn.classList.contains("empty")
           ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null);
     const supervisor = room.supervisor || null;
     const domSupBtn  = card.querySelector("[data-role='supervisor']");
-    const domSupervisor = domSupBtn ? (domSupBtn.getAttribute("data-supervisor") || null) || null : null;
+    const domSupervisor = domSupBtn ? (domSupBtn.getAttribute("data-supervisor") || null) : null;
     const needsSupervisor = provider && getRosterRole(provider) !== "attending";
     // Expected DOM supervisor: only meaningful when card needs a supervisor row
     const expectedDomSupervisor = needsSupervisor ? supervisor : null;
-    if (domProvider !== provider || (!domIsEditing && domSupervisor !== expectedDomSupervisor)) {
+    if (domProvider !== provider || (!domAnyEditing && domSupervisor !== expectedDomSupervisor)) {
       // Provider or supervisor changed — rebuild just this card in-place
       const tabIdx = card.getAttribute("data-tab-idx");
       const newCard = renderCard(loc, true, tabIdx !== null ? parseInt(tabIdx) : null);
@@ -2665,13 +2675,42 @@ function patchDisplay() {
 }
 
 // ─── Dept admin prompt (display board entry point) ───────────────────────────
-// Passcode is stored in localStorage — device-specific, no Firebase rules needed.
-function showDeptAdminPrompt() {
-  const storageKey = `gbadmin_${session.deptCode}`;
-  const stored     = localStorage.getItem(storageKey);
-  const isFirst    = !stored;
+// Passcode is stored in Firebase under deptAdmin/{code}/passcode.
+async function showDeptAdminPrompt() {
+  const overlay = el("div", { class: "confirm-overlay" });
+  const box     = el("div", { class: "confirm-box" },
+    el("div", { class: "confirm-title" }, "Admin Access"),
+    el("div", { class: "confirm-msg", style: { color: "#9c8a7e" } }, "Loading…"),
+  );
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 
-  const overlay    = el("div", { class: "confirm-overlay" });
+  // Load from Firebase; migrate localStorage value on first access
+  let stored;
+  try {
+    stored = await getDeptAdminPasscode(session.deptCode);
+    if (!stored) {
+      const local = localStorage.getItem(`gbadmin_${session.deptCode}`);
+      if (local) {
+        // Migrate — if write fails on a flaky connection, still allow access with local value
+        try {
+          await saveDeptAdminPasscode(session.deptCode, local);
+          localStorage.removeItem(`gbadmin_${session.deptCode}`);
+        } catch { /* migration write failed — continue with local value */ }
+        stored = local;
+      }
+    }
+  } catch(e) {
+    box.innerHTML = "";
+    box.append(
+      el("div", { class: "confirm-title" }, "Error"),
+      el("div", { class: "confirm-msg" }, "Could not load admin settings. Check your connection."),
+      el("div", { class: "btn-row" }, el("button", { class: "btn-ghost", style: { flex: "1" }, onClick: () => overlay.remove() }, "Close")),
+    );
+    return;
+  }
+
+  const isFirst    = !stored;
   const inputStyle = { marginBottom: "8px", width: "100%", boxSizing: "border-box" };
   const passIn1    = el("input", { class: "text-input", type: "password", placeholder: isFirst ? "New passcode (min 4 chars)" : "Admin passcode", autocomplete: "off", style: inputStyle });
   const passIn2    = isFirst ? el("input", { class: "text-input", type: "password", placeholder: "Confirm passcode", autocomplete: "off", style: inputStyle }) : null;
@@ -2679,35 +2718,37 @@ function showDeptAdminPrompt() {
   const submitBtn  = el("button", { class: "btn-primary", style: { flex: "1", padding: "10px" } }, isFirst ? "Set Passcode" : "Enter");
   const cancelBtn  = el("button", { class: "btn-ghost",   style: { flex: "1" } }, "Cancel");
 
-  function attempt() {
+  async function attempt() {
     const p1 = passIn1.value.trim();
     if (isFirst) {
       const p2 = passIn2.value.trim();
-      if (p1.length < 4)  { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
-      if (p1 !== p2)       { statusMsg.textContent = "Passcodes do not match."; return; }
-      localStorage.setItem(storageKey, p1);
-      overlay.remove();
-      renderAdminPage(session.deptCode, true);
+      if (p1.length < 4) { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
+      if (p1 !== p2)      { statusMsg.textContent = "Passcodes do not match."; return; }
+      try {
+        await saveDeptAdminPasscode(session.deptCode, p1);
+        overlay.remove();
+        renderAdminPage(session.deptCode, true);
+      } catch(err) { statusMsg.textContent = "Error saving passcode. Check your connection."; }
     } else {
-      if (!p1)             { statusMsg.textContent = "Enter your passcode."; return; }
-      if (p1 !== stored)   { statusMsg.textContent = "Incorrect passcode."; passIn1.value = ""; passIn1.focus(); return; }
+      if (!p1)           { statusMsg.textContent = "Enter your passcode."; return; }
+      if (p1 !== stored) { statusMsg.textContent = "Incorrect passcode."; passIn1.value = ""; passIn1.focus(); return; }
       overlay.remove();
       renderAdminPage(session.deptCode, true);
     }
   }
 
-  passIn1.addEventListener("keydown", e => { if (e.key === "Enter") { isFirst ? passIn2.focus() : attempt(); } });
+  passIn1.addEventListener("keydown", e => { if (e.key === "Enter") { isFirst ? passIn2?.focus() : attempt(); } });
   if (passIn2) passIn2.addEventListener("keydown", e => { if (e.key === "Enter") attempt(); });
   submitBtn.addEventListener("click", attempt);
   cancelBtn.addEventListener("click", () => overlay.remove());
 
-  overlay.appendChild(el("div", { class: "confirm-box" },
+  box.innerHTML = "";
+  box.append(
     el("div", { class: "confirm-title" }, isFirst ? "Create Admin Passcode" : "Admin Access"),
     el("div", { class: "confirm-msg" }, isFirst ? "Set a passcode to secure admin access from this display board." : session.deptName + " · Admin Panel"),
     passIn1, passIn2, statusMsg,
     el("div", { class: "btn-row" }, submitBtn, cancelBtn),
-  ));
-  document.body.appendChild(overlay);
+  );
   setTimeout(() => passIn1.focus(), 50);
 }
 
@@ -3499,34 +3540,64 @@ function renderAdminPage(deptCode, fromDisplay = false) {
   ));
 
   function buildDeptAdminPasscodeSection() {
-    const storageKey = `gbadmin_${session.deptCode}`;
-    const isSet      = !!localStorage.getItem(storageKey);
-    const newPassIn  = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode (min 4 chars)", style: { flex: "1" } });
-    const confirmIn  = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex: "1" } });
-    const statusMsg  = el("div", { style: { fontSize: "12px", color: "#dc2626", marginTop: "4px", minHeight: "16px" } });
+    const newPassIn = el("input", { class: "admin-add-input", type: "text", placeholder: "New admin passcode (min 4 chars)", style: { flex: "1" } });
+    const confirmIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Confirm passcode", style: { flex: "1" } });
+    const statusMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", marginTop: "4px", minHeight: "16px" } });
+    const subText   = el("div", { class: "admin-section-sub" }, "Loading…");
+    const removeWrap = el("div", { style: { marginTop: "8px" } });
 
-    function doChange() {
+    // Load current state from Firebase
+    getDeptAdminPasscode(session.deptCode).then(existing => {
+      // Migrate localStorage value if present
+      if (!existing) {
+        const local = localStorage.getItem(`gbadmin_${session.deptCode}`);
+        if (local) {
+          saveDeptAdminPasscode(session.deptCode, local).catch(() => {});
+          localStorage.removeItem(`gbadmin_${session.deptCode}`);
+          existing = local;
+        }
+      }
+      const isSet = !!existing;
+      subText.textContent = isSet
+        ? "A passcode is currently set. Enter a new one below to change it."
+        : "No passcode set — the Admin button currently grants open access from the display board.";
+      if (isSet) {
+        const removeBtn = el("button", { class: "btn-warn", onClick: () => showConfirm(
+          "Remove Admin Passcode",
+          "This will allow anyone at the display board to open Admin without a passcode. Continue?",
+          async () => {
+            try {
+              await saveDeptAdminPasscode(session.deptCode, null);
+              removeWrap.innerHTML = "";
+              subText.textContent = "No passcode set — the Admin button currently grants open access from the display board.";
+              showToast("Admin passcode removed");
+            } catch(err) { showToast("Error removing passcode"); }
+          }
+        )}, "Remove Passcode");
+        removeWrap.appendChild(removeBtn);
+      }
+    }).catch(() => { subText.textContent = "Could not load passcode status."; });
+
+    async function doChange() {
       const np = newPassIn.value.trim();
       const cp = confirmIn.value.trim();
       if (!np || np.length < 4) { statusMsg.textContent = "Passcode must be at least 4 characters."; return; }
       if (np !== cp)             { statusMsg.textContent = "Passcodes do not match."; return; }
-      localStorage.setItem(storageKey, np);
-      newPassIn.value = ""; confirmIn.value = "";
-      showToast("Admin passcode updated ✓");
+      statusMsg.textContent = "";
+      try {
+        await saveDeptAdminPasscode(session.deptCode, np);
+        newPassIn.value = ""; confirmIn.value = "";
+        subText.textContent = "A passcode is currently set. Enter a new one below to change it.";
+        showToast("Admin passcode updated ✓");
+      } catch(err) { statusMsg.textContent = "Error saving passcode. Check your connection."; }
     }
     confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
 
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Display Board Admin Passcode"),
-      el("div", { class: "admin-section-sub" }, isSet ? "A passcode is currently set. Enter a new one below to change it." : "No passcode set — the Admin button currently grants open access from the display board."),
+      subText,
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
-      isSet ? el("div", { style: { marginTop: "8px" } },
-        el("button", { class: "btn-warn", onClick: () => showConfirm(
-          "Remove Admin Passcode",
-          "This will allow anyone at the display board to open Admin without a passcode. Continue?",
-          () => { localStorage.removeItem(storageKey); showToast("Admin passcode removed"); }
-        )}, "Remove Passcode"),
-      ) : null,
+      removeWrap,
       statusMsg,
     );
   }
