@@ -91,6 +91,12 @@
     .provider-input-wrap { position: relative; margin-bottom: 7px; }
     .provider-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
     .roster-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto; margin-top: 2px; }
+    .supervisor-row { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+    .supervisor-label { font-size: 10px; font-weight: 700; color: #a39688; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+    .supervisor-name-btn { background: none; border: none; padding: 0; font-size: 12px; font-weight: 600; color: #7c6c62; text-align: left; cursor: pointer; line-height: 1.2; }
+    .supervisor-name-btn.empty { color: #c4b8ad; font-style: italic; }
+    .supervisor-input-wrap { position: relative; margin-bottom: 4px; }
+    .role-select { font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 1px solid #c8bdb5; background: #f9f5f2; color: #4a3728; cursor: pointer; font-family: inherit; }
 
     /* ── On-Call panel ── */
     .call-panel-wrap { position: relative; }
@@ -322,6 +328,9 @@
     .or-card.display-card.requesting { background: #063b33; border-color: #10b981; }
 
     .display-card .room-label { font-size: 1.2em; font-weight: 900; color: #d4cfc9; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .display-card .supervisor-label { color: #6a5c54; font-size: 0.75em; }
+    .display-card .supervisor-name-btn { font-size: 1.0em; font-weight: 700; color: #b8a99e; }
+    .display-card .supervisor-name-btn.empty { color: #4a4240; font-style: italic; }
     .display-card .provider-name-btn {
       font-size: 1.4em; font-weight: 900; color: #f5f0eb; margin-bottom: 0.4em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -463,13 +472,25 @@ async function saveDeptAdminPasscode(code, passcode) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function rosterMatches(name, query) {
+function rosterMatches(entry, query) {
+  const name = typeof entry === "string" ? entry : entry.name;
   if (!query) return true;
   const q = query.toLowerCase(), n = name.toLowerCase();
   if (n.startsWith(q)) return true;
   const ci = n.indexOf(",");
   if (ci !== -1 && n.slice(ci + 1).trimStart().startsWith(q)) return true;
   return false;
+}
+
+function normalizeRosterEntry(p) {
+  if (typeof p === "string") return { name: p, role: "attending" };
+  return { name: p.name || "", role: p.role || "attending" };
+}
+
+function getRosterRole(name) {
+  if (!name) return "attending";
+  const entry = roster.find(e => e.name === name);
+  return entry ? entry.role : "attending";
 }
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
@@ -565,7 +586,7 @@ function subscribeToBoard(deptCode) {
     locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
     noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
-    roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
+    roster         = cfg.roster         ? Object.values(cfg.roster).map(normalizeRosterEntry).sort((a,b) => a.name.localeCompare(b.name)) : [];
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
     // slots, positions, roster) — not for eodConcernTime which patchDisplay handles.
@@ -756,15 +777,28 @@ async function maybeAutoPopulatePostCall() {
   }
 }
 
-async function saveRosterEntry(name) {
-  await push(ref(db, `config/${session.deptCode}/roster`), name);
+async function saveRosterEntry(name, role = "attending") {
+  await push(ref(db, `config/${session.deptCode}/roster`), { name, role });
 }
 
 async function deleteRosterEntry(name) {
   const snap = await get(ref(db, `config/${session.deptCode}/roster`));
   const data = snap.val() || {};
   for (const [k, v] of Object.entries(data)) {
-    if (v === name) { await remove(ref(db, `config/${session.deptCode}/roster/${k}`)); break; }
+    const entryName = typeof v === "string" ? v : v.name;
+    if (entryName === name) { await remove(ref(db, `config/${session.deptCode}/roster/${k}`)); break; }
+  }
+}
+
+async function updateRosterEntryRole(name, role) {
+  const snap = await get(ref(db, `config/${session.deptCode}/roster`));
+  const data = snap.val() || {};
+  for (const [k, v] of Object.entries(data)) {
+    const entryName = typeof v === "string" ? v : v.name;
+    if (entryName === name) {
+      await set(ref(db, `config/${session.deptCode}/roster/${k}`), { name, role });
+      break;
+    }
   }
 }
 
@@ -937,6 +971,7 @@ async function assignProvider(loc, name) {
     await set(swapRef, {
       ...(swapSnap.val()||{}),
       provider: displacedProvider,
+      supervisor: null,
       breaks: displacedBreaks,
       hold: false, holdAt: null, holdDuration: null, requesting: false,
     });
@@ -944,17 +979,18 @@ async function assignProvider(loc, name) {
     // MOVE: just clear the room the provider is leaving
     const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const oldSnap = await get(oldRef);
-    await set(oldRef, { ...(oldSnap.val()||{}), provider: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false });
+    await set(oldRef, { ...(oldSnap.val()||{}), provider: null, supervisor: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false });
   } else if (displacedProvider) {
     // DISPLACE into empty: displaced provider has nowhere to go — just clear target
     // (their breaks are already saved in history, they can be reassigned)
   }
 
-  // Write the target room with the new provider
+  // Write the target room with the new provider (clear supervisor — new provider may have different role)
   await writeRoom(targetId, r => ({
     ...r,
     location: loc,
     provider: name,
+    supervisor: null,
     breaks: restoredBreaks,
     hold: false, holdAt: null, holdDuration: null, requesting: false,
   }));
@@ -962,7 +998,12 @@ async function assignProvider(loc, name) {
 
 async function clearProvider(loc) {
   const id = roomId(loc);
-  await writeRoom(id, () => ({ location: loc, provider: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false }));
+  await writeRoom(id, () => ({ location: loc, provider: null, supervisor: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false }));
+}
+
+async function assignSupervisor(loc, supervisorName) {
+  const id = roomId(loc);
+  await writeRoom(id, r => ({ ...r, supervisor: supervisorName || null }));
 }
 
 async function toggleBreak(loc, breakId) {
@@ -1062,7 +1103,8 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       dropdown.appendChild(clearOpt);
     }
 
-    matches.slice(0, 12).forEach(name => {
+    matches.slice(0, 12).forEach(entry => {
+      const name = entry.name;
       const opt = el("button", { class: "roster-option", type: "button" }, name);
       opt.addEventListener("mousedown", async e => {
         e.preventDefault();
@@ -1070,7 +1112,7 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
         // Optimistic local update so coordinator display refreshes instantly
         const rid = roomId(loc);
         const restoredBreaks = getProviderHistory(name);
-        boardData[rid] = { ...(boardData[rid] || {}), provider: name, breaks: restoredBreaks, hold: false, holdAt: null, holdDuration: null, requesting: false };
+        boardData[rid] = { ...(boardData[rid] || {}), provider: name, supervisor: null, breaks: restoredBreaks, hold: false, holdAt: null, holdDuration: null, requesting: false };
         if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
         await assignProvider(loc, name);
         onDone();
@@ -1153,8 +1195,8 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
       if (highlightedIdx >= 0 && opts[highlightedIdx]) {
         selected = opts[highlightedIdx].textContent.trim();
       } else if (query) {
-        const matches = roster.filter(n => rosterMatches(n, query));
-        if (matches.length > 0) selected = matches[0];
+        const matches = roster.filter(e => rosterMatches(e, query));
+        if (matches.length > 0) selected = matches[0].name;
       }
       if (selected) await assignProvider(loc, selected);
       closeDropdown();
@@ -1165,6 +1207,130 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
         card.classList.add("empty"); card.classList.remove("editing");
       }
       if (onTab) setTimeout(() => onTab(isTab ? e.shiftKey : false), 80);
+    }
+  });
+
+  wrap.appendChild(input);
+  setTimeout(() => { input.focus(); showDropdown(""); }, 30);
+  return wrap;
+}
+
+// ─── Supervisor picker ────────────────────────────────────────────────────────
+function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay = false) {
+  const attendings = roster.filter(e => e.role === "attending");
+  const wrap  = el("div", { class: "supervisor-input-wrap" });
+  const input = el("input", { class: "provider-input", type: "text", value: "", placeholder: "Search attendings...", autocomplete: "off" });
+  let dropdown = null;
+
+  function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } highlightedIdx = -1; }
+
+  function showDropdown(query) {
+    closeDropdown();
+    const matches = query ? attendings.filter(e => rosterMatches(e, query)) : attendings;
+    dropdown = el("div", { class: "roster-dropdown" });
+
+    // Remove supervisor option at top if already assigned
+    if (currentSupervisor) {
+      const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove supervisor");
+      clearOpt.addEventListener("mousedown", async e => {
+        e.preventDefault();
+        closeDropdown();
+        const rid = roomId(loc);
+        if (boardData[rid]) boardData[rid] = { ...boardData[rid], supervisor: null };
+        if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
+        await assignSupervisor(loc, null);
+        onDone();
+      });
+      dropdown.appendChild(clearOpt);
+    }
+
+    matches.slice(0, 12).forEach(entry => {
+      const name = entry.name;
+      const opt = el("button", { class: "roster-option", type: "button" }, name);
+      opt.addEventListener("mousedown", async e => {
+        e.preventDefault();
+        closeDropdown();
+        const rid = roomId(loc);
+        if (boardData[rid]) boardData[rid] = { ...boardData[rid], supervisor: name };
+        if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
+        await assignSupervisor(loc, name);
+        onDone();
+      });
+      dropdown.appendChild(opt);
+    });
+
+    if (!matches.length) {
+      const none = el("div", { style: { padding: "10px 12px", fontSize: "12px", color: "#a39688" } },
+        attendings.length ? "No matches." : "No attendings in roster. Set roles in Admin.");
+      dropdown.appendChild(none);
+    }
+
+    if (isDisplay) {
+      dropdown.style.position = "fixed";
+      dropdown.style.zIndex   = "9999";
+      document.body.appendChild(dropdown);
+      requestAnimationFrame(() => {
+        const rect = wrap.getBoundingClientRect();
+        dropdown.style.left  = rect.left + "px";
+        dropdown.style.top   = (rect.bottom + 2) + "px";
+        dropdown.style.width = rect.width + "px";
+      });
+    } else {
+      wrap.appendChild(dropdown);
+    }
+  }
+
+  input.addEventListener("focus", () => showDropdown(input.value));
+  input.addEventListener("input", () => showDropdown(input.value));
+  input.addEventListener("blur", () => setTimeout(() => {
+    closeDropdown();
+    onDone();
+  }, 150));
+
+  let highlightedIdx = -1;
+
+  function getOptions() {
+    return dropdown ? Array.from(dropdown.querySelectorAll(".roster-option:not(.clear-opt)")) : [];
+  }
+  function setHighlight(idx) {
+    const opts = getOptions();
+    opts.forEach((o, i) => o.classList.toggle("highlighted", i === idx));
+    highlightedIdx = idx;
+    if (opts[idx]) opts[idx].scrollIntoView({ block: "nearest" });
+  }
+
+  input.addEventListener("keydown", async e => {
+    if (e.key === "Escape") { closeDropdown(); onDone(); return; }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!dropdown) showDropdown(input.value);
+      setHighlight(Math.min(highlightedIdx + 1, getOptions().length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight(Math.max(highlightedIdx - 1, 0));
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const query = input.value.trim();
+      const opts = getOptions();
+      let selected = null;
+      if (highlightedIdx >= 0 && opts[highlightedIdx]) {
+        selected = opts[highlightedIdx].textContent.trim();
+      } else if (query) {
+        const matches = attendings.filter(e => rosterMatches(e, query));
+        if (matches.length > 0) selected = matches[0].name;
+      }
+      if (selected) {
+        const rid = roomId(loc);
+        if (boardData[rid]) boardData[rid] = { ...boardData[rid], supervisor: selected };
+        if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
+        await assignSupervisor(loc, selected);
+      }
+      closeDropdown();
+      onDone();
     }
   });
 
@@ -1457,7 +1623,8 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   }
 
   // Provider name / input
-  let editingProvider = false;
+  let editingProvider   = false;
+  let editingSupervisor = false;
 
   function openEdit() {
     if (editingProvider) return;
@@ -1471,6 +1638,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   }
 
   function renderProviderArea() {
+    // Remove old supervisor area if present
+    const existingSup = body.querySelector(".supervisor-row, .supervisor-input-wrap");
+    if (existingSup) existingSup.remove();
     // Remove old provider area if present
     const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
     if (existing) existing.remove();
@@ -1482,33 +1652,58 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         editingProvider = false;
         renderProviderArea();
       }, onTab, isDisplay));
-    } else {
-      const nameLabel = provider
-        ? callStatusPrefix(provider) + provider
-        : "Tap to assign provider";
-      const nameBtn = el("button", {
-        class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
-        onClick: openEdit
-      }, nameLabel);
-      // On mobile, show requesting banner above name
-      if (isReq && provider && !isDisplay) {
-        body.appendChild(el("div", { class: "requesting-banner" }, "🔔 requesting a break"));
-      }
-      body.appendChild(nameBtn);
+      return;
+    }
 
-      // Break pills — only if occupied
-      if (provider) {
-        const pillRow = el("div", { class: "pill-row" });
-        BREAKS.forEach(b => {
-          const done = !!breaks[b.id];
-          const pill = el("button", {
-            class: "pill" + (done ? " done" : ""),
-            onClick: () => toggleBreak(loc, b.id)
-          }, done ? `✓ ${b.label}` : b.label);
-          pillRow.appendChild(pill);
-        });
-        body.appendChild(pillRow);
+    // ── Supervisor row — shown above provider name when frontliner is non-attending ──
+    const supervisor = (boardData[id] || {}).supervisor || null;
+    const needsSupervisor = provider && getRosterRole(provider) !== "attending";
+    if (needsSupervisor) {
+      if (editingSupervisor) {
+        body.appendChild(buildSupervisorPicker(supervisor, loc, card, () => {
+          editingSupervisor = false;
+          renderProviderArea();
+        }, isDisplay));
+      } else {
+        const supRow = el("div", { class: "supervisor-row" },
+          el("span", { class: "supervisor-label" }, "Supervisor"),
+          el("button", {
+            class: "supervisor-name-btn" + (!supervisor ? " empty" : ""),
+            "data-supervisor": supervisor || "",
+            "data-role": "supervisor",
+            onClick: () => { editingSupervisor = true; renderProviderArea(); }
+          }, supervisor || "Tap to assign")
+        );
+        body.appendChild(supRow);
       }
+    }
+
+    // ── Provider name button ──
+    const nameLabel = provider
+      ? callStatusPrefix(provider) + provider
+      : "Tap to assign provider";
+    const nameBtn = el("button", {
+      class: "provider-name-btn" + (!provider ? " empty" : "") + (isReq && isDisplay ? " requesting-name" : ""),
+      onClick: openEdit
+    }, nameLabel);
+    // On mobile, show requesting banner above name
+    if (isReq && provider && !isDisplay) {
+      body.appendChild(el("div", { class: "requesting-banner" }, "🔔 requesting a break"));
+    }
+    body.appendChild(nameBtn);
+
+    // Break pills — only if occupied
+    if (provider) {
+      const pillRow = el("div", { class: "pill-row" });
+      BREAKS.forEach(b => {
+        const done = !!breaks[b.id];
+        const pill = el("button", {
+          class: "pill" + (done ? " done" : ""),
+          onClick: () => toggleBreak(loc, b.id)
+        }, done ? `✓ ${b.label}` : b.label);
+        pillRow.appendChild(pill);
+      });
+      body.appendChild(pillRow);
     }
   }
   renderProviderArea();
@@ -2284,17 +2479,23 @@ function patchDisplay() {
     });
     if (!card) return;
 
-    // Detect structural change: provider added/removed or swapped
-    const domNameBtn  = card.querySelector(".provider-name-btn");
-    const domIsEditing = !!card.querySelector(".provider-input-wrap");
+    // Detect structural change: provider added/removed/swapped, or supervisor changed
+    const domNameBtn   = card.querySelector(".provider-name-btn");
+    const domIsEditing = !!card.querySelector(".provider-input-wrap, .supervisor-input-wrap");
     // When editing, nameBtn is absent — treat card as occupied (non-null provider)
     // so a clear/change still triggers a rebuild rather than matching null===null
     const domProvider = domIsEditing
       ? "__editing__"
       : (domNameBtn && !domNameBtn.classList.contains("empty")
           ? domNameBtn.textContent.trim().replace(/^[📞🌙] ?/, "") : null);
-    if (domProvider !== provider) {
-      // Provider changed — rebuild just this card in-place
+    const supervisor = room.supervisor || null;
+    const domSupBtn  = card.querySelector("[data-role='supervisor']");
+    const domSupervisor = domSupBtn ? (domSupBtn.getAttribute("data-supervisor") || null) || null : null;
+    const needsSupervisor = provider && getRosterRole(provider) !== "attending";
+    // Expected DOM supervisor: only meaningful when card needs a supervisor row
+    const expectedDomSupervisor = needsSupervisor ? supervisor : null;
+    if (domProvider !== provider || (!domIsEditing && domSupervisor !== expectedDomSupervisor)) {
+      // Provider or supervisor changed — rebuild just this card in-place
       const tabIdx = card.getAttribute("data-tab-idx");
       const newCard = renderCard(loc, true, tabIdx !== null ? parseInt(tabIdx) : null);
       // Apply filter classes to new card
@@ -2775,7 +2976,7 @@ async function loadConfig(code) {
       locations     = cfg.locations     ? Object.values(cfg.locations)     : [...DEFAULT_LOCATIONS];
       noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
       callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions)  : [];
-      roster         = cfg.roster         ? Object.values(cfg.roster).sort()  : [];
+      roster         = cfg.roster         ? Object.values(cfg.roster).map(normalizeRosterEntry).sort((a,b) => a.name.localeCompare(b.name)) : [];
       if (!done) { done = true; unsub(); resolve(); }
     });
     setTimeout(() => { if (!done) { done = true; unsub(); resolve(); } }, 5000);
@@ -2805,7 +3006,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         row.setAttribute("draggable", "true");
         const handle = el("span", { class: "drag-handle" }, "⠿");
         row.appendChild(handle);
-        const content = renderItem(item, arr, () => rebuild(arr));
+        const content = renderItem(item, arr, (a) => rebuild(a ?? arr));
         row.appendChild(content);
         row.addEventListener("dragstart", e => { dragSrc = i; setTimeout(() => row.classList.add("dragging"), 0); e.dataTransfer.effectAllowed = "move"; });
         row.addEventListener("dragend",   () => row.classList.remove("dragging"));
@@ -3137,34 +3338,64 @@ function renderAdminPage(deptCode, fromDisplay = false) {
   // ── Roster section ──
   function buildRosterSection() {
     let ros = [...roster];
+    const ROLES = [["attending","Attending"],["resident","Resident"],["anesthetist","Anesthetist"]];
+
     const { list, rebuild } = buildDraggableList(
       ros,
       () => {},
-      (name, arr, rebuildFn) => {
+      (entry, arr, rebuildFn) => {
         const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
-        const nameSpan = el("span", { style: { flex:"1" } }, name);
+        const nameSpan = el("span", { style: { flex:"1" } }, entry.name);
         let editing = false;
+
+        // Role selector
+        const roleSelect = document.createElement("select");
+        roleSelect.className = "role-select";
+        ROLES.forEach(([val, label]) => {
+          const opt = document.createElement("option");
+          opt.value = val; opt.textContent = label;
+          if (val === entry.role) opt.selected = true;
+          roleSelect.appendChild(opt);
+        });
+        roleSelect.addEventListener("change", async () => {
+          const newRole = roleSelect.value;
+          try {
+            await updateRosterEntryRole(entry.name, newRole);
+            ros = ros.map(r => r.name === entry.name ? { ...r, role: newRole } : r);
+          } catch(err) {
+            showToast("Error saving role");
+            roleSelect.value = entry.role;
+          }
+        });
+
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
         const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
-          await deleteRosterEntry(name); ros = ros.filter(n => n !== name); rebuildFn([...ros]); showToast(`${name} removed`);
+          try {
+            await deleteRosterEntry(entry.name);
+            ros = ros.filter(e => e.name !== entry.name);
+            rebuildFn([...ros]);
+            showToast(`${entry.name} removed`);
+          } catch(err) { showToast("Error removing provider"); }
         }}, "Remove");
+
         editBtn.addEventListener("click", () => {
           if (editing) return;
           editing = true;
           const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
-          input.value = name;
+          input.value = entry.name;
           nameSpan.replaceWith(input);
           editBtn.textContent = "Cancel";
           input.focus(); input.select();
           async function saveEdit() {
             const val = input.value.trim();
-            if (val && val !== name && !ros.includes(val)) {
-              // Delete old Firebase key, push new name
-              await deleteRosterEntry(name);
-              await saveRosterEntry(val);
-              ros = ros.filter(n => n !== name).concat(val).sort();
-              rebuildFn([...ros]);
-              showToast(`Renamed to ${val}`);
+            if (val && val !== entry.name && !ros.some(e => e.name === val)) {
+              try {
+                await deleteRosterEntry(entry.name);
+                await saveRosterEntry(val, entry.role);
+                ros = ros.filter(e => e.name !== entry.name).concat({ name: val, role: entry.role }).sort((a,b) => a.name.localeCompare(b.name));
+                rebuildFn([...ros]);
+                showToast(`Renamed to ${val}`);
+              } catch(err) { showToast("Error renaming provider"); }
               return;
             }
             editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
@@ -3175,7 +3406,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           });
           input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
         });
-        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+
+        rowDiv.appendChild(nameSpan); rowDiv.appendChild(roleSelect); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
         return rowDiv;
       }
     );
@@ -3183,14 +3415,18 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     const nameIn = el("input", { class: "admin-add-input", type: "text", placeholder: "Last, First (e.g. Smith, John)", style: { flex:"1" } });
     async function addName() {
       const val = nameIn.value.trim();
-      if (!val || ros.includes(val)) return;
-      await saveRosterEntry(val); ros = [...ros, val].sort(); rebuild(ros); nameIn.value = ""; showToast(`${val} added`);
+      if (!val || ros.some(e => e.name === val)) return;
+      try {
+        await saveRosterEntry(val, "attending");
+        ros = [...ros, { name: val, role: "attending" }].sort((a,b) => a.name.localeCompare(b.name));
+        rebuild(ros); nameIn.value = ""; showToast(`${val} added`);
+      } catch(err) { showToast("Error adding provider"); }
     }
     nameIn.addEventListener("keydown", e => { if (e.key === "Enter") addName(); });
 
     return el("div", { class: "admin-section" },
       el("div", { class: "admin-section-title" }, "Provider Roster"),
-      el("div", { class: "admin-section-sub"   }, "Names appear as suggestions when assigning a provider. Format: Last, First."),
+      el("div", { class: "admin-section-sub"   }, "Names appear as suggestions when assigning a provider. Set role so supervisors can be tracked. Format: Last, First."),
       list,
       el("div", { class: "admin-add-row" }, nameIn, el("button", { class: "btn-primary", onClick: addName }, "Add")),
     );
