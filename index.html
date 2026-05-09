@@ -1290,7 +1290,9 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
 
   input.addEventListener("focus", () => showDropdown(input.value));
   input.addEventListener("input", () => showDropdown(input.value));
+  let tabHandled = false;
   input.addEventListener("blur", () => setTimeout(() => {
+    if (tabHandled) return;
     closeDropdown();
     onDone();
   }, 150));
@@ -1320,7 +1322,7 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
       setHighlight(Math.max(highlightedIdx - 1, 0));
       return;
     }
-    if (e.key === "Enter") {
+    if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       const query = input.value.trim();
       const opts = getOptions();
@@ -1338,6 +1340,7 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
         await assignSupervisor(loc, selected);
       }
       closeDropdown();
+      if (e.key === "Tab") tabHandled = true;
       onDone();
     }
   });
@@ -2311,6 +2314,32 @@ function layoutDisplay(forceRemeasure = false) {
   const availH = vh - headerH - summaryH - 1 - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
+  // ── Compute section sizes from DOM (section dividers force extra grid rows) ──
+  // display-divider-break elements span all columns, breaking cards into sections.
+  // Each divider consumes a full grid row (height 0) plus one inter-row gap,
+  // so the actual row count is higher than ceil(cardCount / cols).
+  const children = Array.from(wrap.children);
+  const sectionSizes = [];
+  let sectionCur = 0;
+  children.forEach(c => {
+    if (c.classList.contains("display-divider-break")) {
+      if (sectionCur > 0) sectionSizes.push(sectionCur);
+      sectionCur = 0;
+    } else {
+      sectionCur++;
+    }
+  });
+  if (sectionCur > 0) sectionSizes.push(sectionCur);
+  const numDividerRows = Math.max(0, sectionSizes.length - 1);
+
+  // For a given column count, compute the actual number of grid rows
+  // (card rows per section, plus one row per divider between sections).
+  function computeGridRows(cols) {
+    let r = numDividerRows;
+    sectionSizes.forEach(n => { r += Math.ceil(n / cols); });
+    return r;
+  }
+
   // ── Find the best column count ──
   // We try each column count, compute what card dimensions and font size would
   // result, then check the card is wide enough to hold all content AT THAT
@@ -2338,9 +2367,12 @@ function layoutDisplay(forceRemeasure = false) {
   const maxCols = Math.min(cardCount, 10);
 
   for (let cols = maxCols; cols >= 2; cols--) {
-    const rows  = Math.ceil(cardCount / cols);
+    const gridRows = computeGridRows(cols);
+    const cardRows = gridRows - numDividerRows; // rows that contain actual cards
     const cardW = (availW - gapPx * (cols - 1)) / cols;
-    const cardH = (availH - gapPx * (rows - 1)) / rows;
+    // Divider rows have height 0 but still consume inter-row gaps.
+    // Total height = cardRows*cardH + (gridRows-1)*gapPx → solve for cardH:
+    const cardH = (availH - gapPx * (gridRows - 1)) / cardRows;
 
     if (cardH < MIN_CARD_H) continue;
     if (cardH > cardW * 0.9) continue;   // reject portrait-ish cards
@@ -2364,8 +2396,9 @@ function layoutDisplay(forceRemeasure = false) {
   if (!bestCardH) {
     bestCols  = 2;
     bestCardW = (availW - gapPx) / 2;
-    const rows = Math.ceil(cardCount / 2);
-    bestCardH  = Math.max(MIN_CARD_H, (availH - gapPx * (rows - 1)) / rows);
+    const gridRows = computeGridRows(2);
+    const cardRows = gridRows - numDividerRows;
+    bestCardH  = Math.max(MIN_CARD_H, (availH - gapPx * (gridRows - 1)) / cardRows);
     bestFontSize = Math.max(8, Math.min(16, bestCardH * 0.1));
   }
 
