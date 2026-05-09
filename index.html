@@ -1388,7 +1388,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
       const nameBtn = el("button", {
         class: "provider-name-btn" + (!currentProvider ? " empty" : ""),
         onClick: openEdit
-      }, currentProvider || "Tap to assign");
+      }, currentProvider ? callStatusPrefix(currentProvider) + currentProvider : "Tap to assign");
       body.appendChild(nameBtn);
     }
   }
@@ -2693,7 +2693,7 @@ function patchDisplay() {
       if (!existing || existing.querySelector(".provider-input-wrap")) return;
       const nameBtn = existing.querySelector(".provider-name-btn");
       if (!nameBtn) return;
-      nameBtn.textContent = provider || "Tap to assign";
+      nameBtn.textContent = provider ? callStatusPrefix(provider) + provider : "Tap to assign";
       nameBtn.classList.toggle("empty", !provider);
       existing.classList.toggle("empty", !provider);
     });
@@ -2896,7 +2896,7 @@ function renderDisplay() {
       if (!existing || existing.querySelector(".provider-input-wrap")) return;
       const nameBtn = existing.querySelector(".provider-name-btn");
       if (!nameBtn) return;
-      nameBtn.textContent = provider || "Tap to assign";
+      nameBtn.textContent = provider ? callStatusPrefix(provider) + provider : "Tap to assign";
       nameBtn.classList.toggle("empty", !provider);
       existing.classList.toggle("empty", !provider);
     });
