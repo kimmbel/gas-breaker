@@ -2336,7 +2336,7 @@ function layoutDisplay(forceRemeasure = false) {
   // display-divider-break elements span all columns, breaking cards into sections.
   // Each divider consumes a full grid row (height 0) plus one inter-row gap,
   // so the actual row count is higher than ceil(cardCount / cols).
-  const children = Array.from(wrap.children);
+  // `children` and `dividerCount` already computed above.
   const sectionSizes = [];
   let sectionCur = 0;
   children.forEach(c => {
@@ -2348,7 +2348,7 @@ function layoutDisplay(forceRemeasure = false) {
     }
   });
   if (sectionCur > 0) sectionSizes.push(sectionCur);
-  const numDividerRows = Math.max(0, sectionSizes.length - 1);
+  const numDividerRows = dividerCount;
 
   // For a given column count, compute the actual number of grid rows
   // (card rows per section, plus one row per divider between sections).
