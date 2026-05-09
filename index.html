@@ -279,7 +279,7 @@
 
     /* ── Coordinator display layout ── */
     .display-outer {
-      padding: 0.8em 1em 0.4em;
+      padding: 10px 14px 6px;
       max-width: none;
       margin: 0;
       box-sizing: border-box;
@@ -304,7 +304,7 @@
     /* OR columns — layout controlled by layoutDisplay() JS after render */
     .display-wrap {
       display: grid;
-      gap: 0.5em;
+      gap: 8px;
     }
 
     /* Display cards — bold dark theme, all sizes in em so they scale with body font-size */
@@ -1239,7 +1239,7 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
 
     // Remove supervisor option at top if already assigned
     if (currentSupervisor) {
-      const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove supervisor");
+      const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove attending");
       clearOpt.addEventListener("mousedown", async e => {
         e.preventDefault();
         closeDropdown();
@@ -1674,13 +1674,13 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         }, isDisplay));
       } else {
         const supRow = el("div", { class: "supervisor-row" },
-          el("span", { class: "supervisor-label" }, "Supervisor"),
+          el("span", { class: "supervisor-label" }, "Attending"),
           el("button", {
             class: "supervisor-name-btn" + (!supervisor ? " empty" : ""),
             "data-supervisor": supervisor || "",
             "data-role": "supervisor",
             onClick: () => { editingSupervisor = true; renderProviderArea(); }
-          }, supervisor || "Tap to assign")
+          }, supervisor || "Tap to assign attending")
         );
         body.appendChild(supRow);
       }
