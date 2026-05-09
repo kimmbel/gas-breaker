@@ -2392,12 +2392,6 @@ function layoutDisplay(forceRemeasure = false) {
 
   const maxCols = Math.min(cardCount, 10);
 
-  // Each section divider spans a full grid row and adds one extra row-gap to the
-  // total height. Account for this so the calculated cardH actually fits on screen.
-  function calcCardH(rows) {
-    return (availH - gapPx * (rows - 1 + dividerCount)) / rows;
-  }
-
   // Pass 1: prefer landscape-ish cards (cardH ≤ cardW)
   for (let cols = maxCols; cols >= 2; cols--) {
     const cardW = (availW - gapPx * (cols - 1)) / cols;
