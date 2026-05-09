@@ -1586,7 +1586,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
     if (existing) existing.remove();
 
     const currentNoteObj = getProviderNote(provider);
-    let selectedColor = currentNoteObj ? currentNoteObj.color : "amber";
+    let selectedColor = currentNoteObj ? currentNoteObj.color : "blue";
 
     const noteInput = el("input", {
       class: "note-input",
