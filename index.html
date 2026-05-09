@@ -1306,7 +1306,9 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
 
   input.addEventListener("focus", () => showDropdown(input.value));
   input.addEventListener("input", () => showDropdown(input.value));
+  let tabHandled = false;
   input.addEventListener("blur", () => setTimeout(() => {
+    if (tabHandled) return;
     closeDropdown();
     onDone();
   }, 150));
@@ -1336,7 +1338,7 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
       setHighlight(Math.max(highlightedIdx - 1, 0));
       return;
     }
-    if (e.key === "Enter") {
+    if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       const query = input.value.trim();
       const opts = getOptions();
@@ -1354,6 +1356,7 @@ function buildSupervisorPicker(currentSupervisor, loc, card, onDone, isDisplay =
         await assignSupervisor(loc, selected);
       }
       closeDropdown();
+      if (e.key === "Tab") tabHandled = true;
       onDone();
     }
   });
@@ -2329,9 +2332,61 @@ function layoutDisplay(forceRemeasure = false) {
   const availH = vh - summaryH - 1 - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
-  const MIN_EM_RATIO = 20.0;
-  const ABS_MIN_W    = 190;
-  const MIN_CARD_H   = 70;
+  // ── Compute section sizes from DOM (section dividers force extra grid rows) ──
+  // display-divider-break elements span all columns, breaking cards into sections.
+  // Each divider consumes a full grid row (height 0) plus one inter-row gap,
+  // so the actual row count is higher than ceil(cardCount / cols).
+  const children = Array.from(wrap.children);
+  const sectionSizes = [];
+  let sectionCur = 0;
+  children.forEach(c => {
+    if (c.classList.contains("display-divider-break")) {
+      if (sectionCur > 0) sectionSizes.push(sectionCur);
+      sectionCur = 0;
+    } else {
+      sectionCur++;
+    }
+  });
+  if (sectionCur > 0) sectionSizes.push(sectionCur);
+  const numDividerRows = Math.max(0, sectionSizes.length - 1);
+
+  // For a given column count, compute the actual number of grid rows
+  // (card rows per section, plus one row per divider between sections).
+  function computeGridRows(cols) {
+    let r = numDividerRows;
+    sectionSizes.forEach(n => { r += Math.ceil(n / cols); });
+    return r;
+  }
+
+  // Divider rows have height 0 but still consume inter-row gaps.
+  // Total height = cardRows*cardH + (gridRows-1)*gapPx → solve for cardH:
+  function calcCardH(cols) {
+    const gridRows = computeGridRows(cols);
+    const cardRows = gridRows - numDividerRows;
+    return (availH - gapPx * (gridRows - 1)) / cardRows;
+  }
+
+  // ── Find the best column count ──
+  // We try each column count, compute what card dimensions and font size would
+  // result, then check the card is wide enough to hold all content AT THAT
+  // font size. This prevents buttons overflowing onto separate lines.
+  //
+  // Card minimum width breakdown (all at computed fontSize F px):
+  //   Card padding L+R        : 2 * 1em        = 2F px
+  //   card-inner gap          : 0.6em           = 0.6F px
+  //   Side button stack width : widest is hold-warn "26x20 20m" with emoji
+  //                             roughly 5.5em at 0.85em font = 5.5 * 0.85 * F
+  //                             = 4.7F px  (plus border/padding already in em)
+  //   Card body min           : room name needs ~8em minimum
+  //                             = 8F px
+  //   Total                   : (2 + 0.6 + 4.7 + 8) F = 15.3F px
+  //   Safety margin 20%       : 15.3 * 1.2 = ~18.4F
+  //
+  // So MIN_CARD_W = 18.4 * fontSize, with an absolute floor of 190px.
+
+  const MIN_EM_RATIO = 20.0; // card must be at least this many em-widths wide
+  const ABS_MIN_W    = 190;  // absolute px floor for very small font sizes
+  const MIN_CARD_H   = 70;   // px minimum useful card height
 
   let bestCols = 2, bestCardH = 0, bestCardW = 0, bestFontSize = 8;
 
@@ -2345,9 +2400,8 @@ function layoutDisplay(forceRemeasure = false) {
 
   // Pass 1: prefer landscape-ish cards (cardH ≤ cardW)
   for (let cols = maxCols; cols >= 2; cols--) {
-    const rows  = Math.ceil(cardCount / cols);
     const cardW = (availW - gapPx * (cols - 1)) / cols;
-    const cardH = calcCardH(rows);
+    const cardH = calcCardH(cols);
     if (cardH < MIN_CARD_H) continue;
     if (cardH > cardW) continue;
     const fs   = Math.max(8, Math.min(16, cardH * 0.1));
@@ -2360,9 +2414,8 @@ function layoutDisplay(forceRemeasure = false) {
   // Pass 2: relax aspect ratio — any card that fits height and width minimums
   if (!bestCardH) {
     for (let cols = maxCols; cols >= 2; cols--) {
-      const rows  = Math.ceil(cardCount / cols);
       const cardW = (availW - gapPx * (cols - 1)) / cols;
-      const cardH = calcCardH(rows);
+      const cardH = calcCardH(cols);
       if (cardH < MIN_CARD_H) continue;
       const fs   = Math.max(8, Math.min(16, cardH * 0.1));
       const minW = Math.max(ABS_MIN_W, MIN_EM_RATIO * fs);
@@ -2376,8 +2429,7 @@ function layoutDisplay(forceRemeasure = false) {
   if (!bestCardH) {
     bestCols  = 2;
     bestCardW = (availW - gapPx) / 2;
-    const rows = Math.ceil(cardCount / 2);
-    bestCardH  = Math.max(MIN_CARD_H, calcCardH(rows));
+    bestCardH  = Math.max(MIN_CARD_H, calcCardH(2));
     bestFontSize = Math.max(8, Math.min(16, bestCardH * 0.1));
   }
 
