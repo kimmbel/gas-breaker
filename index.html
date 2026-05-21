@@ -397,7 +397,7 @@
     .plan-header-input { background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 8px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; width: 100%; margin-bottom: 12px; }
     .plan-header-input:focus { border-color: #b45309; }
     .plan-columns { display: flex; gap: 14px; align-items: flex-start; }
-    .plan-col-left { width: 220px; flex-shrink: 0; }
+    .plan-col-left { width: 220px; flex-shrink: 0; position: sticky; top: 60px; align-self: flex-start; }
     .plan-col-center { flex: 1; min-width: 0; }
     .plan-col-right { width: 220px; flex-shrink: 0; }
     .plan-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
@@ -441,7 +441,7 @@
     .plan-call-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1ede8; }
     .plan-call-row:last-child { border-bottom: none; }
     .plan-call-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 100px; flex-shrink: 0; }
-    .plan-call-btn { flex: 1; min-width: 0; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-call-btn { display: block; width: 100%; box-sizing: border-box; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .plan-call-btn.empty { color: #c4b8ad; font-style: italic; font-weight: 600; }
     .plan-call-btn:hover { background: #f1ede8; }
     .plan-note-editor { display: flex; flex-direction: column; gap: 5px; margin: 4px 0; }
@@ -4796,7 +4796,15 @@ function renderPlanPage() {
               if (m.length) selected = m[0].name;
             }
             if (selected) { await saveData(posIdx, selected); }
-            closeDropdown(); renderCell();
+            closeDropdown();
+            renderCell();
+            // Advance to the next call position in this section
+            const section = row.closest(".plan-section");
+            if (section) {
+              const allRows = Array.from(section.querySelectorAll(".plan-call-row"));
+              const nextRow = allRows[allRows.indexOf(row) + 1];
+              if (nextRow) setTimeout(() => nextRow.querySelector(".plan-call-btn")?.click(), 30);
+            }
           }
         });
         cellWrap.appendChild(inputEl);
