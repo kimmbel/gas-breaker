@@ -4658,7 +4658,7 @@ function renderPlanPage() {
     const callSection = el("div", { class: "plan-section" });
     callSection.appendChild(el("div", { class: "plan-section-title" }, "On Call"));
     callPositions.forEach((pos, idx) => {
-      callSection.appendChild(buildPlanCallRow(pos, idx, false));
+      callSection.appendChild(buildPlanCallRow(pos.name, idx, false));
     });
     if (!callPositions.length) {
       callSection.appendChild(el("div", { style:{ color:"#a39688", fontSize:"12px" } }, "No call positions configured."));
@@ -4670,7 +4670,7 @@ function renderPlanPage() {
     postSection.appendChild(el("div", { class: "plan-section-title" }, "Post Call"));
     postSection.appendChild(el("div", { class: "plan-section-sub" }, "Auto-filled from tonight's on-call"));
     callPositions.forEach((pos, idx) => {
-      postSection.appendChild(buildPlanCallRow(pos, idx, true));
+      postSection.appendChild(buildPlanCallRow(pos.name, idx, true));
     });
     if (!callPositions.length) {
       postSection.appendChild(el("div", { style:{ color:"#a39688", fontSize:"12px" } }, "No call positions configured."));
@@ -4895,7 +4895,7 @@ function renderPlanPage() {
     // Post Call box
     if (callPositions.length) {
       const postRows = callPositions.map((pos, i) => el("div", { class: "print-row" },
-        el("div", { class: "print-row-label" }, pos),
+        el("div", { class: "print-row-label" }, pos.name),
         el("div", { class: "print-row-value" }, planPostCallData[i] || ""),
       ));
       rightContent.push(el("div", { class: "print-box" },
@@ -4905,7 +4905,7 @@ function renderPlanPage() {
 
       // On Call box
       const callRows = callPositions.map((pos, i) => el("div", { class: "print-row" },
-        el("div", { class: "print-row-label" }, pos),
+        el("div", { class: "print-row-label" }, pos.name),
         el("div", { class: "print-row-value" }, planCallData[i] || ""),
       ));
       rightContent.push(el("div", { class: "print-box" },
