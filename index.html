@@ -4315,7 +4315,7 @@ function renderPlanPage() {
     // No-break slots section
     if (noBreakSlots.length) {
       const nbSection = el("div", { class: "plan-section" });
-      nbSection.appendChild(el("div", { class: "plan-section-title" }, "No-Break Slots"));
+      nbSection.appendChild(el("div", { class: "plan-section-title" }, "Core Positions"));
       noBreakSlots.forEach(slot => {
         nbSection.appendChild(buildPlanRoomCard("nb_plan_" + slot, slot, true));
       });
@@ -4716,9 +4716,7 @@ function renderPlanPage() {
         });
         let hiIdx = -1;
 
-        const pool = availableList.length > 0
-          ? roster.filter(en => availableList.includes(en.name))
-          : roster;
+        const pool = roster;
 
         function showDd(query) {
           closeDropdown();
@@ -4847,7 +4845,7 @@ function renderPlanPage() {
         );
       });
       leftContent.push(el("div", { class: "print-box" },
-        el("div", { class: "print-box-title" }, "No-Break Slots"),
+        el("div", { class: "print-box-title" }, "Core Positions"),
         ...rows,
       ));
     }
