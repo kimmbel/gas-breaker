@@ -441,7 +441,7 @@
     .plan-call-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1ede8; }
     .plan-call-row:last-child { border-bottom: none; }
     .plan-call-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 100px; flex-shrink: 0; }
-    .plan-call-btn { flex: 1; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-call-btn { flex: 1; min-width: 0; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .plan-call-btn.empty { color: #c4b8ad; font-style: italic; font-weight: 600; }
     .plan-call-btn:hover { background: #f1ede8; }
     .plan-note-editor { display: flex; flex-direction: column; gap: 5px; margin: 4px 0; }
@@ -3827,9 +3827,10 @@ function renderPlanPage() {
     const dt = new Date(y, m - 1, d);
     return dt.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
   }
-  function isFriday(dateStr) {
+  function isWeekend(dateStr) {
     const [y, m, d] = dateStr.split("-").map(Number);
-    return new Date(y, m - 1, d).getDay() === 5;
+    const day = new Date(y, m - 1, d).getDay();
+    return day === 0 || day === 6;
   }
 
   // ── State ──
@@ -4000,7 +4001,7 @@ function renderPlanPage() {
     app.innerHTML = "";
 
     // ── Header ──
-    const fridayWarn = isFriday(selectedDate)
+    const fridayWarn = isWeekend(selectedDate)
       ? el("span", { class: "plan-friday-warn" }, "Heads up: consider picking Monday")
       : null;
 
@@ -4298,6 +4299,7 @@ function renderPlanPage() {
           const leftCol = document.querySelector(".plan-col-left");
           if (leftCol) buildLeftColumn(leftCol);
           refreshCenterColumn();
+          setTimeout(() => document.querySelector(".plan-col-left .plan-add-input")?.focus(), 0);
         }
       }
     });
