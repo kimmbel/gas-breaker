@@ -385,6 +385,95 @@
     /* ── Toast ── */
     #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #2d2420; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 800; box-shadow: 0 4px 16px rgba(0,0,0,0.2); z-index: 200; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
     #toast.show { opacity: 1; }
+
+    /* ── Plan Tomorrow ── */
+    .plan-root { max-width: 1200px; margin: 0 auto; padding: 16px 16px 80px; }
+    .plan-header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .plan-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 20px; color: #2d2420; flex: 1; }
+    .plan-date-input { background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 7px 12px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; cursor: pointer; }
+    .plan-date-input:focus { border-color: #b45309; }
+    .plan-friday-warn { font-size: 12px; color: #b45309; font-weight: 700; background: #fef3c7; padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
+    .plan-day-banner { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 12px; padding: 10px 18px; font-family: 'Libre Baskerville', serif; font-size: 18px; font-weight: 700; color: #2d2420; text-align: center; margin-bottom: 16px; }
+    .plan-header-input { background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 8px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; width: 100%; margin-bottom: 12px; }
+    .plan-header-input:focus { border-color: #b45309; }
+    .plan-columns { display: flex; gap: 14px; align-items: flex-start; }
+    .plan-col-left { width: 220px; flex-shrink: 0; }
+    .plan-col-center { flex: 1; min-width: 0; }
+    .plan-col-right { width: 220px; flex-shrink: 0; }
+    .plan-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+    .plan-section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 15px; color: #2d2420; margin-bottom: 10px; }
+    .plan-section-sub { font-size: 11px; color: #a39688; font-style: italic; margin-bottom: 8px; }
+    .plan-provider-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f1ede8; cursor: grab; }
+    .plan-provider-row:last-of-type { border-bottom: none; }
+    .plan-provider-row.dragging { opacity: 0.4; }
+    .plan-provider-row.drag-over { background: #fef3c7; border-radius: 8px; }
+    .plan-provider-name { font-size: 13px; font-weight: 700; color: #2d2420; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .plan-note-badge { display: inline-block; border-radius: 5px; font-size: 11px; font-weight: 800; padding: 2px 7px; border: 1px solid; white-space: nowrap; cursor: pointer; flex-shrink: 0; }
+    .plan-note-badge.note-amber { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+    .plan-note-badge.note-blue  { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+    .plan-note-badge.note-green { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    .plan-note-badge.note-rose  { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
+    .plan-note-add { font-size: 11px; color: #c4b8ad; cursor: pointer; flex-shrink: 0; padding: 2px 6px; border: 1px dashed #d4ccc6; border-radius: 5px; }
+    .plan-note-add:hover { color: #7c6c62; border-color: #a39688; }
+    .plan-remove-btn { background: none; border: none; color: #d4ccc6; font-size: 14px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
+    .plan-remove-btn:hover { color: #dc2626; }
+    .plan-add-input-wrap { position: relative; margin-top: 6px; }
+    .plan-add-input { width: 100%; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 7px 10px; font-size: 13px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
+    .plan-add-input:focus { border-color: #b45309; }
+    .plan-room-card { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; transition: border-color 0.15s, opacity 0.15s; }
+    .plan-room-card.drag-over { border-color: #fb923c; box-shadow: 0 0 0 3px #fb923c40; }
+    .plan-room-card.dragging { opacity: 0.4; }
+    .plan-room-card.plan-empty-room { opacity: 0.45; background: #f5f2ef; border-color: #e2dcd6; }
+    .plan-room-row { display: flex; align-items: center; gap: 8px; }
+    .plan-room-label { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 13px; color: #2d2420; min-width: 70px; flex-shrink: 0; }
+    .plan-room-provider-btn { flex: 1; text-align: left; font-size: 13px; font-weight: 700; color: #7c6c62; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 5px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .plan-room-provider-btn.empty { color: #c4b8ad; font-style: italic; font-weight: 600; }
+    .plan-room-provider-btn:hover { background: #f1ede8; }
+    .plan-room-input-wrap { flex: 1; position: relative; }
+    .plan-room-input { width: 100%; font-size: 13px; font-weight: 700; color: #2d2420; background: #fff; border: 1.5px solid #b45309; border-radius: 8px; padding: 5px 10px; outline: none; font-family: inherit; }
+    .plan-attending-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; padding-left: 78px; }
+    .plan-attending-label { font-size: 10px; font-weight: 800; color: #a39688; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .plan-attending-btn { font-size: 12px; font-weight: 600; color: #7c6c62; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+    .plan-attending-btn.empty { color: #c4b8ad; font-style: italic; }
+    .plan-empty-cb { width: 15px; height: 15px; cursor: pointer; accent-color: #a39688; flex-shrink: 0; }
+    .plan-empty-label { font-size: 10px; font-weight: 700; color: #a39688; flex-shrink: 0; white-space: nowrap; }
+    .plan-section-divider-label { font-size: 11px; font-weight: 800; color: #b0a49a; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 0 4px; display: block; }
+    .plan-call-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #f1ede8; }
+    .plan-call-row:last-child { border-bottom: none; }
+    .plan-call-label { font-size: 12px; font-weight: 700; color: #7c6c62; min-width: 100px; flex-shrink: 0; }
+    .plan-call-btn { flex: 1; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .plan-call-btn.empty { color: #c4b8ad; font-style: italic; font-weight: 600; }
+    .plan-call-btn:hover { background: #f1ede8; }
+    .plan-note-editor { display: flex; flex-direction: column; gap: 5px; margin: 4px 0; }
+    .plan-note-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
+    .plan-note-color-row { display: flex; gap: 6px; }
+    .plan-note-color-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: border-color 0.1s, transform 0.1s; }
+    .plan-note-color-dot:hover { transform: scale(1.15); }
+    .plan-note-color-dot.selected { border-color: #2d2420; transform: scale(1.15); }
+    .plan-note-color-dot.dot-blue  { background: #60a5fa; }
+    .plan-note-color-dot.dot-amber { background: #fb923c; }
+    .plan-note-color-dot.dot-green { background: #4ade80; }
+    .plan-note-color-dot.dot-rose  { background: #f472b6; }
+    .plan-bottom-bar { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+
+    /* ── Print view ── */
+    #plan-print-view { display: none; }
+    @media print {
+      body > * { display: none !important; }
+      #plan-print-view { display: block !important; font-family: Arial, sans-serif; font-size: 11pt; color: #000; padding: 0; margin: 0; }
+      .print-header { text-align: center; font-size: 14pt; font-weight: bold; margin-bottom: 4pt; }
+      .print-date { text-align: center; font-size: 11pt; margin-bottom: 10pt; }
+      .print-body { display: flex; gap: 16pt; align-items: flex-start; }
+      .print-left { flex: 55; }
+      .print-right { flex: 42; }
+      .print-box { border: 1pt solid #aaa; border-radius: 4pt; margin-bottom: 10pt; page-break-inside: avoid; }
+      .print-box-title { background: #e8e4df; font-weight: bold; font-size: 10pt; padding: 4pt 8pt; border-bottom: 1pt solid #aaa; }
+      .print-row { display: flex; border-bottom: 0.5pt solid #ddd; padding: 3pt 8pt; align-items: center; min-height: 18pt; }
+      .print-row:last-child { border-bottom: none; }
+      .print-row-label { flex: 0 0 90pt; font-weight: 600; font-size: 10pt; white-space: nowrap; overflow: hidden; }
+      .print-row-value { flex: 1; font-size: 10pt; }
+      #toast { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -619,7 +708,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_" || rid === "_eodconcern_") return;
+    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_" || rid === "_eodconcern_" || rid === "_available_") return;
     const duration = room.holdDuration || HOLD_CLEAR_MS;
     if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
@@ -3626,6 +3715,15 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     );
   }
 
+  // ── Plan Tomorrow section ──
+  function buildPlanTomorrowSection() {
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Plan Tomorrow"),
+      el("div", { class: "admin-section-sub"   }, "Pre-schedule providers and call assignments for tomorrow's board."),
+      el("button", { class: "btn-primary", style: { marginTop: "4px" }, onClick: () => renderPlanPage() }, "📋 Plan Tomorrow →"),
+    );
+  }
+
   app.appendChild(el("div", {},
     el("header", { class: "header" },
       el("div", { class: "header-inner" },
@@ -3642,6 +3740,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       isDept ? buildNoBreakSection()       : buildAdminPasscodeSection(),
       isDept ? buildCallPositionsSection() : null,
       isDept ? buildRosterSection()        : null,
+      isDept ? buildPlanTomorrowSection()  : null,
       isDept ? buildClearSection()         : null,
       fromDisplay ? buildDeptAdminPasscodeSection() : null,
     ),
@@ -3699,6 +3798,1157 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       statusMsg,
     );
   }
+}
+
+// ─── Plan Tomorrow ────────────────────────────────────────────────────────────
+function renderPlanPage() {
+  document.body.classList.remove("display-mode");
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  const deptCode = session.deptCode;
+
+  // ── Date helpers ──
+  function planDateKey(dateStr) {
+    // dateStr: "YYYY-MM-DD"
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return `${y}-${m}-${d}`;
+  }
+  function getTomorrow() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  function formatDateBanner(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  }
+  function isFriday(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d).getDay() === 5;
+  }
+
+  // ── State ──
+  let selectedDate = getTomorrow();
+  let planData = {};        // { [roomId]: { provider, supervisor, empty } }
+  let availableList = [];   // ordered array of names
+  let planNotes = {};       // { [nameKey]: { text, color } }
+  let planCallData = {};    // { [posIdx]: name }
+  let planPostCallData = {}; // { [posIdx]: name }
+  let planHeaderText = "";
+
+  // ── Firebase helpers ──
+  function planBoardRef(dateStr) {
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}`);
+  }
+  function planAvailRef(dateStr) {
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/_available_`);
+  }
+  function planRoomRef(dateStr, rid) {
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/${rid}`);
+  }
+  function planHistRef(dateStr, name) {
+    const key = "_hist_" + name.replace(/[^a-zA-Z0-9]/g, "_");
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/${key}`);
+  }
+  function planCallRef(dateStr, idx) {
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/_call_/${idx}`);
+  }
+  function planPostCallRef(dateStr, idx) {
+    return ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/_postcall_/${idx}`);
+  }
+  function planHeaderRef() {
+    return ref(db, `deptAdmin/${deptCode}/planHeader`);
+  }
+
+  async function saveAvailable() {
+    const obj = {};
+    availableList.forEach((n, i) => { obj[i] = n; });
+    await set(planAvailRef(selectedDate), Object.keys(obj).length ? obj : null);
+  }
+
+  async function savePlanNote(name, noteObj) {
+    const r = planHistRef(selectedDate, name);
+    const snap = await get(r);
+    const current = snap.val() || {};
+    await set(r, { ...current, provider: name, note: noteObj || null });
+    if (noteObj) planNotes[name] = noteObj;
+    else delete planNotes[name];
+  }
+
+  async function savePlanRoom(loc, data) {
+    const rid = roomId(loc);
+    planData[rid] = data;
+    if (data && Object.keys(data).some(k => data[k] != null && data[k] !== false)) {
+      await set(planRoomRef(selectedDate, rid), data);
+    } else {
+      await remove(planRoomRef(selectedDate, rid));
+      delete planData[rid];
+    }
+  }
+
+  async function savePlanCallAssignment(idx, name) {
+    if (name) {
+      planCallData[idx] = name;
+      await set(planCallRef(selectedDate, idx), name);
+    } else {
+      delete planCallData[idx];
+      await remove(planCallRef(selectedDate, idx));
+    }
+  }
+
+  async function savePlanPostCallAssignment(idx, name) {
+    if (name) {
+      planPostCallData[idx] = name;
+      await set(planPostCallRef(selectedDate, idx), name);
+    } else {
+      delete planPostCallData[idx];
+      await remove(planPostCallRef(selectedDate, idx));
+    }
+  }
+
+  // ── Get assigned providers (from plan room assignments) ──
+  function getAssignedProviders() {
+    const assigned = new Set();
+    const realLocs = locations.filter(l => !isDivider(l));
+    realLocs.forEach(loc => {
+      const d = planData[roomId(loc)] || {};
+      if (d.provider) assigned.add(d.provider);
+    });
+    noBreakSlots.forEach(slot => {
+      const d = planData[roomId("nb_plan_" + slot)] || {};
+      if (d.provider) assigned.add(d.provider);
+    });
+    return assigned;
+  }
+
+  function getUnassignedAvailable() {
+    const assigned = getAssignedProviders();
+    return availableList.filter(n => !assigned.has(n));
+  }
+
+  // ── Load data ──
+  async function loadPlanData(dateStr) {
+    selectedDate = dateStr;
+    planData = {};
+    availableList = [];
+    planNotes = {};
+    planCallData = {};
+    planPostCallData = {};
+
+    try {
+      const [boardSnap, headerSnap] = await Promise.all([
+        get(planBoardRef(dateStr)),
+        get(planHeaderRef()),
+      ]);
+
+      planHeaderText = headerSnap.val() || "";
+
+      const bval = boardSnap.val() || {};
+
+      // available list
+      if (bval._available_) {
+        availableList = Object.values(bval._available_).filter(Boolean);
+      }
+
+      // room assignments
+      Object.entries(bval).forEach(([k, v]) => {
+        if (k.startsWith("_")) return;
+        if (v && typeof v === "object") planData[k] = v;
+      });
+
+      // notes from _hist_ keys
+      Object.entries(bval).forEach(([k, v]) => {
+        if (k.startsWith("_hist_") && v && v.provider && v.note) {
+          planNotes[v.provider] = v.note;
+        }
+      });
+
+      // call assignments
+      if (bval._call_) {
+        Object.entries(bval._call_).forEach(([i, n]) => { planCallData[i] = n; });
+      }
+
+      // post-call: use plan date's _postcall_ if present; else load from today's _call_
+      if (bval._postcall_ && Object.keys(bval._postcall_).length) {
+        Object.entries(bval._postcall_).forEach(([i, n]) => { planPostCallData[i] = n; });
+      } else {
+        // auto-fill from today's call data
+        const todaySnap = await get(ref(db, `boards/${deptCode}/${tsDay()}/_call_`));
+        const todayCall = todaySnap.val() || {};
+        planPostCallData = { ...todayCall };
+        // save them to plan date
+        const saves = Object.entries(todayCall).map(([i, n]) => set(planPostCallRef(dateStr, i), n));
+        if (saves.length) await Promise.all(saves);
+      }
+    } catch(e) {
+      console.warn("Plan load error:", e);
+    }
+  }
+
+  // ── Render ──
+  async function render(dateStr) {
+    await loadPlanData(dateStr);
+    buildUI();
+  }
+
+  function buildUI() {
+    app.innerHTML = "";
+
+    // ── Header ──
+    const fridayWarn = isFriday(selectedDate)
+      ? el("span", { class: "plan-friday-warn" }, "Heads up: consider picking Monday")
+      : null;
+
+    const dateInput = el("input", {
+      class: "plan-date-input",
+      type: "date",
+      value: selectedDate,
+    });
+    dateInput.addEventListener("change", () => {
+      const newDate = dateInput.value;
+      if (newDate) render(newDate);
+    });
+
+    const headerInput = el("input", {
+      class: "plan-header-input",
+      type: "text",
+      placeholder: "PDF header (e.g. SJMC Daily OR Assignments)",
+      value: planHeaderText,
+    });
+    headerInput.addEventListener("blur", async () => {
+      planHeaderText = headerInput.value.trim();
+      await set(planHeaderRef(), planHeaderText || null);
+    });
+    headerInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") headerInput.blur();
+    });
+
+    const bannerDiv = el("div", { class: "plan-day-banner" }, formatDateBanner(selectedDate));
+
+    const leftCol   = el("div", { class: "plan-col-left" });
+    const centerCol = el("div", { class: "plan-col-center" });
+    const rightCol  = el("div", { class: "plan-col-right" });
+
+    buildLeftColumn(leftCol);
+    buildCenterColumn(centerCol);
+    buildRightColumn(rightCol);
+
+    const bottomBar = el("div", { class: "plan-bottom-bar" },
+      el("button", { class: "btn-ghost", style: { fontSize:"13px" }, onClick: randomizeRemaining }, "🎲 Randomize Remaining"),
+      el("button", { class: "btn-primary", style: { fontSize:"13px" }, onClick: printPlan }, "🖨 Print PDF"),
+    );
+
+    app.appendChild(el("div", {},
+      el("header", { class: "header" },
+        el("div", { class: "header-inner" },
+          el("button", { class: "admin-back-btn", onClick: () => renderAdminPage(deptCode) }, "← Back"),
+          el("div", { class: "plan-title" }, "Plan Tomorrow"),
+          el("div", { class: "header-right" },
+            el("div", { class: "sync-pip" }),
+          ),
+        )
+      ),
+      el("div", { class: "plan-root" },
+        el("div", { class: "plan-header-row" },
+          dateInput,
+          fridayWarn,
+        ),
+        bannerDiv,
+        headerInput,
+        el("div", { class: "plan-columns" }, leftCol, centerCol, rightCol),
+        bottomBar,
+      ),
+    ));
+  }
+
+  // ─── Left column: Working Tomorrow ──────────────────────────────────────────
+  function buildLeftColumn(col) {
+    col.innerHTML = "";
+
+    const section = el("div", { class: "plan-section" });
+    section.appendChild(el("div", { class: "plan-section-title" }, "Working Tomorrow"));
+
+    const listContainer = el("div", {});
+    let dragSrc = null;
+
+    function rebuildList() {
+      listContainer.innerHTML = "";
+      availableList.forEach((name, idx) => {
+        const noteObj = planNotes[name] || null;
+        const row = el("div", { class: "plan-provider-row" });
+        row.setAttribute("draggable", "true");
+        row.dataset.idx = idx;
+
+        // Drag handle + name
+        const dragHandle = el("span", { class: "drag-handle", style: { fontSize:"14px" } }, "⠿");
+        const nameEl = el("span", { class: "plan-provider-name" }, name);
+
+        // Note badge / add note
+        let noteEl;
+        let editingNote = false;
+
+        function renderNote() {
+          if (noteEl) noteEl.remove();
+          if (editingNote) {
+            const currentNote = planNotes[name] || null;
+            let selectedColor = currentNote ? currentNote.color : "blue";
+            const noteInput = el("input", { class: "plan-note-input", type:"text", placeholder:"Short note…", maxlength:"15" });
+            noteInput.value = currentNote ? currentNote.text : "";
+            const NOTE_COLORS = [
+              { id:"blue",  cls:"dot-blue"  },
+              { id:"amber", cls:"dot-amber" },
+              { id:"green", cls:"dot-green" },
+              { id:"rose",  cls:"dot-rose"  },
+            ];
+            const colorRow = el("div", { class: "plan-note-color-row" });
+            NOTE_COLORS.forEach(c => {
+              const dot = el("div", {
+                class: "plan-note-color-dot " + c.cls + (selectedColor === c.id ? " selected" : ""),
+                title: c.id,
+              });
+              dot.addEventListener("mousedown", e => {
+                e.preventDefault();
+                selectedColor = c.id;
+                colorRow.querySelectorAll(".plan-note-color-dot").forEach(d => d.classList.remove("selected"));
+                dot.classList.add("selected");
+              });
+              colorRow.appendChild(dot);
+            });
+            const saveNote = async () => {
+              const val = noteInput.value.trim().slice(0, 15);
+              const obj = val ? { text: val, color: selectedColor } : null;
+              await savePlanNote(name, obj);
+              editingNote = false;
+              rebuildList();
+            };
+            noteInput.addEventListener("keydown", e => {
+              if (e.key === "Enter") { e.preventDefault(); saveNote(); }
+              if (e.key === "Escape") { editingNote = false; rebuildList(); }
+            });
+            noteInput.addEventListener("blur", () => setTimeout(() => { if (editingNote) saveNote(); }, 200));
+            noteEl = el("div", { class: "plan-note-editor" }, noteInput, colorRow);
+            row.insertBefore(noteEl, dragHandle.nextSibling);
+            setTimeout(() => noteInput.focus(), 20);
+          } else if (noteObj) {
+            noteEl = el("span", { class: "plan-note-badge note-" + noteObj.color, onClick: () => { editingNote = true; renderNote(); } }, noteObj.text);
+            row.insertBefore(noteEl, removeBtn);
+          } else {
+            noteEl = el("span", { class: "plan-note-add", onClick: () => { editingNote = true; renderNote(); } }, "+ note");
+            row.insertBefore(noteEl, removeBtn);
+          }
+        }
+
+        const removeBtn = el("button", { class: "plan-remove-btn", title: "Remove", onClick: async () => {
+          availableList = availableList.filter((_, i) => i !== idx);
+          await saveAvailable();
+          rebuildList();
+          refreshCenterColumn();
+        }}, "✕");
+
+        row.appendChild(dragHandle);
+        row.appendChild(nameEl);
+        row.appendChild(removeBtn);
+
+        // Drag-and-drop reorder
+        row.addEventListener("dragstart", e => {
+          dragSrc = idx;
+          e.dataTransfer.setData("text/plain", "available:" + name);
+          e.dataTransfer.effectAllowed = "move";
+          setTimeout(() => row.classList.add("dragging"), 0);
+        });
+        row.addEventListener("dragend", () => {
+          row.classList.remove("dragging");
+          document.querySelectorAll(".plan-provider-row.drag-over").forEach(r => r.classList.remove("drag-over"));
+        });
+        row.addEventListener("dragover", e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          row.classList.add("drag-over");
+        });
+        row.addEventListener("dragleave", e => {
+          if (!row.contains(e.relatedTarget)) row.classList.remove("drag-over");
+        });
+        row.addEventListener("drop", async e => {
+          e.preventDefault();
+          row.classList.remove("drag-over");
+          const data = e.dataTransfer.getData("text/plain");
+          if (data.startsWith("available:") && dragSrc !== null && dragSrc !== idx) {
+            const newList = [...availableList];
+            const [moved] = newList.splice(dragSrc, 1);
+            newList.splice(idx, 0, moved);
+            availableList = newList;
+            dragSrc = null;
+            await saveAvailable();
+            rebuildList();
+          }
+        });
+
+        renderNote();
+        listContainer.appendChild(row);
+      });
+
+      // Add input row
+      const addWrap = buildAvailableAddInput();
+      listContainer.appendChild(addWrap);
+    }
+
+    section.appendChild(listContainer);
+    col.appendChild(section);
+
+    // Also make left col a drop target (unassign provider from room by dropping here)
+    section.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    section.addEventListener("drop", async e => {
+      e.preventDefault();
+      const data = e.dataTransfer.getData("text/plain");
+      if (data.startsWith("room:")) {
+        const loc = data.slice(5);
+        const rid = roomId(loc);
+        const current = planData[rid] || {};
+        await savePlanRoom(loc, { ...current, provider: null, supervisor: null });
+        refreshCenterColumn();
+      }
+    });
+
+    rebuildList();
+  }
+
+  function buildAvailableAddInput() {
+    const wrap = el("div", { class: "plan-add-input-wrap" });
+    const input = el("input", {
+      class: "plan-add-input",
+      type: "text",
+      placeholder: "Add provider…",
+      autocomplete: "off",
+    });
+    let dropdown = null;
+
+    function closeDropdown() {
+      if (dropdown) { dropdown.remove(); dropdown = null; }
+    }
+
+    function showDropdown(query) {
+      closeDropdown();
+      // Filter out already-in-available providers
+      const alreadyIn = new Set(availableList);
+      const filtered = roster.filter(e => !alreadyIn.has(e.name) && rosterMatches(e, query));
+      if (!filtered.length && !query) return;
+      dropdown = el("div", { class: "roster-dropdown" });
+      filtered.slice(0, 12).forEach(entry => {
+        const opt = el("button", { class: "roster-option", type: "button" }, entry.name);
+        opt.addEventListener("mousedown", async ev => {
+          ev.preventDefault();
+          closeDropdown();
+          availableList = [...availableList, entry.name];
+          input.value = "";
+          await saveAvailable();
+          // rebuild left col
+          const leftCol = document.querySelector(".plan-col-left");
+          if (leftCol) buildLeftColumn(leftCol);
+          refreshCenterColumn();
+        });
+        dropdown.appendChild(opt);
+      });
+      if (!filtered.length) {
+        dropdown.appendChild(el("div", { style: { padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches in roster."));
+      }
+      wrap.appendChild(dropdown);
+    }
+
+    let highlightedIdx = -1;
+    input.addEventListener("focus", () => showDropdown(input.value));
+    input.addEventListener("input", () => showDropdown(input.value));
+    input.addEventListener("blur", () => setTimeout(() => { closeDropdown(); }, 150));
+    input.addEventListener("keydown", async e => {
+      const opts = dropdown ? Array.from(dropdown.querySelectorAll(".roster-option")) : [];
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        highlightedIdx = Math.min(highlightedIdx + 1, opts.length - 1);
+        opts.forEach((o, i) => o.classList.toggle("highlighted", i === highlightedIdx));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        highlightedIdx = Math.max(highlightedIdx - 1, 0);
+        opts.forEach((o, i) => o.classList.toggle("highlighted", i === highlightedIdx));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        let selected = null;
+        if (highlightedIdx >= 0 && opts[highlightedIdx]) {
+          selected = opts[highlightedIdx].textContent.trim();
+        } else if (input.value.trim()) {
+          const alreadyIn = new Set(availableList);
+          const matches = roster.filter(en => !alreadyIn.has(en.name) && rosterMatches(en, input.value.trim()));
+          if (matches.length) selected = matches[0].name;
+        }
+        if (selected) {
+          availableList = [...availableList, selected];
+          input.value = "";
+          closeDropdown();
+          await saveAvailable();
+          const leftCol = document.querySelector(".plan-col-left");
+          if (leftCol) buildLeftColumn(leftCol);
+          refreshCenterColumn();
+        }
+      }
+    });
+
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  // ─── Center column: Room assignments ────────────────────────────────────────
+  function buildCenterColumn(col) {
+    col.innerHTML = "";
+
+    // No-break slots section
+    if (noBreakSlots.length) {
+      const nbSection = el("div", { class: "plan-section" });
+      nbSection.appendChild(el("div", { class: "plan-section-title" }, "No-Break Slots"));
+      noBreakSlots.forEach(slot => {
+        nbSection.appendChild(buildPlanRoomCard("nb_plan_" + slot, slot, true));
+      });
+      col.appendChild(nbSection);
+    }
+
+    // Main room sections
+    const mainSection = el("div", { class: "plan-section" });
+    mainSection.appendChild(el("div", { class: "plan-section-title" }, "Room Assignments"));
+
+    let currentDividerLabel = null;
+    locations.forEach(loc => {
+      if (isDivider(loc)) {
+        // Extract divider name from key
+        const divLabel = loc.replace(/^__divider__\d*$/, "").replace(/^__divider__/, "") || "Section";
+        const labelEl = el("span", { class: "plan-section-divider-label" }, divLabel || "—");
+        mainSection.appendChild(labelEl);
+        currentDividerLabel = divLabel;
+        return;
+      }
+      mainSection.appendChild(buildPlanRoomCard(loc, loc, false));
+    });
+
+    col.appendChild(mainSection);
+  }
+
+  function refreshCenterColumn() {
+    const centerCol = document.querySelector(".plan-col-center");
+    if (centerCol) buildCenterColumn(centerCol);
+  }
+
+  function buildPlanRoomCard(locKey, displayLabel, isNoBreak) {
+    const rid = roomId(locKey);
+    const roomDat = planData[rid] || {};
+    const provider = roomDat.provider || null;
+    const supervisor = roomDat.supervisor || null;
+    const isEmpty = !!roomDat.empty;
+
+    const card = el("div", {
+      class: "plan-room-card" + (isEmpty ? " plan-empty-room" : ""),
+    });
+
+    // Make card a drop target
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", e => {
+      if (!card.contains(e.relatedTarget)) card.classList.remove("drag-over");
+    });
+    card.addEventListener("drop", async e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const data = e.dataTransfer.getData("text/plain");
+      if (data.startsWith("available:")) {
+        const name = data.slice(10);
+        const current = planData[rid] || {};
+        await savePlanRoom(locKey, { ...current, provider: name, supervisor: null, empty: false });
+        refreshCenterColumn();
+      } else if (data.startsWith("room:")) {
+        const srcLoc = data.slice(5);
+        const srcRid = roomId(srcLoc);
+        const srcDat = planData[srcRid] || {};
+        const srcProvider = srcDat.provider || null;
+        if (!srcProvider || srcLoc === locKey) return;
+        // Check if target has a provider (swap)
+        const targetProvider = provider;
+        if (targetProvider) {
+          // Swap
+          const srcCurrent = { ...srcDat };
+          const targetCurrent = { ...planData[rid] || {} };
+          await savePlanRoom(locKey, { ...targetCurrent, provider: srcProvider, supervisor: srcDat.supervisor || null });
+          await savePlanRoom(srcLoc, { ...srcCurrent, provider: targetProvider, supervisor: targetCurrent.supervisor || null });
+        } else {
+          // Move
+          await savePlanRoom(locKey, { ...planData[rid] || {}, provider: srcProvider, supervisor: srcDat.supervisor || null, empty: false });
+          await savePlanRoom(srcLoc, { ...srcDat, provider: null, supervisor: null });
+        }
+        refreshCenterColumn();
+      }
+    });
+
+    // Make card draggable if it has a provider
+    if (provider) {
+      card.setAttribute("draggable", "true");
+      card.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", "room:" + locKey);
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => card.classList.add("dragging"), 0);
+      });
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        document.querySelectorAll(".plan-room-card.drag-over").forEach(c => c.classList.remove("drag-over"));
+      });
+    }
+
+    const row = el("div", { class: "plan-room-row" });
+
+    // Room label
+    row.appendChild(el("span", { class: "plan-room-label" }, displayLabel));
+
+    // Provider area
+    let editingProvider = false;
+    let editingSupervisor = false;
+    const providerArea = el("div", { style: { flex:"1", minWidth:"0", display:"flex", flexDirection:"column" } });
+
+    function renderProviderArea() {
+      providerArea.innerHTML = "";
+      if (editingProvider) {
+        providerArea.appendChild(buildPlanProviderInput());
+      } else {
+        const btn = el("button", {
+          class: "plan-room-provider-btn" + (!provider ? " empty" : ""),
+          onClick: () => { editingProvider = true; renderProviderArea(); }
+        }, provider || "Assign provider…");
+        providerArea.appendChild(btn);
+
+        // Attending row if needed
+        const needsSuper = provider && normalizeRosterEntry(roster.find(e => e.name === provider) || provider).role !== "attending";
+        if (needsSuper) {
+          if (editingSupervisor) {
+            providerArea.appendChild(buildPlanAttendingInput());
+          } else {
+            const supRow = el("div", { class: "plan-attending-row" },
+              el("span", { class: "plan-attending-label" }, "Attending"),
+              el("button", {
+                class: "plan-attending-btn" + (!supervisor ? " empty" : ""),
+                onClick: () => { editingSupervisor = true; renderProviderArea(); }
+              }, supervisor || "assign attending…")
+            );
+            providerArea.appendChild(supRow);
+          }
+        }
+      }
+    }
+
+    function buildPlanProviderInput() {
+      const inputWrap = el("div", { class: "plan-room-input-wrap" });
+      const input = el("input", {
+        class: "plan-room-input",
+        type: "text",
+        placeholder: "Search roster…",
+        autocomplete: "off",
+      });
+      let dropdown = null;
+      let hiIdx = -1;
+
+      function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
+
+      function showDropdown(query) {
+        closeDropdown();
+        // Filter to available providers, unassigned elsewhere (or this room's current provider)
+        const assigned = getAssignedProviders();
+        assigned.delete(provider || ""); // allow reassigning same room
+        const pool = availableList.length > 0
+          ? roster.filter(e => availableList.includes(e.name) && !assigned.has(e.name))
+          : roster.filter(e => !assigned.has(e.name));
+        const filtered = query ? pool.filter(e => rosterMatches(e, query)) : pool;
+        dropdown = el("div", { class: "roster-dropdown" });
+
+        if (provider) {
+          const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove provider");
+          clearOpt.addEventListener("mousedown", async ev => {
+            ev.preventDefault();
+            closeDropdown();
+            editingProvider = false;
+            await savePlanRoom(locKey, { ...(planData[rid] || {}), provider: null, supervisor: null });
+            refreshCenterColumn();
+          });
+          dropdown.appendChild(clearOpt);
+        }
+
+        filtered.slice(0, 12).forEach(entry => {
+          const opt = el("button", { class: "roster-option", type: "button" }, entry.name);
+          opt.addEventListener("mousedown", async ev => {
+            ev.preventDefault();
+            closeDropdown();
+            editingProvider = false;
+            const current = planData[rid] || {};
+            await savePlanRoom(locKey, { ...current, provider: entry.name, supervisor: null, empty: false });
+            refreshCenterColumn();
+          });
+          dropdown.appendChild(opt);
+        });
+
+        if (!filtered.length) {
+          const msg = availableList.length > 0
+            ? "No available providers match. Add providers to the Working list first."
+            : "No matches in roster.";
+          dropdown.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, msg));
+        }
+        inputWrap.appendChild(dropdown);
+      }
+
+      input.addEventListener("focus", () => showDropdown(input.value));
+      input.addEventListener("input", () => showDropdown(input.value));
+      input.addEventListener("blur", () => setTimeout(() => {
+        closeDropdown();
+        editingProvider = false;
+        renderProviderArea();
+      }, 150));
+      input.addEventListener("keydown", async e => {
+        const opts = dropdown ? Array.from(dropdown.querySelectorAll(".roster-option:not(.clear-opt)")) : [];
+        if (e.key === "Escape") { closeDropdown(); editingProvider = false; renderProviderArea(); return; }
+        if (e.key === "ArrowDown") { e.preventDefault(); hiIdx = Math.min(hiIdx+1,opts.length-1); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+        if (e.key === "ArrowUp")   { e.preventDefault(); hiIdx = Math.max(hiIdx-1,0); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          let selected = null;
+          if (hiIdx >= 0 && opts[hiIdx]) selected = opts[hiIdx].textContent.trim();
+          else if (input.value.trim()) {
+            const assigned = getAssignedProviders(); assigned.delete(provider || "");
+            const pool = availableList.length > 0
+              ? roster.filter(en => availableList.includes(en.name) && !assigned.has(en.name))
+              : roster.filter(en => !assigned.has(en.name));
+            const m = pool.filter(en => rosterMatches(en, input.value.trim()));
+            if (m.length) selected = m[0].name;
+          }
+          if (selected) {
+            closeDropdown();
+            editingProvider = false;
+            const current = planData[rid] || {};
+            await savePlanRoom(locKey, { ...current, provider: selected, supervisor: null, empty: false });
+            refreshCenterColumn();
+          } else {
+            closeDropdown(); editingProvider = false; renderProviderArea();
+          }
+        }
+      });
+      inputWrap.appendChild(input);
+      setTimeout(() => { input.focus(); showDropdown(""); }, 30);
+      return inputWrap;
+    }
+
+    function buildPlanAttendingInput() {
+      const inputWrap = el("div", { class: "plan-attending-row" });
+      inputWrap.appendChild(el("span", { class: "plan-attending-label" }, "Attending"));
+      const innerWrap = el("div", { style: { position:"relative", flex:"1" } });
+      const input = el("input", {
+        class: "plan-room-input",
+        type: "text",
+        placeholder: "Search attendings…",
+        autocomplete: "off",
+        style: { fontSize:"12px", padding:"3px 8px" },
+      });
+      let dropdown = null;
+      let hiIdx = -1;
+
+      const attendings = roster.filter(e => e.role === "attending");
+      const planAttendingPool = availableList.length > 0
+        ? attendings.filter(e => availableList.includes(e.name))
+        : attendings;
+
+      function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
+      function showDropdown(query) {
+        closeDropdown();
+        const filtered = query ? planAttendingPool.filter(e => rosterMatches(e, query)) : planAttendingPool;
+        dropdown = el("div", { class: "roster-dropdown" });
+        if (supervisor) {
+          const clearOpt = el("button", { class: "roster-option clear-opt", type:"button" }, "✕ Remove attending");
+          clearOpt.addEventListener("mousedown", async ev => {
+            ev.preventDefault(); closeDropdown();
+            editingSupervisor = false;
+            await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: null });
+            renderProviderArea();
+          });
+          dropdown.appendChild(clearOpt);
+        }
+        filtered.slice(0,12).forEach(entry => {
+          const opt = el("button", { class:"roster-option", type:"button" }, entry.name);
+          opt.addEventListener("mousedown", async ev => {
+            ev.preventDefault(); closeDropdown();
+            editingSupervisor = false;
+            await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: entry.name });
+            renderProviderArea();
+          });
+          dropdown.appendChild(opt);
+        });
+        if (!filtered.length) dropdown.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No attending matches."));
+        innerWrap.appendChild(dropdown);
+      }
+
+      input.addEventListener("focus", () => showDropdown(input.value));
+      input.addEventListener("input", () => showDropdown(input.value));
+      input.addEventListener("blur", () => setTimeout(() => { closeDropdown(); editingSupervisor = false; renderProviderArea(); }, 150));
+      input.addEventListener("keydown", async e => {
+        const opts = dropdown ? Array.from(dropdown.querySelectorAll(".roster-option:not(.clear-opt)")) : [];
+        if (e.key === "Escape") { closeDropdown(); editingSupervisor = false; renderProviderArea(); return; }
+        if (e.key === "ArrowDown") { e.preventDefault(); hiIdx=Math.min(hiIdx+1,opts.length-1); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+        if (e.key === "ArrowUp")   { e.preventDefault(); hiIdx=Math.max(hiIdx-1,0); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          let selected = null;
+          if (hiIdx>=0&&opts[hiIdx]) selected=opts[hiIdx].textContent.trim();
+          else if (input.value.trim()) {
+            const m = planAttendingPool.filter(en => rosterMatches(en, input.value.trim()));
+            if (m.length) selected=m[0].name;
+          }
+          if (selected) {
+            closeDropdown(); editingSupervisor=false;
+            await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: selected });
+            renderProviderArea();
+          } else {
+            closeDropdown(); editingSupervisor=false; renderProviderArea();
+          }
+        }
+      });
+      innerWrap.appendChild(input);
+      setTimeout(() => { input.focus(); showDropdown(""); }, 30);
+      inputWrap.appendChild(innerWrap);
+      return inputWrap;
+    }
+
+    renderProviderArea();
+    row.appendChild(providerArea);
+
+    // Empty checkbox
+    if (!isNoBreak) {
+      const emptyWrap = el("div", { style: { display:"flex", alignItems:"center", gap:"3px", flexShrink:"0" } });
+      const cb = el("input", { class: "plan-empty-cb", type: "checkbox" });
+      cb.checked = isEmpty;
+      cb.addEventListener("change", async () => {
+        const current = planData[rid] || {};
+        await savePlanRoom(locKey, { ...current, empty: cb.checked, provider: cb.checked ? null : current.provider, supervisor: cb.checked ? null : current.supervisor });
+        refreshCenterColumn();
+      });
+      emptyWrap.appendChild(el("label", { class: "plan-empty-label" }, "Empty"));
+      emptyWrap.appendChild(cb);
+      row.appendChild(emptyWrap);
+    }
+
+    card.appendChild(row);
+    return card;
+  }
+
+  // ─── Right column: Call assignments ─────────────────────────────────────────
+  function buildRightColumn(col) {
+    col.innerHTML = "";
+
+    // On Call section
+    const callSection = el("div", { class: "plan-section" });
+    callSection.appendChild(el("div", { class: "plan-section-title" }, "On Call"));
+    callPositions.forEach((pos, idx) => {
+      callSection.appendChild(buildPlanCallRow(pos, idx, false));
+    });
+    if (!callPositions.length) {
+      callSection.appendChild(el("div", { style:{ color:"#a39688", fontSize:"12px" } }, "No call positions configured."));
+    }
+    col.appendChild(callSection);
+
+    // Post Call section
+    const postSection = el("div", { class: "plan-section" });
+    postSection.appendChild(el("div", { class: "plan-section-title" }, "Post Call"));
+    postSection.appendChild(el("div", { class: "plan-section-sub" }, "Auto-filled from tonight's on-call"));
+    callPositions.forEach((pos, idx) => {
+      postSection.appendChild(buildPlanCallRow(pos, idx, true));
+    });
+    if (!callPositions.length) {
+      postSection.appendChild(el("div", { style:{ color:"#a39688", fontSize:"12px" } }, "No call positions configured."));
+    }
+    col.appendChild(postSection);
+  }
+
+  function buildPlanCallRow(position, posIdx, isPostCall) {
+    const row = el("div", { class: "plan-call-row" });
+    row.appendChild(el("span", { class: "plan-call-label" }, position));
+
+    const cellWrap = el("div", { style: { flex:"1", position:"relative" } });
+    let editing = false;
+    let dropdown = null;
+
+    const getData = () => isPostCall ? planPostCallData : planCallData;
+    const saveData = isPostCall ? savePlanPostCallAssignment : savePlanCallAssignment;
+
+    function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
+
+    function renderCell() {
+      closeDropdown();
+      cellWrap.innerHTML = "";
+      editing = false;
+      const liveProvider = getData()[posIdx] || null;
+
+      const btn = el("button", {
+        class: "plan-call-btn" + (!liveProvider ? " empty" : ""),
+      }, liveProvider || "—");
+
+      btn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        editing = true;
+        cellWrap.innerHTML = "";
+        const inputEl = el("input", {
+          class: "plan-room-input",
+          type: "text",
+          placeholder: "Search…",
+          autocomplete: "off",
+          style: { fontSize:"12px", padding:"3px 8px", width:"100%" },
+        });
+        let hiIdx = -1;
+
+        const pool = availableList.length > 0
+          ? roster.filter(en => availableList.includes(en.name))
+          : roster;
+
+        function showDd(query) {
+          closeDropdown();
+          const matches = query ? pool.filter(en => rosterMatches(en, query)) : pool;
+          const dd = el("div", { class: "roster-dropdown", style: { zIndex:"9999" } });
+          if (liveProvider) {
+            const clearOpt = el("button", { class:"roster-option clear-opt", type:"button" }, "✕ Remove");
+            clearOpt.addEventListener("mousedown", async ev => {
+              ev.preventDefault(); closeDropdown();
+              await saveData(posIdx, null);
+              renderCell();
+            });
+            dd.appendChild(clearOpt);
+          }
+          matches.slice(0,12).forEach(en => {
+            const opt = el("button", { class:"roster-option", type:"button" }, en.name);
+            opt.addEventListener("mousedown", async ev => {
+              ev.preventDefault(); closeDropdown();
+              await saveData(posIdx, en.name);
+              renderCell();
+            });
+            dd.appendChild(opt);
+          });
+          if (!matches.length && !liveProvider) dd.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "No matches."));
+          document.body.appendChild(dd);
+          dropdown = dd;
+          requestAnimationFrame(() => {
+            const r = inputEl.getBoundingClientRect();
+            dd.style.position = "fixed";
+            dd.style.top  = (r.bottom + 2) + "px";
+            dd.style.left = r.left + "px";
+            dd.style.width = r.width + "px";
+          });
+        }
+
+        inputEl.addEventListener("focus", () => showDd(inputEl.value));
+        inputEl.addEventListener("input", () => showDd(inputEl.value));
+        inputEl.addEventListener("blur", () => setTimeout(() => { closeDropdown(); renderCell(); }, 150));
+        inputEl.addEventListener("keydown", async e => {
+          const opts = dropdown ? Array.from(dropdown.querySelectorAll(".roster-option:not(.clear-opt)")) : [];
+          if (e.key === "Escape") { closeDropdown(); renderCell(); return; }
+          if (e.key === "ArrowDown") { e.preventDefault(); hiIdx=Math.min(hiIdx+1,opts.length-1); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+          if (e.key === "ArrowUp")   { e.preventDefault(); hiIdx=Math.max(hiIdx-1,0); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
+          if (e.key === "Enter" || e.key === "Tab") {
+            e.preventDefault();
+            let selected = null;
+            if (hiIdx>=0&&opts[hiIdx]) selected=opts[hiIdx].textContent.trim();
+            else if (inputEl.value.trim()) {
+              const m = pool.filter(en => rosterMatches(en, inputEl.value.trim()));
+              if (m.length) selected = m[0].name;
+            }
+            if (selected) { await saveData(posIdx, selected); }
+            closeDropdown(); renderCell();
+          }
+        });
+        cellWrap.appendChild(inputEl);
+        setTimeout(() => inputEl.focus(), 20);
+      });
+
+      cellWrap.appendChild(btn);
+    }
+
+    renderCell();
+    row.appendChild(cellWrap);
+    return row;
+  }
+
+  // ─── Randomize remaining ─────────────────────────────────────────────────────
+  async function randomizeRemaining() {
+    const unassigned = getUnassignedAvailable();
+    const emptyRooms = locations.filter(l => !isDivider(l) && !(planData[roomId(l)] || {}).provider && !(planData[roomId(l)] || {}).empty);
+
+    if (!unassigned.length || !emptyRooms.length) {
+      showToast("Nothing to randomize.");
+      return;
+    }
+
+    const count = Math.min(unassigned.length, emptyRooms.length);
+    const overlay = el("div", { class: "confirm-overlay" },
+      el("div", { class: "confirm-box" },
+        el("div", { class: "confirm-title" }, "Randomize Remaining"),
+        el("div", { class: "confirm-msg" }, `Randomly assign ${count} provider${count !== 1 ? "s" : ""} to ${count} available room${count !== 1 ? "s" : ""}?`),
+        el("div", { class: "btn-row" },
+          el("button", { class: "btn-primary", style:{ flex:"1", padding:"10px" }, onClick: async () => {
+            overlay.remove();
+            // Shuffle unassigned
+            const shuffled = [...unassigned].sort(() => Math.random() - 0.5);
+            const shuffledRooms = [...emptyRooms].sort(() => Math.random() - 0.5);
+            const writes = [];
+            for (let i = 0; i < count; i++) {
+              const loc = shuffledRooms[i];
+              const name = shuffled[i];
+              const current = planData[roomId(loc)] || {};
+              writes.push(savePlanRoom(loc, { ...current, provider: name, supervisor: null, empty: false }));
+            }
+            await Promise.all(writes);
+            refreshCenterColumn();
+            showToast(`Assigned ${count} provider${count !== 1 ? "s" : ""}`);
+          }}, "Assign"),
+          el("button", { class: "btn-ghost", style:{ flex:"1" }, onClick: () => overlay.remove() }, "Cancel"),
+        ),
+      )
+    );
+    document.body.appendChild(overlay);
+  }
+
+  // ─── Print PDF ───────────────────────────────────────────────────────────────
+  function printPlan() {
+    // Remove any existing print view
+    const existing = document.getElementById("plan-print-view");
+    if (existing) existing.remove();
+
+    const dateLabel = formatDateBanner(selectedDate);
+    const header = planHeaderText || "Daily OR Assignments";
+
+    // Build left column content
+    const leftContent = [];
+
+    // No-break slots box
+    if (noBreakSlots.length) {
+      const rows = noBreakSlots.map(slot => {
+        const d = planData[roomId("nb_plan_" + slot)] || {};
+        return el("div", { class: "print-row" },
+          el("div", { class: "print-row-label" }, slot),
+          el("div", { class: "print-row-value" }, d.provider || ""),
+        );
+      });
+      leftContent.push(el("div", { class: "print-box" },
+        el("div", { class: "print-box-title" }, "No-Break Slots"),
+        ...rows,
+      ));
+    }
+
+    // Group rooms by section
+    let currentSection = "Main";
+    let currentRows = [];
+    const sections = [];
+
+    function flushSection() {
+      if (currentRows.length) {
+        sections.push({ title: currentSection, rows: [...currentRows] });
+        currentRows = [];
+      }
+    }
+
+    locations.forEach(loc => {
+      if (isDivider(loc)) {
+        flushSection();
+        currentSection = loc.replace(/^__divider__\d*$/, "").replace(/^__divider__/, "") || "Section";
+        return;
+      }
+      const d = planData[roomId(loc)] || {};
+      if (!d.empty) {
+        currentRows.push({ loc, provider: d.provider || "", supervisor: d.supervisor || "" });
+      }
+    });
+    flushSection();
+
+    sections.forEach(sec => {
+      const rows = sec.rows.map(r => {
+        const nameText = r.provider + (r.supervisor ? ` / ${r.supervisor}` : "");
+        return el("div", { class: "print-row" },
+          el("div", { class: "print-row-label" }, r.loc),
+          el("div", { class: "print-row-value" }, nameText),
+        );
+      });
+      leftContent.push(el("div", { class: "print-box" },
+        el("div", { class: "print-box-title" }, sec.title),
+        ...rows,
+      ));
+    });
+
+    // Right column content
+    const rightContent = [];
+
+    // Post Call box
+    if (callPositions.length) {
+      const postRows = callPositions.map((pos, i) => el("div", { class: "print-row" },
+        el("div", { class: "print-row-label" }, pos),
+        el("div", { class: "print-row-value" }, planPostCallData[i] || ""),
+      ));
+      rightContent.push(el("div", { class: "print-box" },
+        el("div", { class: "print-box-title" }, "Post Call"),
+        ...postRows,
+      ));
+
+      // On Call box
+      const callRows = callPositions.map((pos, i) => el("div", { class: "print-row" },
+        el("div", { class: "print-row-label" }, pos),
+        el("div", { class: "print-row-value" }, planCallData[i] || ""),
+      ));
+      rightContent.push(el("div", { class: "print-box" },
+        el("div", { class: "print-box-title" }, "On Call"),
+        ...callRows,
+      ));
+    }
+
+    // 12-hour shift box: providers whose note matches /^7\s*p(m)?$/i
+    const twelveHourProviders = availableList.filter(name => {
+      const note = planNotes[name];
+      return note && /^7\s*p(m)?$/i.test(note.text);
+    });
+    if (twelveHourProviders.length) {
+      const rows = twelveHourProviders.map((name, i) => el("div", { class: "print-row" },
+        el("div", { class: "print-row-label" }, String(i + 1)),
+        el("div", { class: "print-row-value" }, name),
+      ));
+      rightContent.push(el("div", { class: "print-box" },
+        el("div", { class: "print-box-title" }, "12 Hour Shift"),
+        ...rows,
+      ));
+    }
+
+    const printView = el("div", { id: "plan-print-view" },
+      el("div", { class: "print-header" }, header),
+      el("div", { class: "print-date" }, dateLabel),
+      el("div", { class: "print-body" },
+        el("div", { class: "print-left" }, ...leftContent),
+        el("div", { class: "print-right" }, ...rightContent),
+      ),
+    );
+
+    document.body.appendChild(printView);
+    window.print();
+    // Remove after print dialog closes
+    setTimeout(() => { if (printView.parentNode) printView.remove(); }, 3000);
+  }
+
+  // ─── Initial render ───────────────────────────────────────────────────────────
+  // Show loading state
+  app.appendChild(el("div", { style:{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"50vh", fontSize:"28px" } }, "💨"));
+  render(selectedDate);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
