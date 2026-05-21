@@ -4373,6 +4373,12 @@ function renderPlanPage() {
       const data = e.dataTransfer.getData("text/plain");
       if (data.startsWith("available:")) {
         const name = data.slice(10);
+        if (!isNoBreak && availableList.includes(name)) {
+          availableList = availableList.filter(n => n !== name);
+          await saveAvailable();
+          const leftCol = document.querySelector(".plan-col-left");
+          if (leftCol) buildLeftColumn(leftCol);
+        }
         const current = planData[rid] || {};
         await savePlanRoom(locKey, { ...current, provider: name, supervisor: null, empty: false });
         refreshCenterColumn();
@@ -4428,11 +4434,19 @@ function renderPlanPage() {
       if (editingProvider) {
         providerArea.appendChild(buildPlanProviderInput());
       } else {
+        const nameRow = el("div", { style: { display:"flex", alignItems:"center", gap:"6px", minWidth:"0" } });
         const btn = el("button", {
           class: "plan-room-provider-btn" + (!provider ? " empty" : ""),
           onClick: () => { editingProvider = true; renderProviderArea(); }
         }, provider || "Assign provider…");
-        providerArea.appendChild(btn);
+        nameRow.appendChild(btn);
+        if (provider) {
+          const noteObj = planNotes[provider] || null;
+          if (noteObj) {
+            nameRow.appendChild(el("span", { class: "plan-note-badge note-" + noteObj.color }, noteObj.text));
+          }
+        }
+        providerArea.appendChild(nameRow);
 
         // Attending row if needed
         const needsSuper = provider && normalizeRosterEntry(roster.find(e => e.name === provider) || provider).role !== "attending";
@@ -4469,9 +4483,10 @@ function renderPlanPage() {
       function showDropdown(query) {
         closeDropdown();
         // Filter to available providers, unassigned elsewhere (or this room's current provider)
+        // Core positions (isNoBreak) always use the full roster — providers don't have to be "working tomorrow"
         const assigned = getAssignedProviders();
         assigned.delete(provider || ""); // allow reassigning same room
-        const pool = availableList.length > 0
+        const pool = (availableList.length > 0 && !isNoBreak)
           ? roster.filter(e => availableList.includes(e.name) && !assigned.has(e.name))
           : roster.filter(e => !assigned.has(e.name));
         const filtered = query ? pool.filter(e => rosterMatches(e, query)) : pool;
@@ -4495,6 +4510,12 @@ function renderPlanPage() {
             ev.preventDefault();
             closeDropdown();
             editingProvider = false;
+            if (!isNoBreak && availableList.includes(entry.name)) {
+              availableList = availableList.filter(n => n !== entry.name);
+              await saveAvailable();
+              const leftCol = document.querySelector(".plan-col-left");
+              if (leftCol) buildLeftColumn(leftCol);
+            }
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: entry.name, supervisor: null, empty: false });
             refreshCenterColumn();
@@ -4503,7 +4524,7 @@ function renderPlanPage() {
         });
 
         if (!filtered.length) {
-          const msg = availableList.length > 0
+          const msg = (availableList.length > 0 && !isNoBreak)
             ? "No available providers match. Add providers to the Working list first."
             : "No matches in roster.";
           dropdown.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, msg));
@@ -4529,7 +4550,7 @@ function renderPlanPage() {
           if (hiIdx >= 0 && opts[hiIdx]) selected = opts[hiIdx].textContent.trim();
           else if (input.value.trim()) {
             const assigned = getAssignedProviders(); assigned.delete(provider || "");
-            const pool = availableList.length > 0
+            const pool = (availableList.length > 0 && !isNoBreak)
               ? roster.filter(en => availableList.includes(en.name) && !assigned.has(en.name))
               : roster.filter(en => !assigned.has(en.name));
             const m = pool.filter(en => rosterMatches(en, input.value.trim()));
@@ -4538,6 +4559,12 @@ function renderPlanPage() {
           if (selected) {
             closeDropdown();
             editingProvider = false;
+            if (!isNoBreak && availableList.includes(selected)) {
+              availableList = availableList.filter(n => n !== selected);
+              await saveAvailable();
+              const leftCol = document.querySelector(".plan-col-left");
+              if (leftCol) buildLeftColumn(leftCol);
+            }
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: selected, supervisor: null, empty: false });
             refreshCenterColumn();
@@ -4684,7 +4711,7 @@ function renderPlanPage() {
     const row = el("div", { class: "plan-call-row" });
     row.appendChild(el("span", { class: "plan-call-label" }, position));
 
-    const cellWrap = el("div", { style: { flex:"1", position:"relative" } });
+    const cellWrap = el("div", { style: { flex:"1", minWidth:"0", position:"relative" } });
     let editing = false;
     let dropdown = null;
 
