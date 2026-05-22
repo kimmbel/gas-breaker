@@ -3312,17 +3312,59 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       async (newOrder) => { locs = newOrder; await saveLocations(newOrder); },
       (loc, arr, rebuildFn) => {
         if (isDivider(loc)) {
-          return el("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between", flex:"1", gap:"8px" } },
-            el("span", { style: { fontSize:"11px", color:"#a39688", fontStyle:"italic", display:"flex", alignItems:"center", gap:"6px" } },
-              el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
-              "section divider",
-              el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
-            ),
-            el("button", { class: "btn-danger", onClick: async () => {
-              locs = locs.filter(l => l !== loc);
-              await saveLocations(locs); rebuildFn(locs); showToast("Divider removed");
-            }}, "Remove"),
+          const after = loc.replace(/^__divider__/, "");
+          const divLabel = /^\d+$/.test(after) ? "" : after;
+          const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
+          let divEditing = false;
+          let divInput = null;
+
+          const labelDisplay = el("span", { style: { fontSize:"11px", color:"#a39688", fontStyle:"italic", flex:"1", display:"flex", alignItems:"center", gap:"6px" } },
+            el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
+            divLabel || "Section",
+            el("span", { style: { flex:"1", height:"2px", background:"#d4ccc6", display:"inline-block" } }),
           );
+
+          const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
+          const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
+            locs = locs.filter(l => l !== loc);
+            await saveLocations(locs); rebuildFn(locs); showToast("Divider removed");
+          }}, "Remove");
+
+          async function saveDivEdit() {
+            if (!divEditing) return;
+            const val = divInput ? divInput.value.trim() : "";
+            const newKey = val ? `__divider__${val}` : `__divider__${Date.now()}`;
+            const idx = locs.indexOf(loc);
+            divEditing = false;
+            divInput = null;
+            if (idx !== -1) { locs[idx] = newKey; await saveLocations(locs); rebuildFn(locs); showToast(val ? `Section labeled "${val}"` : "Label cleared"); return; }
+            editBtn.textContent = "Edit";
+          }
+
+          editBtn.addEventListener("click", () => {
+            if (divEditing) {
+              divEditing = false;
+              if (divInput) { divInput.replaceWith(labelDisplay); divInput = null; }
+              editBtn.textContent = "Edit";
+              return;
+            }
+            divEditing = true;
+            divInput = el("input", { class: "admin-add-input", type:"text", placeholder:"Section name…", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+            divInput.value = divLabel;
+            labelDisplay.replaceWith(divInput);
+            editBtn.textContent = "Cancel";
+            divInput.focus(); divInput.select();
+            divInput.addEventListener("keydown", e => {
+              if (e.key === "Enter") { e.preventDefault(); saveDivEdit(); }
+              if (e.key === "Escape") { divEditing = false; divInput.replaceWith(labelDisplay); divInput = null; editBtn.textContent = "Edit"; }
+            });
+            divInput.addEventListener("blur", () => setTimeout(() => { if (divEditing) saveDivEdit(); }, 150));
+          });
+
+          rowDiv.appendChild(labelDisplay);
+          rowDiv.appendChild(editBtn);
+          rowDiv.appendChild(removeBtn);
+          return rowDiv;
         }
         // ── Editable location row ──
         const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
@@ -3452,8 +3494,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No slots yet.");
     if (!slots.length) list.appendChild(emptyMsg);
     return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "No-Break Slots"),
-      el("div", { class: "admin-section-sub" }, "Slots for breakers or others who don't need breaks. Appear at the top of the board for tracking only."),
+      el("div", { class: "admin-section-title" }, "Core Positions"),
+      el("div", { class: "admin-section-sub" }, "Roles like Breaker or Float that appear at the top of the coordinator display. Assignable in Plan Tomorrow."),
       list,
       el("div", { class: "admin-add-row" }, slotIn, el("button", { class: "btn-primary", onClick: addSlot }, "Add")),
     );
@@ -4949,8 +4991,18 @@ function renderPlanPage() {
       ));
     }
 
-    // 12-hour shift box: providers whose note matches /^7\s*p(m)?$/i
-    const twelveHourProviders = availableList.filter(name => {
+    // 12-hour shift box: any provider anywhere in the plan whose note matches /^7\s*p(m)?$/i
+    const allPlanProviders = new Set(availableList);
+    locations.filter(l => !isDivider(l)).forEach(loc => {
+      const d = planData[roomId(loc)] || {};
+      if (d.provider) allPlanProviders.add(d.provider);
+      if (d.supervisor) allPlanProviders.add(d.supervisor);
+    });
+    noBreakSlots.forEach(slot => {
+      const d = planData[roomId("nb_plan_" + slot)] || {};
+      if (d.provider) allPlanProviders.add(d.provider);
+    });
+    const twelveHourProviders = [...allPlanProviders].filter(name => {
       const note = planNotes[name];
       return note && /^7\s*p(m)?$/i.test(note.text);
     });
