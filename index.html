@@ -2337,7 +2337,7 @@ function renderBoard() {
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
-      noBreakSlots.length ? el("div", { class: "no-break-section" },
+      (noBreakSlots.length && !activeFilter) ? el("div", { class: "no-break-section" },
         ...noBreakCards,
         el("hr", { class: "or-section-divider" }),
       ) : null,
@@ -3898,7 +3898,7 @@ function renderPlanPage() {
       if (d.provider) assigned.add(d.provider);
     });
     noBreakSlots.forEach(slot => {
-      const d = planData[roomId("nb_plan_" + slot)] || {};
+      const d = planData[roomId(slot)] || {};
       if (d.provider) assigned.add(d.provider);
     });
     return assigned;
@@ -4294,7 +4294,7 @@ function renderPlanPage() {
       const nbSection = el("div", { class: "plan-section" });
       nbSection.appendChild(el("div", { class: "plan-section-title" }, "Core Positions"));
       noBreakSlots.forEach(slot => {
-        nbSection.appendChild(buildPlanRoomCard("nb_plan_" + slot, slot, true));
+        nbSection.appendChild(buildPlanRoomCard(slot, slot, true));
       });
       col.appendChild(nbSection);
     }
@@ -4404,12 +4404,50 @@ function renderPlanPage() {
     // Provider area
     let editingProvider = false;
     let editingSupervisor = false;
+    let editingRoomNote = false;
     const providerArea = el("div", { style: { flex:"1", minWidth:"0", display:"flex", flexDirection:"column" } });
 
     function renderProviderArea() {
       providerArea.innerHTML = "";
       if (editingProvider) {
         providerArea.appendChild(buildPlanProviderInput());
+      } else if (editingRoomNote && provider) {
+        // ── Inline note editor for assigned provider ──
+        const NOTE_COLORS = [
+          { id:"blue",  cls:"dot-blue"  },
+          { id:"amber", cls:"dot-amber" },
+          { id:"green", cls:"dot-green" },
+          { id:"rose",  cls:"dot-rose"  },
+        ];
+        const currentNote = planNotes[provider] || null;
+        let selectedColor = currentNote ? currentNote.color : "blue";
+        const noteInput = el("input", { class: "plan-note-input", type:"text", placeholder:"Short note…", maxlength:"15" });
+        noteInput.value = currentNote ? currentNote.text : "";
+        const colorRow = el("div", { class: "plan-note-color-row" });
+        NOTE_COLORS.forEach(c => {
+          const dot = el("div", { class: "plan-note-color-dot " + c.cls + (selectedColor === c.id ? " selected" : ""), title: c.id });
+          dot.addEventListener("mousedown", e => {
+            e.preventDefault();
+            selectedColor = c.id;
+            colorRow.querySelectorAll(".plan-note-color-dot").forEach(d => d.classList.remove("selected"));
+            dot.classList.add("selected");
+          });
+          colorRow.appendChild(dot);
+        });
+        const saveRoomNote = async () => {
+          const val = noteInput.value.trim().slice(0, 15);
+          const obj = val ? { text: val, color: selectedColor } : null;
+          await savePlanNote(provider, obj);
+          editingRoomNote = false;
+          renderProviderArea();
+        };
+        noteInput.addEventListener("keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); saveRoomNote(); }
+          if (e.key === "Escape") { editingRoomNote = false; renderProviderArea(); }
+        });
+        noteInput.addEventListener("blur", () => setTimeout(() => { if (editingRoomNote) saveRoomNote(); }, 200));
+        providerArea.appendChild(el("div", { class: "plan-note-editor" }, noteInput, colorRow));
+        setTimeout(() => noteInput.focus(), 20);
       } else {
         const nameRow = el("div", { style: { display:"flex", alignItems:"center", gap:"6px", minWidth:"0" } });
         const btn = el("button", {
@@ -4420,7 +4458,9 @@ function renderPlanPage() {
         if (provider) {
           const noteObj = planNotes[provider] || null;
           if (noteObj) {
-            nameRow.appendChild(el("span", { class: "plan-note-badge note-" + noteObj.color }, noteObj.text));
+            nameRow.appendChild(el("span", { class: "plan-note-badge note-" + noteObj.color, onClick: () => { editingRoomNote = true; renderProviderArea(); } }, noteObj.text));
+          } else {
+            nameRow.appendChild(el("span", { class: "plan-note-add", onClick: () => { editingRoomNote = true; renderProviderArea(); } }, "+ note"));
           }
         }
         providerArea.appendChild(nameRow);
@@ -4475,7 +4515,14 @@ function renderPlanPage() {
             ev.preventDefault();
             closeDropdown();
             editingProvider = false;
+            const removedName = provider;
             await savePlanRoom(locKey, { ...(planData[rid] || {}), provider: null, supervisor: null });
+            if (!isNoBreak && removedName && !availableList.includes(removedName)) {
+              availableList = [...availableList, removedName];
+              await saveAvailable();
+              const leftCol = document.querySelector(".plan-col-left");
+              if (leftCol) buildLeftColumn(leftCol);
+            }
             refreshCenterColumn();
           });
           dropdown.appendChild(clearOpt);
@@ -4825,6 +4872,12 @@ function renderPlanPage() {
               writes.push(savePlanRoom(loc, { ...current, provider: name, supervisor: null, empty: false }));
             }
             await Promise.all(writes);
+            // Remove assigned providers from the Working Tomorrow list
+            const assignedNames = new Set(shuffled.slice(0, count));
+            availableList = availableList.filter(n => !assignedNames.has(n));
+            await saveAvailable();
+            const leftCol = document.querySelector(".plan-col-left");
+            if (leftCol) buildLeftColumn(leftCol);
             refreshCenterColumn();
             showToast(`Assigned ${count} provider${count !== 1 ? "s" : ""}`);
           }}, "Assign"),
@@ -4850,7 +4903,7 @@ function renderPlanPage() {
     // No-break slots box
     if (noBreakSlots.length) {
       const rows = noBreakSlots.map(slot => {
-        const d = planData[roomId("nb_plan_" + slot)] || {};
+        const d = planData[roomId(slot)] || {};
         return el("div", { class: "print-row" },
           el("div", { class: "print-row-label" }, slot),
           el("div", { class: "print-row-value" }, d.provider || ""),
@@ -4934,7 +4987,7 @@ function renderPlanPage() {
       if (d.supervisor) allPlanProviders.add(d.supervisor);
     });
     noBreakSlots.forEach(slot => {
-      const d = planData[roomId("nb_plan_" + slot)] || {};
+      const d = planData[roomId(slot)] || {};
       if (d.provider) allPlanProviders.add(d.provider);
     });
     const twelveHourProviders = [...allPlanProviders].filter(name => {
