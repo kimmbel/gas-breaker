@@ -444,6 +444,19 @@
     .plan-call-btn { display: block; width: 100%; box-sizing: border-box; text-align: left; font-size: 12px; font-weight: 700; color: #2d2420; background: #f8f4ef; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .plan-call-btn.empty { color: #c4b8ad; font-style: italic; font-weight: 600; }
     .plan-call-btn:hover { background: #f1ede8; }
+
+    /* ── Schedule import modal ── */
+    .sched-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; }
+    .sched-modal-box { background: #fff; border-radius: 16px; padding: 24px; max-width: 500px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.18); margin: auto; }
+    .sched-modal-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 18px; color: #2d2420; margin-bottom: 6px; }
+    .sched-modal-sub { font-size: 13px; color: #7c6c62; margin-bottom: 16px; }
+    .sched-name-row { border-bottom: 1px solid #f1ede8; padding: 10px 0; }
+    .sched-name-row:last-of-type { border-bottom: none; }
+    .sched-schedule-name { font-weight: 800; font-size: 13px; color: #2d2420; margin-bottom: 6px; }
+    .sched-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .sched-map-select { flex: 1; min-width: 0; background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 8px; padding: 5px 8px; font-size: 13px; font-family: inherit; color: #2d2420; }
+    .sched-remember { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #7c6c62; white-space: nowrap; cursor: pointer; }
+
     .plan-note-editor { display: flex; flex-direction: column; gap: 5px; margin: 4px 0; }
     .plan-note-input { width: 100%; background: #faf7f4; border: 1.5px solid #b45309; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; color: #2d2420; outline: none; font-family: inherit; }
     .plan-note-color-row { display: flex; gap: 6px; }
@@ -3778,7 +3791,9 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     el("div", { class: "admin-root" },
       el("div", { style: { fontFamily:"'Libre Baskerville', serif", fontWeight:"700", fontSize:"22px", color:"#2d2420", marginBottom:"4px" } }, "⚙️ " + (isDept ? session.deptName : "Departments")),
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
-      isDept ? buildPlanTomorrowSection()  : null,
+      isDept ? buildPlanTomorrowSection()         : null,
+      isDept ? buildScheduleImportSection()       : null,
+      isDept ? buildScheduleNameMappingsSection() : null,
       isDept ? buildLocSection()           : buildDeptSection(),
       isDept ? buildNoBreakSection()       : buildAdminPasscodeSection(),
       isDept ? buildCallPositionsSection() : null,
@@ -3838,6 +3853,90 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
       removeWrap,
       statusMsg,
+    );
+  }
+
+  // ── Schedule import: role mappings section ──────────────────────────────────
+  function buildScheduleImportSection() {
+    const ROLE_KEYS = [
+      { key: "ac",          label: "AC (Charge)" },
+      { key: "obCSection",  label: "OB C-Section" },
+      { key: "obLaborDeck", label: "OB Labor Deck" },
+      { key: "traumaDay",   label: "Trauma Day" },
+    ];
+    const statusMsg = el("div", { style: { fontSize: "12px", color: "#4ade80", marginTop: "8px", minHeight: "16px" } });
+    const selects = {};
+    const container = el("div");
+
+    get(ref(db, `deptAdmin/${deptCode}/scheduleRoleMappings`)).then(snap => {
+      const cur = snap.val() || {};
+      container.innerHTML = "";
+      ROLE_KEYS.forEach(({ key, label }) => {
+        const sel = el("select", { class: "role-select", style: { minWidth: "150px", fontSize: "13px" } });
+        sel.appendChild(el("option", { value: "" }, "— not mapped —"));
+        noBreakSlots.forEach(slot => {
+          const opt = el("option", { value: slot }, slot);
+          if (cur[key] === slot) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        selects[key] = sel;
+        container.appendChild(el("div", {
+          style: { display: "flex", alignItems: "center", gap: "10px", padding: "6px 0", borderBottom: "1px solid #f1ede8" },
+        },
+          el("span", { style: { fontSize: "13px", fontWeight: "700", color: "#7c6c62", minWidth: "140px", flexShrink: "0" } }, label),
+          sel,
+        ));
+      });
+    });
+
+    async function saveRoleMappings() {
+      const mappings = {};
+      ROLE_KEYS.forEach(({ key }) => { const v = selects[key]?.value; if (v) mappings[key] = v; });
+      await set(ref(db, `deptAdmin/${deptCode}/scheduleRoleMappings`), Object.keys(mappings).length ? mappings : null);
+      statusMsg.textContent = "Saved ✓";
+      setTimeout(() => { statusMsg.textContent = ""; }, 2000);
+    }
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Schedule Import: Role Mappings"),
+      el("div", { class: "admin-section-sub" }, "Map each QGenda schedule role to its Core Position in Gas Breaker. Set once, used on every import."),
+      container,
+      el("button", { class: "btn-primary", style: { marginTop: "10px" }, onClick: saveRoleMappings }, "Save Mappings"),
+      statusMsg,
+    );
+  }
+
+  // ── Schedule import: name mappings section ──────────────────────────────────
+  function buildScheduleNameMappingsSection() {
+    const container = el("div");
+
+    async function reloadMappings() {
+      const snap = await get(ref(db, `deptAdmin/${deptCode}/scheduleMappings`));
+      const mappings = snap.val() || {};
+      container.innerHTML = "";
+      const entries = Object.entries(mappings);
+      if (!entries.length) {
+        container.appendChild(el("div", { style: { fontSize: "13px", color: "#a39688", fontStyle: "italic", padding: "8px 0" } }, "No saved mappings yet."));
+        return;
+      }
+      entries.forEach(([key, rosterName]) => {
+        const schedName = key.replace(/_/g, " ").trim();
+        const row = el("div", { style: { display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", borderBottom: "1px solid #f1ede8" } });
+        row.appendChild(el("span", { style: { flex: "1", fontSize: "13px", color: "#2d2420" } }, `${schedName} → ${rosterName}`));
+        row.appendChild(el("button", { class: "btn-danger", style: { fontSize: "11px", padding: "2px 8px" }, onClick: async () => {
+          await remove(ref(db, `deptAdmin/${deptCode}/scheduleMappings/${key}`));
+          reloadMappings();
+        }}, "✕ Remove"));
+        container.appendChild(row);
+      });
+    }
+
+    reloadMappings();
+
+    return el("div", { class: "admin-section" },
+      el("div", { class: "admin-section-title" }, "Schedule Import: Name Mappings"),
+      el("div", { class: "admin-section-sub" }, "Remembered name matches from past imports. Delete a mapping to re-prompt next time."),
+      container,
     );
   }
 }
@@ -4100,6 +4199,7 @@ function renderPlanPage() {
         el("div", { class: "plan-header-row" },
           dateInput,
           fridayWarn,
+          el("button", { class: "btn-ghost", style: { fontSize: "13px", marginLeft: "auto" }, onClick: importFromSchedule }, "📥 Import from Schedule"),
         ),
         bannerDiv,
         headerInput,
@@ -4906,6 +5006,253 @@ function renderPlanPage() {
     renderCell();
     row.appendChild(cellWrap);
     return row;
+  }
+
+  function refreshRightColumn() {
+    const rightCol = document.querySelector(".plan-col-right");
+    if (rightCol) buildRightColumn(rightCol);
+  }
+
+  // ─── Schedule import ──────────────────────────────────────────────────────────
+
+  function promptOverwriteOrMerge() {
+    return new Promise(resolve => {
+      const overlay = el("div", { class: "confirm-overlay" },
+        el("div", { class: "confirm-box" },
+          el("div", { class: "confirm-title" }, "Import from Schedule"),
+          el("div", { class: "confirm-msg" }, "Plan Tomorrow already has data. What would you like to do?"),
+          el("div", { class: "btn-row", style: { flexDirection: "column", gap: "8px", marginTop: "4px" } },
+            el("button", { class: "btn-warn", style: { width: "100%", textAlign: "left", padding: "10px 14px" },
+              onClick: () => { overlay.remove(); resolve(false); } }, "Overwrite all existing assignments"),
+            el("button", { class: "btn-primary", style: { width: "100%", textAlign: "left", padding: "10px 14px" },
+              onClick: () => { overlay.remove(); resolve(true); } }, "Fill empty slots only"),
+            el("button", { class: "btn-ghost", style: { width: "100%", textAlign: "left", padding: "10px 14px" },
+              onClick: () => { overlay.remove(); resolve(null); } }, "Cancel"),
+          ),
+        )
+      );
+      document.body.appendChild(overlay);
+    });
+  }
+
+  function showResolutionModal(names) {
+    return new Promise(resolve => {
+      const overlay = el("div", { class: "sched-modal-overlay" });
+      const box = el("div", { class: "sched-modal-box" });
+
+      box.appendChild(el("div", { class: "sched-modal-title" }, "Unmatched Names"));
+      box.appendChild(el("div", { class: "sched-modal-sub" },
+        `${names.length} name${names.length !== 1 ? "s" : ""} from the schedule weren't found in your roster. Choose what to do with each:`));
+
+      const resolutions = {};
+      const remembers = {};
+      names.forEach(n => { resolutions[n] = ""; remembers[n] = true; });
+
+      names.forEach(name => {
+        const row = el("div", { class: "sched-name-row" });
+        row.appendChild(el("div", { class: "sched-schedule-name" }, `"${name}"`));
+
+        const sel = el("select", { class: "sched-map-select" });
+        sel.appendChild(el("option", { value: "" }, "— choose —"));
+        roster.forEach(entry => sel.appendChild(el("option", { value: entry.name }, entry.name)));
+        sel.appendChild(el("option", { value: "__add__" }, "➕ Add to roster permanently"));
+        sel.appendChild(el("option", { value: "__skip__" }, "✕ Skip (don't import)"));
+
+        const remCb = el("input", { type: "checkbox" });
+        remCb.checked = true;
+        const remLabel = el("label", { class: "sched-remember", style: { display: "none" } }, remCb, " Remember");
+
+        sel.addEventListener("change", () => {
+          resolutions[name] = sel.value;
+          const isMapped = sel.value && sel.value !== "__add__" && sel.value !== "__skip__";
+          remLabel.style.display = isMapped ? "flex" : "none";
+        });
+        remCb.addEventListener("change", () => { remembers[name] = remCb.checked; });
+
+        row.appendChild(el("div", { class: "sched-actions" }, sel, remLabel));
+        box.appendChild(row);
+      });
+
+      const errMsg = el("div", { style: { fontSize: "12px", color: "#dc2626", minHeight: "16px", marginTop: "8px" } });
+      box.appendChild(errMsg);
+      box.appendChild(el("div", { class: "btn-row", style: { marginTop: "16px" } },
+        el("button", { class: "btn-primary", style: { flex: "1", padding: "10px" }, onClick: () => {
+          const missing = names.filter(n => !resolutions[n]);
+          if (missing.length) {
+            errMsg.textContent = `Please choose an action for all ${missing.length} unresolved name${missing.length !== 1 ? "s" : ""}.`;
+            return;
+          }
+          overlay.remove();
+          const result = {};
+          names.forEach(name => {
+            const v = resolutions[name];
+            result[name] = {
+              rosterName:  v === "__skip__" ? null : v === "__add__" ? name : v,
+              remember:    v !== "__add__" && v !== "__skip__" && remembers[name],
+              addToRoster: v === "__add__",
+            };
+          });
+          resolve(result);
+        }}, "Import"),
+        el("button", { class: "btn-ghost", style: { flex: "1" }, onClick: () => { overlay.remove(); resolve(null); } }, "Cancel"),
+      ));
+
+      overlay.appendChild(box);
+      document.body.appendChild(overlay);
+    });
+  }
+
+  async function importFromSchedule() {
+    const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
+    const sched = schedSnap.val();
+    if (!sched) { showToast("No schedule found for " + selectedDate + "."); return; }
+
+    const hasData = availableList.length > 0
+      || Object.values(planData).some(d => d && (d.provider || d.supervisor))
+      || Object.keys(planCallData).length > 0
+      || Object.keys(planPostCallData).length > 0;
+
+    let mergeMode = false;
+    if (hasData) {
+      const choice = await promptOverwriteOrMerge();
+      if (choice === null) return;
+      mergeMode = choice;
+    }
+
+    const roles      = sched.roles      || {};
+    const dayShifts  = sched.dayShifts  || {};
+    const nightCalls = sched.nightCalls || {};
+    const postCall   = sched.postCall   || {};
+
+    const allNames = new Set();
+    Object.values(roles).forEach(n               => n && allNames.add(n));
+    (dayShifts.tenHourDay    || []).forEach(n    => n && allNames.add(n));
+    (dayShifts.twelveHourDay || []).forEach(n    => n && allNames.add(n));
+    Object.values(nightCalls).forEach(n          => n && allNames.add(n));
+    Object.values(postCall).forEach(n            => n && allNames.add(n));
+
+    const mappingsSnap = await get(ref(db, `deptAdmin/${deptCode}/scheduleMappings`));
+    const savedMappings = mappingsSnap.val() || {};
+
+    const resolved = {};
+    const needsResolution = [];
+    for (const name of allNames) {
+      if (roster.find(r => r.name === name)) {
+        resolved[name] = name;
+      } else {
+        const key = name.replace(/[^a-zA-Z0-9]/g, "_");
+        if (savedMappings[key]) {
+          resolved[name] = savedMappings[key];
+        } else {
+          needsResolution.push(name);
+        }
+      }
+    }
+
+    if (needsResolution.length) {
+      const userRes = await showResolutionModal(needsResolution);
+      if (userRes === null) return;
+
+      const mappingWrites = [];
+      for (const [schedName, res] of Object.entries(userRes)) {
+        resolved[schedName] = res.rosterName;
+        if (res.addToRoster && res.rosterName) {
+          await saveRosterEntry(res.rosterName);
+          roster.push({ name: res.rosterName, role: "attending" });
+          roster.sort((a, b) => a.name.localeCompare(b.name));
+        }
+        if (res.remember && res.rosterName) {
+          const key = schedName.replace(/[^a-zA-Z0-9]/g, "_");
+          mappingWrites.push(set(ref(db, `deptAdmin/${deptCode}/scheduleMappings/${key}`), res.rosterName));
+        }
+      }
+      if (mappingWrites.length) await Promise.all(mappingWrites);
+    }
+
+    const roleMappingsSnap = await get(ref(db, `deptAdmin/${deptCode}/scheduleRoleMappings`));
+    const roleMappings = roleMappingsSnap.val() || {};
+
+    await applyScheduleImport(sched, resolved, roleMappings, mergeMode);
+  }
+
+  async function applyScheduleImport(sched, resolved, roleMappings, mergeMode) {
+    const roles      = sched.roles      || {};
+    const dayShifts  = sched.dayShifts  || {};
+    const nightCalls = sched.nightCalls || {};
+    const postCall   = sched.postCall   || {};
+    const nightCallKeys = ["nightOB", "nightOR", "nightTrauma", "nightCall1", "nightCall2"];
+
+    const writes = [];
+    const noteWrites = [];
+    const coreAssigned = new Set();
+
+    // Core positions (roles → noBreakSlots via roleMappings)
+    for (const [roleKey, schedName] of Object.entries(roles)) {
+      if (!schedName) continue;
+      const rosterName = resolved[schedName];
+      if (!rosterName) continue;
+      const corePos = roleMappings[roleKey];
+      if (!corePos || !noBreakSlots.includes(corePos)) continue;
+      const rid = roomId(corePos);
+      if (mergeMode && (planData[rid] || {}).provider) continue;
+      planData[rid] = { ...(planData[rid] || {}), provider: rosterName };
+      writes.push(savePlanRoom(corePos, planData[rid]));
+      coreAssigned.add(rosterName);
+    }
+
+    // Working Tomorrow list
+    const rolePeople  = Object.values(roles).map(n          => n && resolved[n]).filter(Boolean);
+    const tenHour     = (dayShifts.tenHourDay    || []).map(n => n && resolved[n]).filter(Boolean);
+    const twelveHour  = (dayShifts.twelveHourDay || []).map(n => n && resolved[n]).filter(Boolean);
+    const allWorking  = new Set([...rolePeople, ...tenHour, ...twelveHour]);
+    coreAssigned.forEach(n => allWorking.delete(n));
+
+    if (mergeMode) {
+      const existingSet = new Set(availableList);
+      allWorking.forEach(n => { if (!existingSet.has(n)) availableList.push(n); });
+    } else {
+      availableList = [...allWorking];
+    }
+    writes.push(saveAvailable());
+
+    // 12-hour notes
+    for (const name of twelveHour) {
+      if (!mergeMode || !(planNotes[name] || {}).text) {
+        noteWrites.push(savePlanNote(name, { text: "7p", color: "blue" }));
+      }
+    }
+
+    // Night calls
+    nightCallKeys.forEach((key, idx) => {
+      if (idx >= callPositions.length) return;
+      const schedName = nightCalls[key];
+      if (!schedName) return;
+      const rosterName = resolved[schedName];
+      if (!rosterName) return;
+      if (mergeMode && planCallData[idx]) return;
+      planCallData[idx] = rosterName;
+      writes.push(savePlanCallAssignment(idx, rosterName));
+    });
+
+    // Post call
+    nightCallKeys.forEach((key, idx) => {
+      if (idx >= callPositions.length) return;
+      const schedName = postCall[key];
+      if (!schedName) return;
+      const rosterName = resolved[schedName];
+      if (!rosterName) return;
+      if (mergeMode && planPostCallData[idx]) return;
+      planPostCallData[idx] = rosterName;
+      writes.push(savePlanPostCallAssignment(idx, rosterName));
+    });
+
+    await Promise.all([...writes, ...noteWrites]);
+
+    const leftCol = document.querySelector(".plan-col-left");
+    if (leftCol) buildLeftColumn(leftCol);
+    refreshCenterColumn();
+    refreshRightColumn();
+    showToast("Schedule imported ✓");
   }
 
   // ─── Randomize remaining ─────────────────────────────────────────────────────
