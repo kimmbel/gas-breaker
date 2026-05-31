@@ -5039,6 +5039,7 @@ function renderPlanPage() {
 
   async function importFromSchedule() {
     try {
+    console.log("[import] auth user:", auth.currentUser?.email, "uid:", auth.currentUser?.uid);
     console.log("[import] step 1: reading daily_schedule/" + selectedDate);
     const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
     console.log("[import] step 2: got schedule, val=", schedSnap.val());
