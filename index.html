@@ -5038,6 +5038,7 @@ function renderPlanPage() {
   }
 
   async function importFromSchedule() {
+    try {
     const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
     const sched = schedSnap.val();
     if (!sched) { showToast("No schedule found for " + selectedDate + "."); return; }
@@ -5108,6 +5109,10 @@ function renderPlanPage() {
     const roleMappings = roleMappingsSnap.val() || {};
 
     await applyScheduleImport(sched, resolved, roleMappings, mergeMode);
+    } catch(err) {
+      console.error("Import from schedule error:", err);
+      showToast("Import error: " + (err.message || String(err)));
+    }
   }
 
   async function applyScheduleImport(sched, resolved, roleMappings, mergeMode) {
