@@ -2884,7 +2884,7 @@ async function showDeptAdminPrompt() {
   box.append(
     el("div", { class: "confirm-title" }, isFirst ? "Create Admin Passcode" : "Admin Access"),
     el("div", { class: "confirm-msg" }, isFirst ? "Set a passcode to secure admin access from this display board." : session.deptName + " · Admin Panel"),
-    passIn1, passIn2, statusMsg,
+    passIn1, ...(passIn2 ? [passIn2] : []), statusMsg,
     el("div", { class: "btn-row" }, submitBtn, cancelBtn),
   );
   setTimeout(() => passIn1.focus(), 50);
