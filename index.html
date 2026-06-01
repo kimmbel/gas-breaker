@@ -3868,7 +3868,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
     confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
 
-    return adminSection("display-passcode", "Display Board Admin Passcode", null,
+    return adminSection("display-passcode", "Display Board Admin Passcode",
+      "Protects the Admin button on the coordinator display board. Set once; required each time Admin is opened.",
       subText,
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
       removeWrap,
