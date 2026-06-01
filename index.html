@@ -5104,10 +5104,14 @@ function renderPlanPage() {
 
   async function importFromSchedule() {
     try {
-    console.log("[import] auth user:", auth.currentUser?.email, "uid:", auth.currentUser?.uid);
-    console.log("[import] step 1: reading daily_schedule/" + selectedDate);
+    const testRef = ref(db, `daily_schedule/${selectedDate}`);
+    const dbTarget = testRef.toString().replace("https://", "").split("/")[0];
+    console.warn("[import] db target:", dbTarget, "| auth:", auth.currentUser?.email);
+    showToast("DB: " + dbTarget);
+    await new Promise(r => setTimeout(r, 200)); // let toast render
+    console.warn("[import] step 1: fetching daily_schedule/" + selectedDate);
     const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
-    console.log("[import] step 2: got schedule, val=", schedSnap.val());
+    console.warn("[import] step 2: got schedule, val=", schedSnap.val());
     const sched = schedSnap.val();
     if (!sched) { showToast("No schedule found for " + selectedDate + "."); return; }
 
