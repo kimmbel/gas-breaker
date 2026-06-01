@@ -15,8 +15,8 @@ export default async function handler(req, res) {
   }
 
   const from = fromName
-    ? `${fromName} <schedule@send.gasbreaker.net>`
-    : "Gas Breaker <schedule@send.gasbreaker.net>";
+    ? `${fromName} <schedule@gasbreaker.net>`
+    : "Gas Breaker <schedule@gasbreaker.net>";
 
   const payload = {
     from,
