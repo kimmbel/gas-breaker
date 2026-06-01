@@ -3717,6 +3717,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       el("div", { style: { fontFamily:"'Libre Baskerville', serif", fontWeight:"700", fontSize:"22px", color:"#2d2420", marginBottom:"4px" } }, "⚙️ " + (isDept ? session.deptName : "Departments")),
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
       isDept ? buildPlanTomorrowSection()         : null,
+      isDept ? buildEmailSection()               : null,
       isDept ? buildScheduleImportSection()       : null,
       isDept ? buildScheduleNameMappingsSection() : null,
       isDept ? buildLocSection()           : buildDeptSection(),
@@ -3787,6 +3788,51 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       subText,
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
       removeWrap,
+      statusMsg,
+    );
+  }
+
+  // ── Email settings section ───────────────────────────────────────────────────
+  function buildEmailSection() {
+    const statusMsg = el("div", { style: { fontSize:"12px", color:"#4ade80", marginTop:"8px", minHeight:"16px" } });
+    const toInput       = el("input", { type:"email", class:"plan-header-input", placeholder:"recipient@example.com", style:{marginBottom:"6px"} });
+    const fromNameInput = el("input", { type:"text",  class:"plan-header-input", placeholder:"e.g. SJMC Anesthesia",  style:{marginBottom:"6px"} });
+    const subjectInput  = el("input", { type:"text",  class:"plan-header-input", placeholder:"e.g. OR Schedule — {date}" });
+
+    // Load existing config
+    get(ref(db, `deptAdmin/${deptCode}/emailConfig`)).then(snap => {
+      const cfg = snap.val() || {};
+      toInput.value       = cfg.to          || "";
+      fromNameInput.value = cfg.fromName    || "";
+      subjectInput.value  = cfg.defaultSubject || "";
+    });
+
+    async function saveEmailConfig() {
+      const cfg = {
+        to:              toInput.value.trim()       || null,
+        fromName:        fromNameInput.value.trim() || null,
+        defaultSubject:  subjectInput.value.trim()  || null,
+      };
+      await set(ref(db, `deptAdmin/${deptCode}/emailConfig`), cfg);
+      statusMsg.textContent = "Saved ✓";
+      setTimeout(() => { statusMsg.textContent = ""; }, 2000);
+    }
+
+    const row = (label, input) => el("div", {
+      style: { display:"flex", alignItems:"center", gap:"10px", padding:"6px 0", borderBottom:"1px solid #f1ede8" },
+    },
+      el("span", { style:{ fontSize:"13px", fontWeight:"700", color:"#7c6c62", minWidth:"120px", flexShrink:"0" } }, label),
+      input,
+    );
+
+    return el("div", { class:"admin-section" },
+      el("div", { class:"admin-section-title" }, "Email Settings"),
+      el("div", { class:"admin-section-sub" }, "Configure where the Plan Tomorrow email is sent from and to."),
+      row("Recipient",   toInput),
+      row("From Name",   fromNameInput),
+      row("Subject",     subjectInput),
+      el("div", { style:{ fontSize:"12px", color:"#a39688", marginTop:"4px" } }, "Use {date} in subject to insert the schedule date automatically."),
+      el("button", { class:"btn-primary", style:{ marginTop:"10px" }, onClick: saveEmailConfig }, "Save"),
       statusMsg,
     );
   }
@@ -3917,6 +3963,7 @@ function renderPlanPage() {
   let planCallData = {};    // { [posIdx]: name }
   let planPostCallData = {}; // { [posIdx]: name }
   let planHeaderText = "";
+  let emailConfig    = {};   // { to, fromName, defaultSubject }
 
   // ── Firebase helpers ──
   function planBoardRef(dateStr) {
@@ -4018,12 +4065,14 @@ function renderPlanPage() {
     planPostCallData = {};
 
     try {
-      const [boardSnap, headerSnap] = await Promise.all([
+      const [boardSnap, headerSnap, emailConfigSnap] = await Promise.all([
         get(planBoardRef(dateStr)),
         get(planHeaderRef()),
+        get(ref(db, `deptAdmin/${deptCode}/emailConfig`)),
       ]);
 
       planHeaderText = headerSnap.val() || "";
+      emailConfig    = emailConfigSnap.val() || {};
 
       const bval = boardSnap.val() || {};
 
@@ -4116,8 +4165,9 @@ function renderPlanPage() {
     buildRightColumn(rightCol);
 
     const bottomBar = el("div", { class: "plan-bottom-bar" },
-      el("button", { class: "btn-ghost", style: { fontSize:"13px" }, onClick: randomizeRemaining }, "🎲 Randomize Remaining"),
-      el("button", { class: "btn-primary", style: { fontSize:"13px" }, onClick: printPlan }, "🖨 Print PDF"),
+      el("button", { class: "btn-ghost",    style: { fontSize:"13px" }, onClick: randomizeRemaining }, "🎲 Randomize Remaining"),
+      el("button", { class: "btn-ghost",    style: { fontSize:"13px" }, onClick: showEmailModal }, "📧 Email Plan"),
+      el("button", { class: "btn-primary",  style: { fontSize:"13px" }, onClick: printPlan }, "🖨 Print PDF"),
     );
 
     app.appendChild(el("div", {},
@@ -5241,6 +5291,212 @@ function renderPlanPage() {
   }
 
   // ─── Print PDF ───────────────────────────────────────────────────────────────
+  // ─── Email Plan ──────────────────────────────────────────────────────────────
+  function buildPlanEmailHtml(message) {
+    const header    = planHeaderText || "Daily OR Assignments";
+    const dateLabel = formatDateBanner(selectedDate);
+
+    const s = {
+      wrap:      "font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:0 auto;color:#2d2420;",
+      h1:        "font-size:20px;font-weight:700;margin:0 0 2px 0;color:#2d2420;",
+      date:      "font-size:13px;color:#7c6c62;margin:0 0 16px 0;",
+      msg:       "font-size:14px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px 0;color:#2d2420;",
+      hr:        "border:none;border-top:1px solid #e8e0d6;margin:0 0 20px 0;",
+      boxWrap:   "margin-bottom:16px;",
+      boxTitle:  "font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7c6c62;padding:6px 10px;background:#f5f0ea;border-radius:6px 6px 0 0;margin:0;",
+      table:     "width:100%;border-collapse:collapse;border-radius:0 0 6px 6px;overflow:hidden;",
+      tdLabel:   "padding:5px 10px;font-size:13px;color:#7c6c62;width:45%;border-bottom:1px solid #f1ede8;",
+      tdValue:   "padding:5px 10px;font-size:13px;color:#2d2420;font-weight:600;border-bottom:1px solid #f1ede8;",
+    };
+
+    function box(title, rows) {
+      if (!rows.length) return "";
+      const rowHtml = rows.map(([label, value]) =>
+        `<tr><td style="${s.tdLabel}">${label}</td><td style="${s.tdValue}">${value || ""}</td></tr>`
+      ).join("");
+      return `<div style="${s.boxWrap}"><div style="${s.boxTitle}">${title}</div>
+<table style="${s.table}">${rowHtml}</table></div>`;
+    }
+
+    // Core Positions
+    let coreHtml = "";
+    if (noBreakSlots.length) {
+      const rows = noBreakSlots.map(slot => [slot, (planData[roomId(slot)] || {}).provider || ""]);
+      coreHtml = box("Core Positions", rows);
+    }
+
+    // OR rooms by section
+    let currentSection = "Main";
+    let currentRows = [];
+    const sections = [];
+    function flushSec() { if (currentRows.length) { sections.push({ title: currentSection, rows: [...currentRows] }); currentRows = []; } }
+    locations.forEach(loc => {
+      if (isDivider(loc)) {
+        flushSec();
+        currentSection = loc.replace(/^__divider__\d*$/, "").replace(/^__divider__/, "") || "Section";
+        return;
+      }
+      const d = planData[roomId(loc)] || {};
+      if (!d.empty) currentRows.push([loc, d.provider ? d.provider + (d.supervisor ? ` / ${d.supervisor}` : "") : ""]);
+    });
+    flushSec();
+    const roomsHtml = sections.map(sec => box(sec.title, sec.rows)).join("");
+
+    // On Call / Post Call
+    let callHtml = "";
+    if (callPositions.length) {
+      const postRows = callPositions.map((p, i) => [p.name, planPostCallData[i] || ""]);
+      const callRows = callPositions.map((p, i) => [p.name, planCallData[i] || ""]);
+      callHtml = box("Post Call (Today)", postRows) + box("On Call (Tonight)", callRows);
+    }
+
+    // 12-hour shifts
+    const allPlanNames = new Set(availableList);
+    locations.filter(l => !isDivider(l)).forEach(loc => {
+      const d = planData[roomId(loc)] || {};
+      if (d.provider) allPlanNames.add(d.provider);
+      if (d.supervisor) allPlanNames.add(d.supervisor);
+    });
+    noBreakSlots.forEach(slot => { const d = planData[roomId(slot)] || {}; if (d.provider) allPlanNames.add(d.provider); });
+    const twelveHour = [...allPlanNames].filter(n => { const note = planNotes[n]; return note && /^7\s*p(m)?$/i.test(note.text); });
+    const twelveHtml = twelveHour.length ? box("12 Hour Shift", twelveHour.map((n, i) => [String(i + 1), n])) : "";
+
+    const leftHtml  = coreHtml + roomsHtml;
+    const rightHtml = callHtml + twelveHtml;
+    const safeMsg   = message.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br>");
+
+    return `<!DOCTYPE html><html><body style="margin:0;padding:16px;background:#fff;">
+<div style="${s.wrap}">
+  <p style="${s.h1}">${header}</p>
+  <p style="${s.date}">${dateLabel}</p>
+  <p style="${s.msg}">${safeMsg}</p>
+  <hr style="${s.hr}">
+  <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+    <tr>
+      <td width="50%" valign="top" style="padding-right:10px;">${leftHtml}</td>
+      <td width="50%" valign="top" style="padding-left:10px;">${rightHtml}</td>
+    </tr>
+  </table>
+</div></body></html>`;
+  }
+
+  async function sendPlan(subject, message, epicFile) {
+    const html = buildPlanEmailHtml(message);
+    const attachments = [];
+
+    if (epicFile) {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(epicFile);
+      });
+      attachments.push({ filename: epicFile.name, content: base64 });
+    }
+
+    const to      = emailConfig.to;
+    const fromName = emailConfig.fromName || "";
+
+    const resp = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to, fromName, subject, html, attachments }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    return true;
+  }
+
+  function showEmailModal() {
+    if (!emailConfig.to) {
+      showToast("Set a recipient email in Admin → Email Settings first.");
+      return;
+    }
+
+    const dateLabel = formatDateBanner(selectedDate);
+    const defaultSubject = (emailConfig.defaultSubject || "OR Schedule — {date}").replace("{date}", dateLabel);
+
+    let epicFile = null;
+    const fileLabel = el("span", { style:{ fontSize:"12px", color:"#a39688", fontStyle:"italic" } }, "No file selected");
+
+    const subjectInput = el("input", {
+      type:"text", class:"plan-header-input",
+      value: defaultSubject,
+      style: { marginBottom:"10px" },
+    });
+
+    const messageArea = el("textarea", {
+      style: {
+        width:"100%", boxSizing:"border-box", minHeight:"120px", padding:"10px",
+        border:"1.5px solid #e8e0d6", borderRadius:"10px", fontSize:"14px",
+        fontFamily:"inherit", resize:"vertical", color:"#2d2420", background:"#faf7f4",
+      },
+      placeholder: "Type your message here…",
+    });
+
+    const fileInput = el("input", { type:"file", accept:".pdf", style:{ display:"none" } });
+    fileInput.addEventListener("change", () => {
+      epicFile = fileInput.files[0] || null;
+      fileLabel.textContent = epicFile ? epicFile.name : "No file selected";
+    });
+
+    const sendBtn = el("button", { class:"btn-primary", style:{ fontSize:"13px" } }, "Send");
+    const cancelBtn = el("button", { class:"btn-ghost", style:{ fontSize:"13px" } }, "Cancel");
+    const errMsg = el("div", { style:{ fontSize:"12px", color:"#ef4444", marginTop:"6px", minHeight:"16px" } });
+
+    const overlay = el("div", { class:"sched-modal-overlay" },
+      el("div", { class:"sched-modal-box" },
+        el("div", { class:"sched-modal-title" }, "📧 Email Plan"),
+        el("div", { class:"sched-modal-sub" }, `To: ${emailConfig.to}`),
+        el("div", { style:{ fontSize:"12px", fontWeight:"700", color:"#7c6c62", marginBottom:"4px" } }, "Subject"),
+        subjectInput,
+        el("div", { style:{ fontSize:"12px", fontWeight:"700", color:"#7c6c62", marginBottom:"4px" } }, "Message"),
+        messageArea,
+        el("div", { style:{ marginTop:"10px", display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
+          el("button", {
+            class:"btn-ghost", style:{ fontSize:"12px" },
+            onClick: () => fileInput.click(),
+          }, "📎 Attach Epic PDF"),
+          fileLabel,
+          fileInput,
+        ),
+        el("div", { style:{ display:"flex", gap:"8px", marginTop:"16px", justifyContent:"flex-end" } },
+          cancelBtn,
+          sendBtn,
+        ),
+        errMsg,
+      ),
+    );
+
+    cancelBtn.addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+
+    sendBtn.addEventListener("click", async () => {
+      const subject = subjectInput.value.trim();
+      const message = messageArea.value.trim();
+      if (!subject) { errMsg.textContent = "Subject is required."; return; }
+      if (!message) { errMsg.textContent = "Please enter a message."; return; }
+      errMsg.textContent = "";
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending…";
+      try {
+        await sendPlan(subject, message, epicFile);
+        overlay.remove();
+        showToast("Email sent ✓");
+      } catch(err) {
+        errMsg.textContent = "Failed: " + err.message;
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send";
+      }
+    });
+
+    document.body.appendChild(overlay);
+    setTimeout(() => messageArea.focus(), 50);
+  }
+
   function printPlan() {
     // Remove any existing print view
     const existing = document.getElementById("plan-print-view");
