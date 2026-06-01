@@ -243,7 +243,10 @@
     /* ── Admin ── */
     .admin-root { max-width: 680px; margin: 0 auto; padding: 20px 16px 60px; }
     .admin-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 16px; padding: 20px; margin-bottom: 20px; }
-    .admin-section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 17px; color: #2d2420; margin-bottom: 4px; }
+    .admin-section-title { font-family: 'Libre Baskerville', serif; font-weight: 700; font-size: 17px; color: #2d2420; display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+    .admin-section-title:hover { color: #5c3d2e; }
+    .admin-section-chevron { font-size: 14px; color: #a39688; transition: transform 0.18s; flex-shrink: 0; }
+    .admin-section-body  { padding-top: 4px; }
     .admin-section-sub   { font-size: 12px; color: #a39688; margin-bottom: 16px; }
     .admin-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
     .admin-list-item { display: flex; align-items: center; gap: 8px; background: #f8f4ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; font-weight: 700; color: #2d2420; }
@@ -3181,6 +3184,31 @@ async function loadConfig(code) {
   });
 }
 
+// ─── Admin section helper (collapsible) ──────────────────────────────────────
+function adminSection(storageKey, title, sub, ...body) {
+  const lsKey  = "gas-breaker-admin-open-" + storageKey;
+  let isOpen   = localStorage.getItem(lsKey) !== "0";
+
+  const chevron = el("span", { class: "admin-section-chevron" });
+  chevron.style.transform = isOpen ? "" : "rotate(-90deg)";
+  chevron.textContent = "▾";
+
+  const bodyDiv = el("div", { class: "admin-section-body" });
+  if (sub) bodyDiv.appendChild(el("div", { class: "admin-section-sub" }, sub));
+  body.forEach(b => { if (b) bodyDiv.appendChild(b); });
+  bodyDiv.style.display = isOpen ? "" : "none";
+
+  const titleEl = el("div", { class: "admin-section-title" }, title, chevron);
+  titleEl.addEventListener("click", () => {
+    isOpen = !isOpen;
+    bodyDiv.style.display = isOpen ? "" : "none";
+    chevron.style.transform = isOpen ? "" : "rotate(-90deg)";
+    localStorage.setItem(lsKey, isOpen ? "1" : "0");
+  });
+
+  return el("div", { class: "admin-section" }, titleEl, bodyDiv);
+}
+
 // ─── Admin page ───────────────────────────────────────────────────────────────
 function renderAdminPage(deptCode, fromDisplay = false) {
   const isDept = !!deptCode;
@@ -3309,9 +3337,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
     nameIn.addEventListener("keydown", e => { if (e.key === "Enter") addDept(); });
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Departments"),
-      el("div", { class: "admin-section-sub"   }, "Each department gets its own board and code."),
+    return adminSection("departments", "Departments",
+      "Each department gets its own board and code.",
       Object.keys(departments).length ? list : el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No departments yet."),
       el("div", { class: "admin-add-row" }, codeIn, nameIn, el("button", { class: "btn-primary", onClick: addDept }, "Add")),
     );
@@ -3441,9 +3468,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       await saveLocations(newLocs); locs = newLocs; rebuild(newLocs); showToast("Section divider added — drag to position");
     }
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Locations"),
-      el("div", { class: "admin-section-sub"   }, "Drag ⠿ to reorder. Use dividers to separate sections on the board."),
+    return adminSection("locations", "Locations",
+      "Drag ⠿ to reorder. Use dividers to separate sections on the board.",
       list,
       el("div", { class: "admin-add-row" }, locIn, el("button", { class: "btn-primary", onClick: addLoc }, "Add")),
       el("div", { class: "admin-add-row", style: { marginTop: "6px" } },
@@ -3506,9 +3532,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
     const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No slots yet.");
     if (!slots.length) list.appendChild(emptyMsg);
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Core Positions"),
-      el("div", { class: "admin-section-sub" }, "Roles like Breaker or Float that appear at the top of the coordinator display. Assignable in Plan Tomorrow."),
+    return adminSection("core-positions", "Core Positions",
+      "Roles like Breaker or Float that appear at the top of the coordinator display. Assignable in Plan Tomorrow.",
       list,
       el("div", { class: "admin-add-row" }, slotIn, el("button", { class: "btn-primary", onClick: addSlot }, "Add")),
     );
@@ -3620,9 +3645,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
     const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No call positions yet.");
     if (!positions.length) list.appendChild(emptyMsg);
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "On-Call Positions"),
-      el("div", { class: "admin-section-sub" }, "Define call positions (e.g. First Call, OB Call). Tap Edit to customize the Tonight and Post-call icons, or set to None."),
+    return adminSection("call-positions", "On-Call Positions",
+      "Define call positions (e.g. First Call, OB Call). Tap Edit to customize the Tonight and Post-call icons, or set to None.",
       list,
       el("div", { class: "admin-add-row" }, posIn, el("button", { class: "btn-primary", onClick: addPosition }, "Add")),
     );
@@ -3717,9 +3741,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
     nameIn.addEventListener("keydown", e => { if (e.key === "Enter") addName(); });
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Provider Roster"),
-      el("div", { class: "admin-section-sub"   }, "Names appear as suggestions when assigning a provider. Set role so supervisors can be tracked. Format: Last, First."),
+    return adminSection("roster", "Provider Roster",
+      "Names appear as suggestions when assigning a provider. Set role so supervisors can be tracked. Format: Last, First.",
       list,
       el("div", { class: "admin-add-row" }, nameIn, el("button", { class: "btn-primary", onClick: addName }, "Add")),
     );
@@ -3749,9 +3772,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
     confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Admin Passcode"),
-      el("div", { class: "admin-section-sub" }, "Change the admin login passcode. You will need to use the new passcode next time."),
+    return adminSection("admin-passcode", "Admin Passcode",
+      "Change the admin login passcode. You will need to use the new passcode next time.",
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
       statusMsg,
     );
@@ -3759,9 +3781,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
   // ── Clear board section ──
   function buildClearSection() {
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Clear Board"),
-      el("div", { class: "admin-section-sub"   }, "Removes all providers from today's board immediately."),
+    return adminSection("clear-board", "Clear Board",
+      "Removes all providers from today's board immediately.",
       el("button", { class: "btn-warn", onClick: () => showConfirm(
         "Clear Today's Board",
         `Remove all providers from the ${session.deptName} board right now? This cannot be undone.`,
@@ -3772,9 +3793,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
   // ── Plan Tomorrow section ──
   function buildPlanTomorrowSection() {
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Plan Tomorrow"),
-      el("div", { class: "admin-section-sub"   }, "Pre-schedule providers and call assignments for tomorrow's board."),
+    return adminSection("plan-tomorrow", "Plan Tomorrow",
+      "Pre-schedule providers and call assignments for tomorrow's board.",
       el("button", { class: "btn-primary", style: { marginTop: "4px" }, onClick: () => renderPlanPage() }, "📋 Plan Tomorrow →"),
     );
   }
@@ -3848,8 +3868,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
     confirmIn.addEventListener("keydown", e => { if (e.key === "Enter") doChange(); });
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Display Board Admin Passcode"),
+    return adminSection("display-passcode", "Display Board Admin Passcode", null,
       subText,
       el("div", { class: "admin-add-row" }, newPassIn, confirmIn, el("button", { class: "btn-primary", onClick: doChange }, "Update")),
       removeWrap,
@@ -3890,9 +3909,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       input,
     );
 
-    return el("div", { class:"admin-section" },
-      el("div", { class:"admin-section-title" }, "Email Settings"),
-      el("div", { class:"admin-section-sub" }, "Configure where the Plan Tomorrow email is sent from and to."),
+    return adminSection("email", "Email Settings",
+      "Configure where the Plan Tomorrow email is sent from and to.",
       row("Recipient",   toInput),
       row("From Name",   fromNameInput),
       row("Subject",     subjectInput),
@@ -3943,9 +3961,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       setTimeout(() => { statusMsg.textContent = ""; }, 2000);
     }
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Schedule Import: Role Mappings"),
-      el("div", { class: "admin-section-sub" }, "Map each QGenda schedule role to its Core Position in Gas Breaker. Set once, used on every import."),
+    return adminSection("schedule-role-mappings", "Schedule Import: Role Mappings",
+      "Map each QGenda schedule role to its Core Position in Gas Breaker. Set once, used on every import.",
       container,
       el("button", { class: "btn-primary", style: { marginTop: "10px" }, onClick: saveRoleMappings }, "Save Mappings"),
       statusMsg,
@@ -3979,9 +3996,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
     reloadMappings();
 
-    return el("div", { class: "admin-section" },
-      el("div", { class: "admin-section-title" }, "Schedule Import: Name Mappings"),
-      el("div", { class: "admin-section-sub" }, "Remembered name matches from past imports. Delete a mapping to re-prompt next time."),
+    return adminSection("schedule-name-mappings", "Schedule Import: Name Mappings",
+      "Remembered name matches from past imports. Delete a mapping to re-prompt next time.",
       container,
     );
   }
@@ -4230,9 +4246,9 @@ function renderPlanPage() {
     buildRightColumn(rightCol);
 
     const bottomBar = el("div", { class: "plan-bottom-bar" },
-      el("button", { class: "btn-ghost",    style: { fontSize:"13px" }, onClick: randomizeRemaining }, "🎲 Randomize Remaining"),
-      el("button", { class: "btn-ghost",    style: { fontSize:"13px" }, onClick: showEmailModal }, "📧 Email Plan"),
-      el("button", { class: "btn-primary",  style: { fontSize:"13px" }, onClick: printPlan }, "🖨 Print PDF"),
+      el("button", { class: "btn-primary", style: { fontSize:"13px" }, onClick: printPlan }, "🖨 View Schedule PDF"),
+      el("div", { style: { flex: "1" } }),
+      el("button", { class: "btn-ghost",   style: { fontSize:"13px" }, onClick: showEmailModal }, "📧 Email Plan"),
     );
 
     app.appendChild(el("div", {},
@@ -4391,6 +4407,13 @@ function renderPlanPage() {
     }
 
     section.appendChild(listContainer);
+    section.appendChild(
+      el("button", {
+        class: "btn-ghost",
+        style: { fontSize:"12px", marginTop:"8px", width:"100%" },
+        onClick: randomizeRemaining,
+      }, "🎲 Randomize Remaining")
+    );
     col.appendChild(section);
 
     // Also make left col a drop target (unassign provider from room by dropping here)
