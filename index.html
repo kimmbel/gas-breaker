@@ -3525,36 +3525,86 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       async (newOrder) => { positions = newOrder; await saveCallPositions(newOrder); },
       (pos, arr, rebuildFn) => {
         const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
-        const nameSpan = el("span", { style: { flex:"1" } }, pos);
-        let editing = false;
-        const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
-        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
-          positions = positions.filter(p => p !== pos);
-          await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos} removed`);
-        }}, "Remove");
-        editBtn.addEventListener("click", () => {
-          if (editing) return;
-          editing = true;
-          const input = el("input", { class: "admin-add-input", type:"text", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
-          input.value = pos;
-          nameSpan.replaceWith(input);
-          editBtn.textContent = "Cancel";
-          input.focus(); input.select();
-          async function saveEdit() {
-            const val = input.value.trim();
-            if (val && val !== pos && !positions.includes(val)) {
-              const i = positions.indexOf(pos);
-              if (i !== -1) { positions[i] = val; await saveCallPositions(positions); rebuildFn(positions); showToast(`Renamed to ${val}`); return; }
-            }
-            editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit";
-          }
-          input.addEventListener("keydown", e => {
-            if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
-            if (e.key === "Escape") { editing = false; input.replaceWith(nameSpan); editBtn.textContent = "Edit"; }
+
+        function showView() {
+          rowDiv.innerHTML = "";
+          rowDiv.style.display = "flex";
+          rowDiv.style.flexDirection = "row";
+          rowDiv.style.alignItems = "center";
+          rowDiv.style.flex = "1";
+          rowDiv.style.gap = "8px";
+          const iconBadge = el("span", { style: { fontSize:"12px", color:"#9c8a7e", whiteSpace:"nowrap" } },
+            (pos.callIcon || "—") + " / " + (pos.postCallIcon || "—"));
+          const nameSpan  = el("span", { style: { flex:"1" } }, pos.name);
+          const editBtn   = el("button", { class:"btn-ghost",  style:{ fontSize:"11px", padding:"4px 8px" } }, "Edit");
+          const removeBtn = el("button", { class:"btn-danger", style:{ fontSize:"11px", padding:"4px 8px" } }, "Remove");
+          editBtn.addEventListener("click", showEdit);
+          removeBtn.addEventListener("click", async () => {
+            try {
+              positions = positions.filter(p => p !== pos);
+              await saveCallPositions(positions); rebuildFn(positions); showToast(`${pos.name} removed`);
+            } catch(e) { showToast("Save failed — check permissions"); }
           });
-          input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
-        });
-        rowDiv.appendChild(nameSpan); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+          rowDiv.append(nameSpan, iconBadge, editBtn, removeBtn);
+        }
+
+        function showEdit() {
+          rowDiv.innerHTML = "";
+          rowDiv.style.display = "flex";
+          rowDiv.style.flexDirection = "column";
+          rowDiv.style.alignItems = "stretch";
+          rowDiv.style.flex = "1";
+          rowDiv.style.gap = "6px";
+
+          const nameInput = el("input", { class:"admin-add-input", type:"text",
+            style:{ width:"100%", fontSize:"13px", padding:"4px 8px", boxSizing:"border-box" } });
+          nameInput.value = pos.name;
+
+          function makeIconInput(val) {
+            const inp = el("input", { class:"admin-add-input", type:"text",
+              style:{ width:"52px", fontSize:"18px", textAlign:"center", padding:"2px 4px" } });
+            inp.value = val || "";
+            return inp;
+          }
+          const callIn = makeIconInput(pos.callIcon);
+          const postIn = makeIconInput(pos.postCallIcon);
+
+          const iconRow = el("div", { style:{ display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap", marginTop:"2px" } },
+            el("span", { style:{ fontSize:"12px", color:"#7c6c62" } }, "Tonight icon:"),
+            callIn,
+            el("button", { class:"btn-ghost", style:{ fontSize:"11px", padding:"2px 6px" },
+              onClick:() => { callIn.value = ""; } }, "None"),
+            el("span", { style:{ fontSize:"12px", color:"#7c6c62", marginLeft:"6px" } }, "Post-call icon:"),
+            postIn,
+            el("button", { class:"btn-ghost", style:{ fontSize:"11px", padding:"2px 6px" },
+              onClick:() => { postIn.value = ""; } }, "None"),
+          );
+
+          const saveBtn   = el("button", { class:"btn-primary", style:{ fontSize:"12px", padding:"4px 12px" } }, "Save");
+          const cancelBtn = el("button", { class:"btn-ghost",   style:{ fontSize:"12px", padding:"4px 12px" } }, "Cancel");
+          const btnRow    = el("div", { style:{ display:"flex", gap:"8px", justifyContent:"flex-end" } }, cancelBtn, saveBtn);
+
+          cancelBtn.addEventListener("click", showView);
+          saveBtn.addEventListener("click", async () => {
+            const newName = nameInput.value.trim();
+            if (!newName) { showView(); return; }
+            const i = positions.indexOf(pos);
+            if (i === -1) { showView(); return; }
+            try {
+              positions[i] = { name: newName, callIcon: callIn.value.trim(), postCallIcon: postIn.value.trim() };
+              await saveCallPositions(positions); rebuildFn(positions); showToast("Updated");
+            } catch(e) { showToast("Save failed — check permissions"); showView(); }
+          });
+
+          rowDiv.append(nameInput, iconRow, btnRow);
+          nameInput.focus(); nameInput.select();
+          nameInput.addEventListener("keydown", e => {
+            if (e.key === "Enter")  { e.preventDefault(); saveBtn.click(); }
+            if (e.key === "Escape") showView();
+          });
+        }
+
+        showView();
         return rowDiv;
       }
     );
@@ -3562,16 +3612,19 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     const posIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. First Call, OB Call", style: { flex:"1" } });
     async function addPosition() {
       const val = posIn.value.trim();
-      if (!val || positions.includes(val)) return;
-      const newPositions = [...positions, val];
-      await saveCallPositions(newPositions); positions = newPositions; rebuild(newPositions); posIn.value = ""; showToast(`${val} added`);
+      if (!val || positions.some(p => p.name === val)) return;
+      try {
+        const newPositions = [...positions, { name: val, callIcon: "📞", postCallIcon: "🌙" }];
+        await saveCallPositions(newPositions);
+        positions = newPositions; rebuild(newPositions); posIn.value = ""; showToast(`${val} added`);
+      } catch(e) { showToast("Save failed — check permissions"); }
     }
     posIn.addEventListener("keydown", e => { if (e.key === "Enter") addPosition(); });
 
     const emptyMsg = el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"14px" } }, "No call positions yet.");
     if (!positions.length) list.appendChild(emptyMsg);
     return adminSection("call-positions", "On-Call Positions",
-      "Define call positions (e.g. First Call, OB Call). Staff can assign providers nightly from the board.",
+      "Define call positions (e.g. First Call, OB Call). Tap Edit to customize the Tonight and Post-call icons, or set to None.",
       list,
       el("div", { class: "admin-add-row" }, posIn, el("button", { class: "btn-primary", onClick: addPosition }, "Add")),
     );
