@@ -499,7 +499,7 @@ import { getDatabase, ref, onValue, set, get, remove, push, off } from "https://
 import { getAuth, signInWithEmailAndPassword, signOut, updatePassword, createUserWithEmailAndPassword, deleteUser, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
-const isProd = location.hostname === "gasbreaker.net";
+const isProd = location.hostname === "gasbreaker.net" || location.hostname === "www.gasbreaker.net";
 const firebaseConfig = isProd ? {
   apiKey:            "AIzaSyBzSQU4RoSGGoPgbcMDUHIDxAl3PAqBqsk",
   authDomain:        "gas-breaker.firebaseapp.com",
@@ -5104,14 +5104,7 @@ function renderPlanPage() {
 
   async function importFromSchedule() {
     try {
-    const testRef = ref(db, `daily_schedule/${selectedDate}`);
-    const dbTarget = testRef.toString().replace("https://", "").split("/")[0];
-    console.warn("[import] db target:", dbTarget, "| auth:", auth.currentUser?.email);
-    showToast("DB: " + dbTarget);
-    await new Promise(r => setTimeout(r, 200)); // let toast render
-    console.warn("[import] step 1: fetching daily_schedule/" + selectedDate);
     const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
-    console.warn("[import] step 2: got schedule, val=", schedSnap.val());
     const sched = schedSnap.val();
     if (!sched) { showToast("No schedule found for " + selectedDate + "."); return; }
 
@@ -5139,9 +5132,7 @@ function renderPlanPage() {
     Object.values(nightCalls).forEach(n          => n && allNames.add(n));
     Object.values(postCall).forEach(n            => n && allNames.add(n));
 
-    console.log("[import] step 3: reading deptAdmin/" + deptCode + "/scheduleMappings");
     const mappingsSnap = await get(ref(db, `deptAdmin/${deptCode}/scheduleMappings`));
-    console.log("[import] step 4: got mappings");
     const savedMappings = mappingsSnap.val() || {};
 
     const resolved = {};
@@ -5179,9 +5170,7 @@ function renderPlanPage() {
       if (mappingWrites.length) await Promise.all(mappingWrites);
     }
 
-    console.log("[import] step 5: reading role mappings");
     const roleMappingsSnap = await get(ref(db, `deptAdmin/${deptCode}/scheduleRoleMappings`));
-    console.log("[import] step 6: got role mappings");
     const roleMappings = roleMappingsSnap.val() || {};
 
     await applyScheduleImport(sched, resolved, roleMappings, mergeMode);
