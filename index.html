@@ -552,6 +552,7 @@ let boardData   = {};     // { [roomId]: { provider, breaks, hold, holdAt, reque
 let locations     = [...DEFAULT_LOCATIONS];
 let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
 let callPositions = [];   // e.g. [{ name: "First Call", callIcon: "📞", postCallIcon: "🌙" }]
+let trackedRooms  = [];   // e.g. ["GI Room", "Bronch Suite"] — rooms tracked for fairness rotation
 
 function normalizeCallPosition(p) {
   if (typeof p === "string") return { name: p, callIcon: "📞", postCallIcon: "🌙" };
@@ -664,10 +665,95 @@ function scheduleMidnightReload() {
   setTimeout(() => location.reload(), midnight - now);
 }
 
+// ─── Room history snapshot (tracks start-of-day assignments for tracked rooms) ─
+function histDateKey(d) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+function parseDateKey(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
+function formatHistDate(dateKey) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+async function doHistorySnapshot(deptCode) {
+  if (!trackedRooms.length) return;
+  const dateKey = tsDay();
+  const flagKey = `gb-hist-${deptCode}-${dateKey}`;
+  // Write each tracked room's current provider
+  const writes = [];
+  trackedRooms.forEach(locName => {
+    const rid = roomId(locName);
+    const prov = (boardData[rid] || {}).provider;
+    if (prov) {
+      writes.push(set(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}/${dateKey}`), prov));
+    }
+  });
+  // Write _done_ marker so other devices can skip the snapshot
+  writes.push(set(ref(db, `deptAdmin/${deptCode}/roomHistory/_done_/${dateKey}`), true));
+  if (writes.length) await Promise.all(writes);
+  localStorage.setItem(flagKey, "1");
+
+  // Prune entries older than 180 days
+  const cutoffMs = Date.now() - 180 * 24 * 60 * 60 * 1000;
+  try {
+    const histSnap = await get(ref(db, `deptAdmin/${deptCode}/roomHistory`));
+    if (!histSnap.exists()) return;
+    const deletes = [];
+    histSnap.forEach(ridNode => {
+      ridNode.forEach(dayNode => {
+        const k = dayNode.key;
+        if (!k || k.startsWith("_")) return; // skip _done_
+        if (parseDateKey(k) < cutoffMs) {
+          deletes.push(remove(ref(db, `deptAdmin/${deptCode}/roomHistory/${ridNode.key}/${k}`)));
+        }
+      });
+    });
+    // Prune _done_ markers too
+    const doneSnap = histSnap.child("_done_");
+    if (doneSnap.exists()) {
+      doneSnap.forEach(d => {
+        if (parseDateKey(d.key) < cutoffMs) {
+          deletes.push(remove(ref(db, `deptAdmin/${deptCode}/roomHistory/_done_/${d.key}`)));
+        }
+      });
+    }
+    if (deletes.length) await Promise.all(deletes);
+  } catch(e) { /* pruning is best-effort */ }
+}
+
+async function checkAndMaybeSnapshot(deptCode) {
+  if (!trackedRooms.length) return;
+  const dateKey = tsDay();
+  const flagKey = `gb-hist-${deptCode}-${dateKey}`;
+  if (localStorage.getItem(flagKey)) return; // already done on this device today
+  // Check Firebase for the _done_ marker (another device may have already written it)
+  try {
+    const markerSnap = await get(ref(db, `deptAdmin/${deptCode}/roomHistory/_done_/${dateKey}`));
+    if (markerSnap.exists()) {
+      localStorage.setItem(flagKey, "1");
+      return;
+    }
+  } catch(e) { /* treat as not done */ }
+  await doHistorySnapshot(deptCode);
+}
+
+function schedule1amSnapshot(deptCode) {
+  const now = new Date();
+  // Schedule for 1:00 AM tomorrow (or tonight if it's before 1am)
+  const next1am = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (now.getHours() >= 1 ? 1 : 0), 1, 0, 0);
+  const delay = next1am - now;
+  setTimeout(() => doHistorySnapshot(deptCode), delay);
+}
+
 function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
   scheduleMidnightReload();
+  schedule1amSnapshot(deptCode);
+  checkAndMaybeSnapshot(deptCode); // async — runs in background, no-op if already done
 
   let boardInitialized = false;
 
@@ -700,6 +786,7 @@ function subscribeToBoard(deptCode) {
     noBreakSlots  = cfg.noBreakSlots  ? Object.values(cfg.noBreakSlots)  : [];
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions).map(normalizeCallPosition)  : [];
     roster         = cfg.roster         ? Object.values(cfg.roster).map(normalizeRosterEntry).sort((a,b) => a.name.localeCompare(b.name)) : [];
+    trackedRooms   = cfg.trackedRooms   ? Object.values(cfg.trackedRooms).filter(Boolean) : [];
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
     // slots, positions, roster) — not for eodConcernTime which patchDisplay handles.
@@ -757,6 +844,11 @@ async function saveNoBreakSlots(slots) {
 async function saveCallPositions(positions) {
   const obj = {}; positions.forEach((p, i) => { obj[i] = p; });
   await set(ref(db, `config/${session.deptCode}/callPositions`), obj);
+}
+
+async function saveTrackedRooms(rooms) {
+  const obj = {}; rooms.forEach((r, i) => { obj[i] = r; });
+  await set(ref(db, `config/${session.deptCode}/trackedRooms`), Object.keys(obj).length ? obj : null);
 }
 
 async function saveCallAssignment(positionIdx, providerName) {
@@ -3454,9 +3546,34 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         const nameSpan = el("span", { style: { flex:"1" } }, loc);
         let editing = false;
 
+        // Track toggle
+        const isTracked = () => trackedRooms.includes(loc);
+        const trackBtn = el("button", {
+          class: "btn-ghost",
+          style: { fontSize:"11px", padding:"4px 8px", flexShrink:"0",
+            ...(isTracked() ? { background:"#f0fdf4", color:"#16a34a", borderColor:"#86efac" } : {}) },
+          title: "Track assignments for rotation fairness",
+        }, isTracked() ? "📊 Tracked" : "📊 Track");
+        trackBtn.addEventListener("click", async () => {
+          let cur = trackedRooms.includes(loc)
+            ? trackedRooms.filter(r => r !== loc)
+            : [...trackedRooms, loc];
+          trackedRooms = cur;
+          await saveTrackedRooms(cur);
+          trackBtn.textContent = isTracked() ? "📊 Tracked" : "📊 Track";
+          Object.assign(trackBtn.style, isTracked()
+            ? { background:"#f0fdf4", color:"#16a34a", borderColor:"#86efac" }
+            : { background:"", color:"", borderColor:"" });
+        });
+
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
         const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
           locs = locs.filter(l => l !== loc);
+          // Remove from tracked rooms too if present
+          if (trackedRooms.includes(loc)) {
+            trackedRooms = trackedRooms.filter(r => r !== loc);
+            await saveTrackedRooms(trackedRooms);
+          }
           await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
         }}, "Remove");
 
@@ -3473,7 +3590,14 @@ function renderAdminPage(deptCode, fromDisplay = false) {
             const val = input.value.trim();
             if (val && val !== loc && !locs.includes(val)) {
               const idx = locs.indexOf(loc);
-              if (idx !== -1) { locs[idx] = val; await saveLocations(locs); rebuildFn(locs); showToast(`Renamed to ${val}`); return; }
+              if (idx !== -1) {
+                // Update trackedRooms if this room was tracked
+                if (trackedRooms.includes(loc)) {
+                  trackedRooms = trackedRooms.map(r => r === loc ? val : r);
+                  await saveTrackedRooms(trackedRooms);
+                }
+                locs[idx] = val; await saveLocations(locs); rebuildFn(locs); showToast(`Renamed to ${val}`); return;
+              }
             }
             editing = false;
             input.replaceWith(nameSpan);
@@ -3489,6 +3613,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         });
 
         rowDiv.appendChild(nameSpan);
+        rowDiv.appendChild(trackBtn);
         rowDiv.appendChild(editBtn);
         rowDiv.appendChild(removeBtn);
         return rowDiv;
@@ -3965,7 +4090,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       row("Recipient",       toInput),
       row("From Name",       fromNameInput),
       row("Subject",         subjectInput),
-      el("div", { style:{ fontSize:"12px", color:"#a39688", marginTop:"4px" } }, "Use {date} in subject to insert the schedule date automatically."),
+      el("div", { style:{ fontSize:"12px", color:"#a39688", marginTop:"4px" } }, "Use {date} in subject or message to insert the schedule date automatically."),
       row("Default Message", defaultBodyInput),
       el("button", { class:"btn-primary", style:{ marginTop:"10px" }, onClick: saveEmailConfig }, "Save"),
       statusMsg,
@@ -4806,6 +4931,27 @@ function renderPlanPage() {
       let dropdown = null;
       let hiIdx = -1;
 
+      // ── Tracked-room history ──
+      const isTracked = !isNoBreak && trackedRooms.includes(locKey);
+      let roomHistory = null; // { dateKey: providerName } — loaded async for tracked rooms
+      if (isTracked) {
+        get(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}`)).then(snap => {
+          roomHistory = snap.val() || {};
+          // Remove internal markers
+          delete roomHistory["_done_"];
+          if (dropdown) showDropdown(input.value); // refresh if already open
+        });
+      }
+
+      function getLastAssigned(name) {
+        if (!roomHistory) return null;
+        const dates = Object.entries(roomHistory)
+          .filter(([, n]) => n === name)
+          .map(([k]) => k);
+        if (!dates.length) return null;
+        return dates.reduce((best, k) => parseDateKey(k) > parseDateKey(best) ? k : best);
+      }
+
       function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
 
       function showDropdown(query) {
@@ -4817,8 +4963,24 @@ function renderPlanPage() {
         const pool = (availableList.length > 0 && !isNoBreak)
           ? roster.filter(e => availableList.includes(e.name) && !assigned.has(e.name))
           : roster.filter(e => !assigned.has(e.name));
-        const filtered = query ? pool.filter(e => rosterMatches(e, query)) : pool;
+        let filtered = query ? pool.filter(e => rosterMatches(e, query)) : pool;
+
+        // For tracked rooms with history loaded, sort oldest-first (never assigned = top)
+        if (isTracked && roomHistory) {
+          filtered = [...filtered].sort((a, b) => {
+            const da = getLastAssigned(a.name);
+            const db_ = getLastAssigned(b.name);
+            if (!da && !db_) return 0;
+            if (!da) return -1;
+            if (!db_) return 1;
+            return parseDateKey(da) - parseDateKey(db_);
+          });
+        }
+
         dropdown = el("div", { class: "roster-dropdown" });
+        if (isTracked && !roomHistory) {
+          dropdown.appendChild(el("div", { style:{ padding:"8px 12px", fontSize:"12px", color:"#a39688" } }, "Loading history…"));
+        }
 
         if (provider) {
           const clearOpt = el("button", { class: "roster-option clear-opt", type: "button" }, "✕ Remove provider");
@@ -4839,8 +5001,10 @@ function renderPlanPage() {
           dropdown.appendChild(clearOpt);
         }
 
-        filtered.slice(0, 12).forEach(entry => {
-          const opt = el("button", { class: "roster-option", type: "button" }, entry.name);
+        filtered.slice(0, 16).forEach(entry => {
+          const lastDate = (isTracked && roomHistory) ? getLastAssigned(entry.name) : null;
+          const label = lastDate ? entry.name + " — " + formatHistDate(lastDate) : entry.name;
+          const opt = el("button", { class: "roster-option", type: "button", "data-name": entry.name }, label);
           opt.addEventListener("mousedown", async ev => {
             ev.preventDefault();
             closeDropdown();
@@ -4894,7 +5058,7 @@ function renderPlanPage() {
           e.preventDefault();
           const isTab = e.key === "Tab";
           let selected = null;
-          if (hiIdx >= 0 && opts[hiIdx]) selected = opts[hiIdx].textContent.trim();
+          if (hiIdx >= 0 && opts[hiIdx]) selected = opts[hiIdx].dataset.name || opts[hiIdx].textContent.trim();
           else if (input.value.trim()) {
             const assigned = getAssignedProviders(); assigned.delete(provider || "");
             const pool = (availableList.length > 0 && !isNoBreak)
@@ -5170,7 +5334,10 @@ function renderPlanPage() {
             if (section) {
               const allRows = Array.from(section.querySelectorAll(".plan-call-row"));
               const nextRow = allRows[allRows.indexOf(row) + 1];
-              if (nextRow) setTimeout(() => nextRow.querySelector(".plan-call-btn")?.click(), 30);
+              if (nextRow) {
+                const nextBtn = nextRow.querySelector(".plan-call-btn");
+                if (nextBtn) setTimeout(() => nextBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true })), 30);
+              }
             }
           }
         });
@@ -5629,7 +5796,7 @@ function renderPlanPage() {
       },
       placeholder: "Type your message here…",
     });
-    messageArea.value = emailConfig.defaultBody || "";
+    messageArea.value = (emailConfig.defaultBody || "").replace("{date}", dateLabel);
 
     const fileInput = el("input", { type:"file", accept:".pdf", style:{ display:"none" } });
     fileInput.addEventListener("change", () => {
