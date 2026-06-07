@@ -218,6 +218,9 @@
 
     /* Requesting banner */
     .requesting-banner { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 800; margin-bottom: 8px; }
+    .global-request-banner { background: #f0fdf4; border: 2px solid #10b981; border-radius: 14px; padding: 12px 16px; margin-bottom: 14px; }
+    .global-request-banner .grb-title { font-size: 14px; font-weight: 800; color: #065f46; margin-bottom: 6px; }
+    .global-request-banner .grb-room  { font-size: 13px; font-weight: 700; color: #0f766e; padding: 2px 0; }
 
     /* ── Auth screens ── */
     .auth-root { min-height: 100vh; background: #f8f4ef; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -847,13 +850,20 @@ function getProviderCallStatus(name) {
 function callStatusPrefix(name) {
   const calls     = getCallAssignments();
   const postCalls = getPostCallAssignments();
-  const callEntry = Object.entries(calls).find(([, n]) => n === name);
+  const callEntry  = Object.entries(calls).find(([, n]) => n === name);
+  const postEntry  = Object.entries(postCalls).find(([, n]) => n === name);
   if (callEntry) {
     const pos  = callPositions[parseInt(callEntry[0])];
     const icon = pos ? (pos.callIcon ?? "📞") : "📞";
-    return icon ? icon + " " : "";
+    if (icon) return icon + " ";
+    // callIcon is empty string — fall back to postCallIcon if provider is also post-call
+    if (postEntry) {
+      const ppos  = callPositions[parseInt(postEntry[0])];
+      const picon = ppos ? (ppos.postCallIcon ?? "🌙") : "🌙";
+      if (picon) return picon + " ";
+    }
+    return "";
   }
-  const postEntry = Object.entries(postCalls).find(([, n]) => n === name);
   if (postEntry) {
     const pos  = callPositions[parseInt(postEntry[0])];
     const icon = pos ? (pos.postCallIcon ?? "🌙") : "🌙";
@@ -1881,16 +1891,36 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
 }
 
 // ─── Request notification (for display mode) ──────────────────────────────────
-let shownNotifications = new Set();
+let shownNotifications    = new Set();
+let requestRechimeTimers  = new Map(); // roomId → intervalId for 3-minute rechimes
 
 function checkRequestNotifications() {
   if (!isDisplayMode) return;
   Object.entries(boardData).forEach(([id, room]) => {
-    if (room.requesting && room.provider && !shownNotifications.has(id)) {
-      shownNotifications.add(id);
-      showRequestNotification(room.location || id, room.provider);
+    if (room.requesting && room.provider) {
+      if (!shownNotifications.has(id)) {
+        shownNotifications.add(id);
+        showRequestNotification(room.location || id, room.provider);
+        // Set up 3-minute rechime interval until request is cleared
+        const ivId = setInterval(() => {
+          const cur = boardData[id] || {};
+          if (cur.requesting && cur.provider) {
+            playChime();
+          } else {
+            clearInterval(requestRechimeTimers.get(id));
+            requestRechimeTimers.delete(id);
+          }
+        }, 3 * 60 * 1000);
+        requestRechimeTimers.set(id, ivId);
+      }
     }
-    if (!room.requesting) shownNotifications.delete(id);
+    if (!room.requesting) {
+      shownNotifications.delete(id);
+      if (requestRechimeTimers.has(id)) {
+        clearInterval(requestRechimeTimers.get(id));
+        requestRechimeTimers.delete(id);
+      }
+    }
   });
 }
 
@@ -2370,6 +2400,19 @@ function renderBoard() {
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
+      (() => {
+        const requesting = locations
+          .filter(l => !isDivider(l))
+          .map(l => ({ loc: l, room: boardData[roomId(l)] || {} }))
+          .filter(({ room }) => room.requesting && room.provider);
+        if (!requesting.length) return null;
+        return el("div", { class: "global-request-banner" },
+          el("div", { class: "grb-title" }, "🔔 Break Requested"),
+          ...requesting.map(({ loc, room }) =>
+            el("div", { class: "grb-room" }, loc + " — " + room.provider)
+          ),
+        );
+      })(),
       (noBreakSlots.length && !activeFilter) ? el("div", { class: "no-break-section" },
         ...noBreakCards,
         el("hr", { class: "or-section-divider" }),
@@ -3187,7 +3230,7 @@ async function loadConfig(code) {
 // ─── Admin section helper (collapsible) ──────────────────────────────────────
 function adminSection(storageKey, title, sub, ...body) {
   const lsKey  = "gas-breaker-admin-open-" + storageKey;
-  let isOpen   = localStorage.getItem(lsKey) !== "0";
+  let isOpen   = storageKey === "plan-tomorrow" ? localStorage.getItem(lsKey) !== "0" : localStorage.getItem(lsKey) === "1";
 
   const chevron = el("span", { class: "admin-section-chevron" });
   chevron.style.transform = isOpen ? "" : "rotate(-90deg)";
@@ -3883,20 +3926,27 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     const toInput       = el("input", { type:"email", class:"plan-header-input", placeholder:"recipient@example.com", style:{marginBottom:"6px"} });
     const fromNameInput = el("input", { type:"text",  class:"plan-header-input", placeholder:"e.g. SJMC Anesthesia",  style:{marginBottom:"6px"} });
     const subjectInput  = el("input", { type:"text",  class:"plan-header-input", placeholder:"e.g. OR Schedule — {date}" });
+    const defaultBodyInput = el("textarea", {
+      class: "plan-header-input",
+      placeholder: "e.g. Please see the attached schedule for tomorrow.",
+      style: { minHeight:"72px", resize:"vertical", fontFamily:"inherit" },
+    });
 
     // Load existing config
     get(ref(db, `deptAdmin/${deptCode}/emailConfig`)).then(snap => {
       const cfg = snap.val() || {};
-      toInput.value       = cfg.to          || "";
-      fromNameInput.value = cfg.fromName    || "";
-      subjectInput.value  = cfg.defaultSubject || "";
+      toInput.value          = cfg.to             || "";
+      fromNameInput.value    = cfg.fromName       || "";
+      subjectInput.value     = cfg.defaultSubject || "";
+      defaultBodyInput.value = cfg.defaultBody    || "";
     });
 
     async function saveEmailConfig() {
       const cfg = {
-        to:              toInput.value.trim()       || null,
-        fromName:        fromNameInput.value.trim() || null,
-        defaultSubject:  subjectInput.value.trim()  || null,
+        to:              toInput.value.trim()            || null,
+        fromName:        fromNameInput.value.trim()      || null,
+        defaultSubject:  subjectInput.value.trim()       || null,
+        defaultBody:     defaultBodyInput.value.trim()   || null,
       };
       await set(ref(db, `deptAdmin/${deptCode}/emailConfig`), cfg);
       statusMsg.textContent = "Saved ✓";
@@ -3912,10 +3962,11 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
     return adminSection("email", "Email Settings",
       "Configure where the Plan Tomorrow email is sent from and to.",
-      row("Recipient",   toInput),
-      row("From Name",   fromNameInput),
-      row("Subject",     subjectInput),
+      row("Recipient",       toInput),
+      row("From Name",       fromNameInput),
+      row("Subject",         subjectInput),
       el("div", { style:{ fontSize:"12px", color:"#a39688", marginTop:"4px" } }, "Use {date} in subject to insert the schedule date automatically."),
+      row("Default Message", defaultBodyInput),
       el("button", { class:"btn-primary", style:{ marginTop:"10px" }, onClick: saveEmailConfig }, "Save"),
       statusMsg,
     );
@@ -4126,7 +4177,7 @@ function renderPlanPage() {
       if (d.provider) assigned.add(d.provider);
     });
     noBreakSlots.forEach(slot => {
-      const d = planData[roomId(slot)] || {};
+      const d = planData[roomId("nb_" + slot)] || {};
       if (d.provider) assigned.add(d.provider);
     });
     return assigned;
@@ -4429,8 +4480,17 @@ function renderPlanPage() {
         const loc = data.slice(5);
         const rid = roomId(loc);
         const current = planData[rid] || {};
+        const wasProvider = current.provider || null;
         await savePlanRoom(loc, { ...current, provider: null, supervisor: null });
+        // Add displaced provider back to Working Tomorrow if not a noBreak room
+        const isNbRoom = loc.startsWith("nb_");
+        if (!isNbRoom && wasProvider && !availableList.includes(wasProvider)) {
+          availableList = [...availableList, wasProvider];
+          await saveAvailable();
+        }
         refreshCenterColumn();
+        const leftCol = document.querySelector(".plan-col-left");
+        if (leftCol) buildLeftColumn(leftCol);
       }
     });
 
@@ -4533,7 +4593,7 @@ function renderPlanPage() {
       const nbSection = el("div", { class: "plan-section" });
       nbSection.appendChild(el("div", { class: "plan-section-title" }, "Core Positions"));
       noBreakSlots.forEach(slot => {
-        nbSection.appendChild(buildPlanRoomCard(slot, slot, true));
+        nbSection.appendChild(buildPlanRoomCard("nb_" + slot, slot, true));
       });
       col.appendChild(nbSection);
     }
@@ -4572,6 +4632,7 @@ function renderPlanPage() {
 
     const card = el("div", {
       class: "plan-room-card" + (isEmpty ? " plan-empty-room" : ""),
+      "data-loc-key": locKey,
     });
 
     // Make card a drop target
@@ -4589,13 +4650,24 @@ function renderPlanPage() {
       const data = e.dataTransfer.getData("text/plain");
       if (data.startsWith("available:")) {
         const name = data.slice(10);
-        if (!isNoBreak && availableList.includes(name)) {
-          availableList = availableList.filter(n => n !== name);
-          await saveAvailable();
-          const leftCol = document.querySelector(".plan-col-left");
-          if (leftCol) buildLeftColumn(leftCol);
-        }
         const current = planData[rid] || {};
+        const displacedProvider = current.provider || null;
+        if (!isNoBreak) {
+          let listChanged = false;
+          if (availableList.includes(name)) {
+            availableList = availableList.filter(n => n !== name);
+            listChanged = true;
+          }
+          if (displacedProvider && displacedProvider !== name && !availableList.includes(displacedProvider)) {
+            availableList = [...availableList, displacedProvider];
+            listChanged = true;
+          }
+          if (listChanged) {
+            await saveAvailable();
+            const leftCol = document.querySelector(".plan-col-left");
+            if (leftCol) buildLeftColumn(leftCol);
+          }
+        }
         await savePlanRoom(locKey, { ...current, provider: name, supervisor: null, empty: false });
         refreshCenterColumn();
       } else if (data.startsWith("room:")) {
@@ -4773,11 +4845,22 @@ function renderPlanPage() {
             ev.preventDefault();
             closeDropdown();
             editingProvider = false;
-            if (!isNoBreak && availableList.includes(entry.name)) {
-              availableList = availableList.filter(n => n !== entry.name);
-              await saveAvailable();
-              const leftCol = document.querySelector(".plan-col-left");
-              if (leftCol) buildLeftColumn(leftCol);
+            const displacedProvider = (planData[rid] || {}).provider || null;
+            if (!isNoBreak) {
+              let listChanged = false;
+              if (availableList.includes(entry.name)) {
+                availableList = availableList.filter(n => n !== entry.name);
+                listChanged = true;
+              }
+              if (displacedProvider && displacedProvider !== entry.name && !availableList.includes(displacedProvider)) {
+                availableList = [...availableList, displacedProvider];
+                listChanged = true;
+              }
+              if (listChanged) {
+                await saveAvailable();
+                const leftCol = document.querySelector(".plan-col-left");
+                if (leftCol) buildLeftColumn(leftCol);
+              }
             }
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: entry.name, supervisor: null, empty: false });
@@ -4809,6 +4892,7 @@ function renderPlanPage() {
         if (e.key === "ArrowUp")   { e.preventDefault(); hiIdx = Math.max(hiIdx-1,0); opts.forEach((o,i)=>o.classList.toggle("highlighted",i===hiIdx)); return; }
         if (e.key === "Enter" || e.key === "Tab") {
           e.preventDefault();
+          const isTab = e.key === "Tab";
           let selected = null;
           if (hiIdx >= 0 && opts[hiIdx]) selected = opts[hiIdx].textContent.trim();
           else if (input.value.trim()) {
@@ -4822,15 +4906,35 @@ function renderPlanPage() {
           if (selected) {
             closeDropdown();
             editingProvider = false;
-            if (!isNoBreak && availableList.includes(selected)) {
-              availableList = availableList.filter(n => n !== selected);
-              await saveAvailable();
-              const leftCol = document.querySelector(".plan-col-left");
-              if (leftCol) buildLeftColumn(leftCol);
+            const displacedProvider = (planData[rid] || {}).provider || null;
+            if (!isNoBreak) {
+              let listChanged = false;
+              if (availableList.includes(selected)) {
+                availableList = availableList.filter(n => n !== selected);
+                listChanged = true;
+              }
+              if (displacedProvider && displacedProvider !== selected && !availableList.includes(displacedProvider)) {
+                availableList = [...availableList, displacedProvider];
+                listChanged = true;
+              }
+              if (listChanged) {
+                await saveAvailable();
+                const leftCol = document.querySelector(".plan-col-left");
+                if (leftCol) buildLeftColumn(leftCol);
+              }
             }
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: selected, supervisor: null, empty: false });
             refreshCenterColumn();
+            // Tab: advance focus to the next room card
+            if (isTab) {
+              const allCards = Array.from(document.querySelectorAll(".plan-room-card[data-loc-key]"));
+              const idx = allCards.findIndex(c => c.dataset.locKey === locKey);
+              if (idx >= 0 && idx + 1 < allCards.length) {
+                const nextBtn = allCards[idx + 1].querySelector(".plan-room-provider-btn");
+                if (nextBtn) setTimeout(() => nextBtn.click(), 60);
+              }
+            }
           } else {
             closeDropdown(); editingProvider = false; renderProviderArea();
           }
@@ -5410,7 +5514,7 @@ function renderPlanPage() {
     // Core Positions
     let coreHtml = "";
     if (noBreakSlots.length) {
-      const rows = noBreakSlots.map(slot => [slot, (planData[roomId(slot)] || {}).provider || ""]);
+      const rows = noBreakSlots.map(slot => [slot, (planData[roomId("nb_" + slot)] || {}).provider || ""]);
       coreHtml = box("Core Positions", rows);
     }
 
@@ -5436,7 +5540,7 @@ function renderPlanPage() {
     if (callPositions.length) {
       const postRows = callPositions.map((p, i) => [p.name, planPostCallData[i] || ""]);
       const callRows = callPositions.map((p, i) => [p.name, planCallData[i] || ""]);
-      callHtml = box("Post Call (Today)", postRows) + box("On Call (Tonight)", callRows);
+      callHtml = box("Post Call", postRows) + box("On Call", callRows);
     }
 
     // 12-hour shifts
@@ -5446,7 +5550,7 @@ function renderPlanPage() {
       if (d.provider) allPlanNames.add(d.provider);
       if (d.supervisor) allPlanNames.add(d.supervisor);
     });
-    noBreakSlots.forEach(slot => { const d = planData[roomId(slot)] || {}; if (d.provider) allPlanNames.add(d.provider); });
+    noBreakSlots.forEach(slot => { const d = planData[roomId("nb_" + slot)] || {}; if (d.provider) allPlanNames.add(d.provider); });
     const twelveHour = [...allPlanNames].filter(n => { const note = planNotes[n]; return note && /^7\s*p(m)?$/i.test(note.text); });
     const twelveHtml = twelveHour.length ? box("12 Hour Shift", twelveHour.map((n, i) => [String(i + 1), n])) : "";
 
@@ -5525,6 +5629,7 @@ function renderPlanPage() {
       },
       placeholder: "Type your message here…",
     });
+    messageArea.value = emailConfig.defaultBody || "";
 
     const fileInput = el("input", { type:"file", accept:".pdf", style:{ display:"none" } });
     fileInput.addEventListener("change", () => {
@@ -5600,7 +5705,7 @@ function renderPlanPage() {
     // No-break slots box
     if (noBreakSlots.length) {
       const rows = noBreakSlots.map(slot => {
-        const d = planData[roomId(slot)] || {};
+        const d = planData[roomId("nb_" + slot)] || {};
         return el("div", { class: "print-row" },
           el("div", { class: "print-row-label" }, slot),
           el("div", { class: "print-row-value" }, d.provider || ""),
@@ -5684,7 +5789,7 @@ function renderPlanPage() {
       if (d.supervisor) allPlanProviders.add(d.supervisor);
     });
     noBreakSlots.forEach(slot => {
-      const d = planData[roomId(slot)] || {};
+      const d = planData[roomId("nb_" + slot)] || {};
       if (d.provider) allPlanProviders.add(d.provider);
     });
     const twelveHourProviders = [...allPlanProviders].filter(name => {
