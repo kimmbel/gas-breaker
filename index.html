@@ -666,9 +666,6 @@ function scheduleMidnightReload() {
 }
 
 // ─── Room history snapshot (tracks start-of-day assignments for tracked rooms) ─
-function histDateKey(d) {
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
 function parseDateKey(k) {
   const [y, m, d] = k.split("-").map(Number);
   return new Date(y, m - 1, d).getTime();
@@ -753,9 +750,9 @@ function subscribeToBoard(deptCode) {
   if (unsubConfig) unsubConfig();
   scheduleMidnightReload();
   schedule1amSnapshot(deptCode);
-  checkAndMaybeSnapshot(deptCode); // async — runs in background, no-op if already done
 
   let boardInitialized = false;
+  let configInitialized = false;
 
   unsubBoard = onValue(boardRef(deptCode), snap => {
     boardData = snap.val() || {};
@@ -787,6 +784,7 @@ function subscribeToBoard(deptCode) {
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions).map(normalizeCallPosition)  : [];
     roster         = cfg.roster         ? Object.values(cfg.roster).map(normalizeRosterEntry).sort((a,b) => a.name.localeCompare(b.name)) : [];
     trackedRooms   = cfg.trackedRooms   ? Object.values(cfg.trackedRooms).filter(Boolean) : [];
+    if (!configInitialized) { configInitialized = true; checkAndMaybeSnapshot(deptCode); }
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
     // slots, positions, roster) — not for eodConcernTime which patchDisplay handles.
@@ -2464,7 +2462,18 @@ function renderBoard() {
     return card;
   });
 
-
+  const requesting = locations
+    .filter(l => !isDivider(l))
+    .map(l => ({ loc: l, room: boardData[roomId(l)] || {} }))
+    .filter(({ room }) => room.requesting && room.provider);
+  const requestBanner = requesting.length
+    ? el("div", { class: "global-request-banner" },
+        el("div", { class: "grb-title" }, "🔔 Break Requested"),
+        ...requesting.map(({ loc, room }) =>
+          el("div", { class: "grb-room" }, loc + " — " + room.provider)
+        ),
+      )
+    : null;
 
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -2482,7 +2491,9 @@ function renderBoard() {
           el("a", { class: "display-link", href: `?display=1&code=${session.deptCode}`, target: "_blank" }, "Change Display"),
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
-            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; activeFilter = null; providerHistory = {};
+            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; trackedRooms = []; activeFilter = null; providerHistory = {};
+            shownNotifications.clear();
+            requestRechimeTimers.forEach(id => clearInterval(id)); requestRechimeTimers.clear();
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
             signOut(auth).finally(() => renderCodeScreen());
@@ -2492,19 +2503,7 @@ function renderBoard() {
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
-      (() => {
-        const requesting = locations
-          .filter(l => !isDivider(l))
-          .map(l => ({ loc: l, room: boardData[roomId(l)] || {} }))
-          .filter(({ room }) => room.requesting && room.provider);
-        if (!requesting.length) return null;
-        return el("div", { class: "global-request-banner" },
-          el("div", { class: "grb-title" }, "🔔 Break Requested"),
-          ...requesting.map(({ loc, room }) =>
-            el("div", { class: "grb-room" }, loc + " — " + room.provider)
-          ),
-        );
-      })(),
+      requestBanner,
       (noBreakSlots.length && !activeFilter) ? el("div", { class: "no-break-section" },
         ...noBreakCards,
         el("hr", { class: "or-section-divider" }),
@@ -3547,11 +3546,13 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         let editing = false;
 
         // Track toggle
+        const TRACKED_STYLE   = { background:"#f0fdf4", color:"#16a34a", borderColor:"#86efac" };
+        const UNTRACKED_STYLE = { background:"", color:"", borderColor:"" };
         const isTracked = () => trackedRooms.includes(loc);
         const trackBtn = el("button", {
           class: "btn-ghost",
           style: { fontSize:"11px", padding:"4px 8px", flexShrink:"0",
-            ...(isTracked() ? { background:"#f0fdf4", color:"#16a34a", borderColor:"#86efac" } : {}) },
+            ...(isTracked() ? TRACKED_STYLE : {}) },
           title: "Track assignments for rotation fairness",
         }, isTracked() ? "📊 Tracked" : "📊 Track");
         trackBtn.addEventListener("click", async () => {
@@ -3561,9 +3562,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           trackedRooms = cur;
           await saveTrackedRooms(cur);
           trackBtn.textContent = isTracked() ? "📊 Tracked" : "📊 Track";
-          Object.assign(trackBtn.style, isTracked()
-            ? { background:"#f0fdf4", color:"#16a34a", borderColor:"#86efac" }
-            : { background:"", color:"", borderColor:"" });
+          Object.assign(trackBtn.style, isTracked() ? TRACKED_STYLE : UNTRACKED_STYLE);
         });
 
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
@@ -4748,12 +4747,45 @@ function renderPlanPage() {
     if (centerCol) buildCenterColumn(centerCol);
   }
 
+  // Sync the Working Tomorrow list when a provider is assigned to a room:
+  // remove the incoming name, return the displaced occupant (if any).
+  async function syncAvailableForAssignment(incomingName, rid, isNoBreak) {
+    if (isNoBreak) return;
+    const displaced = (planData[rid] || {}).provider || null;
+    let listChanged = false;
+    if (availableList.includes(incomingName)) {
+      availableList = availableList.filter(n => n !== incomingName);
+      listChanged = true;
+    }
+    if (displaced && displaced !== incomingName && !availableList.includes(displaced)) {
+      availableList = [...availableList, displaced];
+      listChanged = true;
+    }
+    if (listChanged) {
+      await saveAvailable();
+      const leftCol = document.querySelector(".plan-col-left");
+      if (leftCol) buildLeftColumn(leftCol);
+    }
+  }
+
   function buildPlanRoomCard(locKey, displayLabel, isNoBreak) {
     const rid = roomId(locKey);
     const roomDat = planData[rid] || {};
     const provider = roomDat.provider || null;
     const supervisor = roomDat.supervisor || null;
     const isEmpty = !!roomDat.empty;
+
+    // Fetch room assignment history once per card DOM lifetime (tracked rooms only)
+    const isTracked = !isNoBreak && trackedRooms.includes(locKey);
+    let roomHistory = null;
+    let onRoomHistoryLoaded = null; // set by buildPlanProviderInput while the input is open
+    if (isTracked) {
+      get(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}`)).then(snap => {
+        roomHistory = snap.val() || {};
+        delete roomHistory["_done_"];
+        if (onRoomHistoryLoaded) onRoomHistoryLoaded();
+      });
+    }
 
     const card = el("div", {
       class: "plan-room-card" + (isEmpty ? " plan-empty-room" : ""),
@@ -4776,23 +4808,7 @@ function renderPlanPage() {
       if (data.startsWith("available:")) {
         const name = data.slice(10);
         const current = planData[rid] || {};
-        const displacedProvider = current.provider || null;
-        if (!isNoBreak) {
-          let listChanged = false;
-          if (availableList.includes(name)) {
-            availableList = availableList.filter(n => n !== name);
-            listChanged = true;
-          }
-          if (displacedProvider && displacedProvider !== name && !availableList.includes(displacedProvider)) {
-            availableList = [...availableList, displacedProvider];
-            listChanged = true;
-          }
-          if (listChanged) {
-            await saveAvailable();
-            const leftCol = document.querySelector(".plan-col-left");
-            if (leftCol) buildLeftColumn(leftCol);
-          }
-        }
+        await syncAvailableForAssignment(name, rid, isNoBreak);
         await savePlanRoom(locKey, { ...current, provider: name, supervisor: null, empty: false });
         refreshCenterColumn();
       } else if (data.startsWith("room:")) {
@@ -4930,18 +4946,8 @@ function renderPlanPage() {
       });
       let dropdown = null;
       let hiIdx = -1;
-
-      // ── Tracked-room history ──
-      const isTracked = !isNoBreak && trackedRooms.includes(locKey);
-      let roomHistory = null; // { dateKey: providerName } — loaded async for tracked rooms
-      if (isTracked) {
-        get(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}`)).then(snap => {
-          roomHistory = snap.val() || {};
-          // Remove internal markers
-          delete roomHistory["_done_"];
-          if (dropdown) showDropdown(input.value); // refresh if already open
-        });
-      }
+      // Register callback so the hoisted fetch can refresh the dropdown when history arrives
+      onRoomHistoryLoaded = () => { if (dropdown) showDropdown(input.value); };
 
       function getLastAssigned(name) {
         if (!roomHistory) return null;
@@ -5009,23 +5015,7 @@ function renderPlanPage() {
             ev.preventDefault();
             closeDropdown();
             editingProvider = false;
-            const displacedProvider = (planData[rid] || {}).provider || null;
-            if (!isNoBreak) {
-              let listChanged = false;
-              if (availableList.includes(entry.name)) {
-                availableList = availableList.filter(n => n !== entry.name);
-                listChanged = true;
-              }
-              if (displacedProvider && displacedProvider !== entry.name && !availableList.includes(displacedProvider)) {
-                availableList = [...availableList, displacedProvider];
-                listChanged = true;
-              }
-              if (listChanged) {
-                await saveAvailable();
-                const leftCol = document.querySelector(".plan-col-left");
-                if (leftCol) buildLeftColumn(leftCol);
-              }
-            }
+            await syncAvailableForAssignment(entry.name, rid, isNoBreak);
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: entry.name, supervisor: null, empty: false });
             refreshCenterColumn();
@@ -5070,23 +5060,7 @@ function renderPlanPage() {
           if (selected) {
             closeDropdown();
             editingProvider = false;
-            const displacedProvider = (planData[rid] || {}).provider || null;
-            if (!isNoBreak) {
-              let listChanged = false;
-              if (availableList.includes(selected)) {
-                availableList = availableList.filter(n => n !== selected);
-                listChanged = true;
-              }
-              if (displacedProvider && displacedProvider !== selected && !availableList.includes(displacedProvider)) {
-                availableList = [...availableList, displacedProvider];
-                listChanged = true;
-              }
-              if (listChanged) {
-                await saveAvailable();
-                const leftCol = document.querySelector(".plan-col-left");
-                if (leftCol) buildLeftColumn(leftCol);
-              }
-            }
+            await syncAvailableForAssignment(selected, rid, isNoBreak);
             const current = planData[rid] || {};
             await savePlanRoom(locKey, { ...current, provider: selected, supervisor: null, empty: false });
             refreshCenterColumn();
