@@ -3962,7 +3962,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
   function buildPlanTomorrowSection() {
     return adminSection("plan-tomorrow", "Plan Tomorrow",
       "Pre-schedule providers and call assignments for tomorrow's board.",
-      el("button", { class: "btn-primary", style: { marginTop: "4px" }, onClick: () => renderPlanPage() }, "📋 Plan Tomorrow →"),
+      el("button", { class: "btn-primary", style: { marginTop: "4px" }, onClick: () => renderPlanPage(fromDisplay) }, "📋 Plan Tomorrow →"),
     );
   }
 
@@ -4180,7 +4180,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 }
 
 // ─── Plan Tomorrow ────────────────────────────────────────────────────────────
-function renderPlanPage() {
+function renderPlanPage(fromDisplay = false) {
   document.body.classList.remove("display-mode");
   const app = document.getElementById("app");
   app.innerHTML = "";
@@ -4308,8 +4308,15 @@ function renderPlanPage() {
   }
 
   function getUnassignedAvailable() {
-    const assigned = getAssignedProviders();
-    return availableList.filter(n => !assigned.has(n));
+    // Only exclude providers already in a regular OR room — core positions (no-break
+    // slots) are separate and don't disqualify someone from Working Tomorrow randomize.
+    const assignedToRooms = new Set();
+    locations.forEach(l => {
+      if (isDivider(l)) return;
+      const d = planData[roomId(l)] || {};
+      if (d.provider) assignedToRooms.add(d.provider);
+    });
+    return availableList.filter(n => !assignedToRooms.has(n));
   }
 
   // ── Load data ──
@@ -4430,7 +4437,7 @@ function renderPlanPage() {
     app.appendChild(el("div", {},
       el("header", { class: "header" },
         el("div", { class: "header-inner" },
-          el("button", { class: "admin-back-btn", onClick: () => renderAdminPage(deptCode) }, "← Back"),
+          el("button", { class: "admin-back-btn", onClick: () => renderAdminPage(deptCode, fromDisplay) }, fromDisplay ? "← Display Board" : "← Back"),
           el("div", { class: "plan-title" }, "Plan Tomorrow"),
           el("div", { class: "header-right" },
             el("div", { class: "sync-pip" }),
@@ -5584,8 +5591,12 @@ function renderPlanPage() {
     const unassigned = getUnassignedAvailable();
     const emptyRooms = locations.filter(l => !isDivider(l) && !(planData[roomId(l)] || {}).provider && !(planData[roomId(l)] || {}).empty);
 
-    if (!unassigned.length || !emptyRooms.length) {
-      showToast("Nothing to randomize.");
+    if (!unassigned.length) {
+      showToast("Nothing to randomize — all Working Tomorrow providers are already in rooms.");
+      return;
+    }
+    if (!emptyRooms.length) {
+      showToast("Nothing to randomize — no unoccupied rooms available.");
       return;
     }
 
