@@ -501,7 +501,7 @@
 
 <script type="module">
 import { initializeApp }                                           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, onValue, set, get, remove, push, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, onValue, set, get, remove, push, off, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, signOut, updatePassword, createUserWithEmailAndPassword, deleteUser, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
@@ -1666,17 +1666,19 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
       const srcProvider = (boardData[srcId] || {}).provider;
       if (!srcProvider) return;
       if (srcLoc.startsWith("nb_")) {
-        // nb → nb: assignProvider skips nb sources, swap manually
+        // nb → nb: assignProvider skips nb sources, so swap manually. Use a single
+        // atomic multi-path update — two separate set() writes fire the board listener
+        // twice, and the intermediate snapshot (target not yet written) wipes the
+        // optimistic provider off the destination card.
         const tgtId = roomId(nbLoc);
         const tgtProvider = (boardData[tgtId] || {}).provider || null;
-        boardData[srcId] = { ...(boardData[srcId] || {}), provider: tgtProvider };
-        boardData[tgtId] = { ...(boardData[tgtId] || {}), provider: srcProvider };
+        const newSrc = { ...(boardData[srcId] || {}), provider: tgtProvider };
+        const newTgt = { ...(boardData[tgtId] || {}), provider: srcProvider };
+        boardData[srcId] = newSrc;
+        boardData[tgtId] = newTgt;
         if (document.querySelector(".display-outer")) patchDisplay();
         const bPath = `boards/${session.deptCode}/${tsDay()}`;
-        await Promise.all([
-          set(ref(db, `${bPath}/${srcId}`), boardData[srcId]),
-          set(ref(db, `${bPath}/${tgtId}`), boardData[tgtId]),
-        ]);
+        await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
       } else {
         // OR → nb: assignProvider handles this (finds and clears the OR source)
         await assignProvider(nbLoc, srcProvider);
@@ -4665,7 +4667,7 @@ function renderPlanPage(fromDisplay = false) {
               badgeWrap.appendChild(el("span", { class: "plan-note-add", onClick: () => { editingNote = true; renderNote(); } }, "+ note"));
             }
             if (currentLate) {
-              badgeWrap.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: async () => { await savePlanLate(name, false); rebuildList(); } }, "Late"));
+              badgeWrap.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: () => { editingNote = true; renderNote(); } }, "Late"));
             }
             noteEl = badgeWrap;
             row.insertBefore(noteEl, removeBtn);
@@ -5067,7 +5069,7 @@ function renderPlanPage(fromDisplay = false) {
             nameRow.appendChild(el("span", { class: "plan-note-add", onClick: () => { editingRoomNote = true; renderProviderArea(); } }, "+ note"));
           }
           if (isLate) {
-            nameRow.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: async () => { await savePlanLate(provider, false); renderProviderArea(); } }, "Late"));
+            nameRow.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: () => { editingRoomNote = true; renderProviderArea(); } }, "Late"));
           }
         }
         providerArea.appendChild(nameRow);
