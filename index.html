@@ -1127,11 +1127,11 @@ function providerKey(name) {
 
 async function saveProviderBreaks(name, breaks) {
   if (!session?.deptCode || !name) return;
-  const key  = providerKey(name);
-  const r    = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
-  const snap = await get(r);
-  const current = snap.val() || {};
-  await set(r, { ...current, provider: name, breaks }); // preserve note and any other fields
+  const key = providerKey(name);
+  const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
+  // Field-level update: only touch provider + breaks. A full read-modify-write of the
+  // node would clobber a concurrent note/late edit (last whole-object write wins).
+  await update(r, { provider: name, breaks });
 }
 
 function getProviderHistory(name) {
@@ -1148,9 +1148,9 @@ async function saveProviderNote(name, noteObj) {
   if (!session?.deptCode || !name) return;
   const key = providerKey(name);
   const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
-  const snap = await get(r);
-  const current = snap.val() || {};
-  await set(r, { ...current, provider: name, note: noteObj || null });
+  // Field-level update so a concurrent break toggle or late edit isn't clobbered.
+  // note:null removes just the note child, leaving breaks/late intact.
+  await update(r, { provider: name, note: noteObj || null });
 }
 
 function getProviderNote(name) {
@@ -1169,9 +1169,9 @@ async function saveProviderLate(name, isLate) {
   if (!session?.deptCode || !name) return;
   const key = providerKey(name);
   const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
-  const snap = await get(r);
-  const current = snap.val() || {};
-  await set(r, { ...current, provider: name, late: isLate || null });
+  // Field-level update so a concurrent break toggle or note edit isn't clobbered.
+  // late:null removes just the late child, leaving breaks/note intact.
+  await update(r, { provider: name, late: isLate || null });
 }
 
 function getProviderLate(name) {
@@ -2065,11 +2065,28 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       card.classList.remove("drag-over");
       const srcLoc = e.dataTransfer.getData("text/plain");
       if (!srcLoc || srcLoc === loc) return;
-      const srcProvider = (boardData[roomId(srcLoc)] || {}).provider;
+      const srcId = roomId(srcLoc);
+      const srcProvider = (boardData[srcId] || {}).provider;
       if (!srcProvider) return;
-      await assignProvider(loc, srcProvider);
-      // assignProvider skips nb_ sources; clear the slot explicitly
-      if (srcLoc.startsWith("nb_")) await clearProvider(srcLoc);
+      if (srcLoc.startsWith("nb_")) {
+        // nb → OR: assignProvider can't rehome the displaced OR occupant into a no-break
+        // source (it filters nb_ keys), so it would silently drop them. Do an atomic
+        // move/swap: dragged provider into this OR room, any displaced occupant back into
+        // the vacated no-break slot.
+        const tgtId     = roomId(loc);
+        const displaced = (boardData[tgtId] || {}).provider || null;
+        const newTgt = { ...(boardData[tgtId] || {}), location: loc, provider: srcProvider, supervisor: null, breaks: getProviderHistory(srcProvider), hold:false, holdAt:null, holdDuration:null, requesting:false };
+        const newSrc = (displaced && displaced !== srcProvider)
+          ? { ...(boardData[srcId] || {}), provider: displaced }
+          : { ...(boardData[srcId] || {}), provider: null };
+        boardData[srcId] = newSrc;
+        boardData[tgtId] = newTgt;
+        if (document.querySelector(".display-outer")) patchDisplay();
+        const bPath = `boards/${session.deptCode}/${tsDay()}`;
+        await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
+      } else {
+        await assignProvider(loc, srcProvider);
+      }
     });
     // Only occupied cards can be dragged
     if (provider) {
