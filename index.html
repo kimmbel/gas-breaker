@@ -1640,6 +1640,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         class: "provider-name-btn" + (!currentProvider ? " empty" : ""),
         onClick: openEdit
       }, currentProvider ? callStatusPrefix(currentProvider) + currentProvider : "Tap to assign");
+      if (isDisplay && currentProvider) nameBtn.setAttribute("draggable", "true");
       body.appendChild(nameBtn);
     }
   }
@@ -1907,8 +1908,8 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
 
     const lateCheck = el("input", { type: "checkbox" });
     lateCheck.checked = getProviderLate(provider);
-    const lateRow = el("div", { style: "display:flex;align-items:center;gap:0.4em;font-size:0.95em;font-weight:700;color:#d0c8c0;cursor:pointer" },
-      lateCheck, document.createTextNode("Late")
+    const lateRow = el("div", { style: { display:"flex", alignItems:"center", gap:"0.4em", fontSize:"0.95em", fontWeight:"700", color:"#d0c8c0", cursor:"pointer" } },
+      lateCheck, " Late"
     );
     lateRow.addEventListener("mousedown", e => e.preventDefault());
 
@@ -4652,8 +4653,8 @@ function renderPlanPage(fromDisplay = false) {
             });
             const lateCheck = el("input", { type: "checkbox" });
             lateCheck.checked = currentLate;
-            const lateRow = el("div", { style: "display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#2d2420;cursor:pointer" },
-              lateCheck, document.createTextNode("Late (12-hr)")
+            const lateRow = el("div", { style: { display:"flex", alignItems:"center", gap:"5px", fontSize:"11px", fontWeight:"700", color:"#2d2420", cursor:"pointer" } },
+              lateCheck, " Late (12-hr)"
             );
             lateRow.addEventListener("mousedown", e => e.preventDefault());
             const saveNote = async () => {
@@ -5047,8 +5048,8 @@ function renderPlanPage(fromDisplay = false) {
         });
         const lateCheck = el("input", { type: "checkbox" });
         lateCheck.checked = !!planLate[provider];
-        const lateRow = el("div", { style: "display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#2d2420;cursor:pointer" },
-          lateCheck, document.createTextNode("Late (12-hr)")
+        const lateRow = el("div", { style: { display:"flex", alignItems:"center", gap:"5px", fontSize:"11px", fontWeight:"700", color:"#2d2420", cursor:"pointer" } },
+          lateCheck, " Late (12-hr)"
         );
         lateRow.addEventListener("mousedown", e => e.preventDefault());
         const saveRoomNote = async () => {
