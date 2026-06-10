@@ -1598,20 +1598,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
 
   const body = el("div", { class: "card-body" });
   body.appendChild(el("div", { class: "room-label no-break-label" }, slot));
-
-  if (isDisplay && provider) {
-    const note = getProviderNote(provider);
-    const lateFlag = getProviderLate(provider);
-    if (note || lateFlag) {
-      const badges = el("div", { class: "display-badges", style: { marginBottom: "0.2em" } });
-      if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
-      if (lateFlag) {
-        const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" }, onClick: () => saveProviderLate(provider, false) }, "Late");
-        badges.appendChild(lb);
-      }
-      body.appendChild(badges);
-    }
-  }
+  // No-break slot cards are name-only — note/late badges are not shown here.
 
   let editingProvider = false;
 
@@ -1858,7 +1845,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   if (isDisplay && (note || late || isReq || eodBadge) && provider) {
     const badges = el("div", { class: "display-badges" });
     if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color, style: { cursor:"pointer" }, onClick: () => openNoteEdit() }, note.text));
-    if (late) badges.appendChild(el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" }, onClick: () => saveProviderLate(provider, false) }, "Late"));
+    if (late) badges.appendChild(el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" }, onClick: () => openNoteEdit() }, "Late"));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
     body.appendChild(
       el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
@@ -3020,7 +3007,10 @@ function patchDisplay() {
         }
         if (lateBadge) {
           const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" } }, "Late");
-          lb.addEventListener("click", () => saveProviderLate(provider, false));
+          lb.addEventListener("click", () => {
+            const noteBtn = card.querySelector(".card-side [data-role='note']");
+            if (noteBtn) noteBtn.click();
+          });
           badges.appendChild(lb);
         }
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
@@ -3053,8 +3043,9 @@ function patchDisplay() {
   });
 
   // ── Patch no-break slot cards ──
-  // Surgical update: just flip text/class on the existing name button in place.
-  // This mirrors how regular cards are patched and avoids replaceChild complexity.
+  // Rebuild the card whenever the provider identity changes. Rebuilding (rather than
+  // mutating text in place) keeps the draggable attribute and drag listeners in sync —
+  // a card that gains a provider via drag must become a draggable source immediately.
   if (noBreakSlots.length > 0) {
     const nbRow = document.querySelector(".display-nobreak-row");
     if (!nbRow) { renderDisplay(); return; }
@@ -3070,36 +3061,14 @@ function patchDisplay() {
       const nameBtn = existing.querySelector(".provider-name-btn");
       if (!nameBtn) return;
 
-      // Rebuild card when occupied state changes so draggable attribute stays in sync
-      const domWasEmpty = nameBtn.classList.contains("empty");
-      if (domWasEmpty !== !provider) {
+      // Provider currently shown in the DOM (strip call/postcall emoji prefix)
+      const domProvider = nameBtn.classList.contains("empty")
+        ? null
+        : nameBtn.textContent.replace(/^[📞🌙] ?/, "");
+      if (domProvider !== provider) {
         const tabIdx = existing.getAttribute("data-tab-idx");
         const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : null);
         existing.parentNode.replaceChild(newCard, existing);
-        return;
-      }
-
-      nameBtn.textContent = provider ? callStatusPrefix(provider) + provider : "Tap to assign";
-
-      // Update note/late badges
-      const note     = provider ? getProviderNote(provider) : null;
-      const lateFlag = provider ? getProviderLate(provider) : false;
-      const cardBody = existing.querySelector(".card-body");
-      let badges     = cardBody ? cardBody.querySelector(".display-badges") : null;
-      if (note || lateFlag) {
-        if (!badges) {
-          badges = el("div", { class: "display-badges", style: { marginBottom: "0.2em" } });
-          if (cardBody) cardBody.insertBefore(badges, nameBtn);
-        }
-        badges.innerHTML = "";
-        if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
-        if (lateFlag) {
-          const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" } }, "Late");
-          lb.addEventListener("click", () => saveProviderLate(provider, false));
-          badges.appendChild(lb);
-        }
-      } else if (badges) {
-        badges.remove();
       }
     });
   }
