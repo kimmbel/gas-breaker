@@ -1680,8 +1680,22 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         const bPath = `boards/${session.deptCode}/${tsDay()}`;
         await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
       } else {
-        // OR → nb: assignProvider handles this (finds and clears the OR source)
-        await assignProvider(nbLoc, srcProvider);
+        // OR → nb: move (or swap if the slot is occupied) in a single atomic update.
+        // assignProvider does this in two sequential writes (clear the OR source, then
+        // fill the slot); the board listener runs boardData = snap.val() between them and
+        // the intermediate snapshot drops the provider, leaving the slot card un-rebuilt
+        // and un-draggable ("stuck").
+        const tgtId     = roomId(nbLoc);
+        const displaced = (boardData[tgtId] || {}).provider || null; // current slot occupant, if any
+        const newTgt = { ...(boardData[tgtId] || {}), provider: srcProvider, breaks: getProviderHistory(srcProvider), hold:false, holdAt:null, holdDuration:null, requesting:false };
+        const newSrc = (displaced && displaced !== srcProvider)
+          ? { ...(boardData[srcId] || {}), provider: displaced, breaks: getProviderHistory(displaced), hold:false, holdAt:null, holdDuration:null, requesting:false }
+          : { ...(boardData[srcId] || {}), provider: null, supervisor: null, breaks: {}, hold:false, holdAt:null, holdDuration:null, requesting:false };
+        boardData[srcId] = newSrc;
+        boardData[tgtId] = newTgt;
+        if (document.querySelector(".display-outer")) patchDisplay();
+        const bPath = `boards/${session.deptCode}/${tsDay()}`;
+        await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
       }
     });
     // Dragging from the card background (label area) — nameBtn has its own dragstart listener
@@ -5786,6 +5800,20 @@ function renderPlanPage(fromDisplay = false) {
   }
 
   // ─── Print PDF ───────────────────────────────────────────────────────────────
+  // Working Tomorrow note shown in parentheses next to the provider name on the
+  // printed/emailed schedule. Two variants: plain text for the PDF (el() makes safe
+  // text nodes) and HTML-escaped for the email body.
+  function planNoteSuffix(name) {
+    const note = name && planNotes[name];
+    return note && note.text ? ` (${note.text})` : "";
+  }
+  function planNoteSuffixHtml(name) {
+    const note = name && planNotes[name];
+    if (!note || !note.text) return "";
+    const safe = note.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return ` (${safe})`;
+  }
+
   // ─── Email Plan ──────────────────────────────────────────────────────────────
   function buildPlanEmailHtml(message) {
     const header    = planHeaderText || "Daily OR Assignments";
@@ -5816,7 +5844,10 @@ function renderPlanPage(fromDisplay = false) {
     // Core Positions
     let coreHtml = "";
     if (noBreakSlots.length) {
-      const rows = noBreakSlots.map(slot => [slot, (planData[roomId("nb_" + slot)] || {}).provider || ""]);
+      const rows = noBreakSlots.map(slot => {
+        const p = (planData[roomId("nb_" + slot)] || {}).provider || "";
+        return [slot, p ? p + planNoteSuffixHtml(p) : ""];
+      });
       coreHtml = box("Core Positions", rows);
     }
 
@@ -5832,7 +5863,7 @@ function renderPlanPage(fromDisplay = false) {
         return;
       }
       const d = planData[roomId(loc)] || {};
-      if (!d.empty) currentRows.push([loc, d.provider ? d.provider + (d.supervisor ? ` / ${d.supervisor}` : "") : ""]);
+      if (!d.empty) currentRows.push([loc, d.provider ? d.provider + planNoteSuffixHtml(d.provider) + (d.supervisor ? ` / ${d.supervisor}` : "") : ""]);
     });
     flushSec();
     const roomsHtml = sections.map(sec => box(sec.title, sec.rows)).join("");
@@ -6010,7 +6041,7 @@ function renderPlanPage(fromDisplay = false) {
         const d = planData[roomId("nb_" + slot)] || {};
         return el("div", { class: "print-row" },
           el("div", { class: "print-row-label" }, slot),
-          el("div", { class: "print-row-value" }, d.provider || ""),
+          el("div", { class: "print-row-value" }, d.provider ? d.provider + planNoteSuffix(d.provider) : ""),
         );
       });
       leftContent.push(el("div", { class: "print-box" },
@@ -6046,7 +6077,7 @@ function renderPlanPage(fromDisplay = false) {
 
     sections.forEach(sec => {
       const rows = sec.rows.map(r => {
-        const nameText = r.provider + (r.supervisor ? ` / ${r.supervisor}` : "");
+        const nameText = r.provider + planNoteSuffix(r.provider) + (r.supervisor ? ` / ${r.supervisor}` : "");
         return el("div", { class: "print-row" },
           el("div", { class: "print-row-label" }, r.loc),
           el("div", { class: "print-row-value" }, nameText),
