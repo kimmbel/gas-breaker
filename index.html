@@ -1626,13 +1626,15 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
     if (targetBtn) setTimeout(() => targetBtn.click(), 60);
   }
 
+  const nbLoc = "nb_" + slot;
+
   function renderProviderArea() {
     const existing = body.querySelector(".provider-name-btn, .provider-input-wrap");
     if (existing) existing.remove();
     // Always read live from boardData so out-of-band updates are reflected when editing opens
     const currentProvider = (boardData[id] || {}).provider || null;
     if (editingProvider) {
-      body.appendChild(buildProviderInput(currentProvider, "nb_" + slot, card, () => {
+      body.appendChild(buildProviderInput(currentProvider, nbLoc, card, () => {
         editingProvider = false; renderProviderArea();
       }, onTab, isDisplay));
     } else {
@@ -1640,14 +1642,26 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         class: "provider-name-btn" + (!currentProvider ? " empty" : ""),
         onClick: openEdit
       }, currentProvider ? callStatusPrefix(currentProvider) + currentProvider : "Tap to assign");
-      if (isDisplay && currentProvider) nameBtn.setAttribute("draggable", "true");
+      if (isDisplay && currentProvider) {
+        // Buttons are non-draggable by default — attach drag directly on the button so the
+        // user can drag from the provider name without needing to hit the small label area.
+        nameBtn.setAttribute("draggable", "true");
+        nameBtn.addEventListener("dragstart", e => {
+          e.dataTransfer.setData("text/plain", nbLoc);
+          e.dataTransfer.effectAllowed = "move";
+          setTimeout(() => card.classList.add("dragging"), 0);
+        });
+        nameBtn.addEventListener("dragend", () => {
+          card.classList.remove("dragging");
+          document.querySelectorAll(".drag-over").forEach(c => c.classList.remove("drag-over"));
+        });
+      }
       body.appendChild(nameBtn);
     }
   }
   renderProviderArea();
 
   if (isDisplay) {
-    const nbLoc = "nb_" + slot;
     card.addEventListener("dragover", e => {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
@@ -1681,6 +1695,7 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         await assignProvider(nbLoc, srcProvider);
       }
     });
+    // Dragging from the card background (label area) — nameBtn has its own dragstart listener
     if (provider) {
       card.setAttribute("draggable", "true");
       card.addEventListener("dragstart", e => {
@@ -4674,7 +4689,7 @@ function renderPlanPage(fromDisplay = false) {
             row.insertBefore(noteEl, dragHandle.nextSibling);
             setTimeout(() => noteInput.focus(), 20);
           } else {
-            const badgeWrap = el("div", { style: "display:flex;gap:4px;align-items:center;flex-shrink:0" });
+            const badgeWrap = el("div", { style: { display:"flex", gap:"4px", alignItems:"center", flexShrink:"0" } });
             if (currentNoteObj) {
               badgeWrap.appendChild(el("span", { class: "plan-note-badge note-" + currentNoteObj.color, onClick: () => { editingNote = true; renderNote(); } }, currentNoteObj.text));
             } else {
