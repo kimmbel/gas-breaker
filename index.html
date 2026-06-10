@@ -1165,6 +1165,22 @@ function getProviderNote(name) {
   return n;
 }
 
+async function saveProviderLate(name, isLate) {
+  if (!session?.deptCode || !name) return;
+  const key = providerKey(name);
+  const r   = ref(db, `boards/${session.deptCode}/${tsDay()}/${key}`);
+  const snap = await get(r);
+  const current = snap.val() || {};
+  await set(r, { ...current, provider: name, late: isLate || null });
+}
+
+function getProviderLate(name) {
+  if (!name) return false;
+  const key   = providerKey(name);
+  const entry = boardData[key];
+  return !!(entry && entry.provider === name && entry.late);
+}
+
 // ─── Board actions ────────────────────────────────────────────────────────────
 async function assignProvider(loc, name) {
   const targetId = roomId(loc);
@@ -1583,6 +1599,20 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
   const body = el("div", { class: "card-body" });
   body.appendChild(el("div", { class: "room-label no-break-label" }, slot));
 
+  if (isDisplay && provider) {
+    const note = getProviderNote(provider);
+    const lateFlag = getProviderLate(provider);
+    if (note || lateFlag) {
+      const badges = el("div", { class: "display-badges", style: { marginBottom: "0.2em" } });
+      if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
+      if (lateFlag) {
+        const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" }, onClick: () => saveProviderLate(provider, false) }, "Late");
+        badges.appendChild(lb);
+      }
+      body.appendChild(badges);
+    }
+  }
+
   let editingProvider = false;
 
   function openEdit() {
@@ -1614,6 +1644,55 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
     }
   }
   renderProviderArea();
+
+  if (isDisplay) {
+    const nbLoc = "nb_" + slot;
+    card.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", e => {
+      if (!card.contains(e.relatedTarget)) card.classList.remove("drag-over");
+    });
+    card.addEventListener("drop", async e => {
+      e.preventDefault();
+      card.classList.remove("drag-over");
+      const srcLoc = e.dataTransfer.getData("text/plain");
+      if (!srcLoc || srcLoc === nbLoc) return;
+      const srcId = roomId(srcLoc);
+      const srcProvider = (boardData[srcId] || {}).provider;
+      if (!srcProvider) return;
+      if (srcLoc.startsWith("nb_")) {
+        // nb → nb: assignProvider skips nb sources, swap manually
+        const tgtId = roomId(nbLoc);
+        const tgtProvider = (boardData[tgtId] || {}).provider || null;
+        boardData[srcId] = { ...(boardData[srcId] || {}), provider: tgtProvider };
+        boardData[tgtId] = { ...(boardData[tgtId] || {}), provider: srcProvider };
+        if (document.querySelector(".display-outer")) patchDisplay();
+        const bPath = `boards/${session.deptCode}/${tsDay()}`;
+        await Promise.all([
+          set(ref(db, `${bPath}/${srcId}`), boardData[srcId]),
+          set(ref(db, `${bPath}/${tgtId}`), boardData[tgtId]),
+        ]);
+      } else {
+        // OR → nb: assignProvider handles this (finds and clears the OR source)
+        await assignProvider(nbLoc, srcProvider);
+      }
+    });
+    if (provider) {
+      card.setAttribute("draggable", "true");
+      card.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("text/plain", nbLoc);
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => card.classList.add("dragging"), 0);
+      });
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        document.querySelectorAll(".drag-over").forEach(c => c.classList.remove("drag-over"));
+      });
+    }
+  }
 
   card.appendChild(el("div", { class: "card-inner" }, body));
   return card;
@@ -1755,13 +1834,15 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
 
   // Room label row — badges stack vertically on right (note on top, requesting below)
   const note = provider ? getProviderNote(provider) : null;
+  const late = isDisplay && provider ? getProviderLate(provider) : false;
   const eodStatus = isDisplay ? (getEodTimes()[roomId(loc)] || null) : null;
   const eodBadge = isDisplay && (eodStatus === "ok" || eodStatus === "late")
     ? el("span", { class: "eod-status-badge " + eodStatus }, eodStatus === "ok" ? "✓" : "✗")
     : null;
-  if (isDisplay && (note || isReq || eodBadge) && provider) {
+  if (isDisplay && (note || late || isReq || eodBadge) && provider) {
     const badges = el("div", { class: "display-badges" });
     if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color, style: { cursor:"pointer" }, onClick: () => openNoteEdit() }, note.text));
+    if (late) badges.appendChild(el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" }, onClick: () => saveProviderLate(provider, false) }, "Late"));
     if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
     body.appendChild(
       el("div", { style: { display:"flex", alignItems:"center", gap:"5px", marginBottom:"0", minWidth:"0" } },
@@ -1824,9 +1905,17 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       colorRow.appendChild(dot);
     });
 
+    const lateCheck = el("input", { type: "checkbox" });
+    lateCheck.checked = getProviderLate(provider);
+    const lateRow = el("div", { style: "display:flex;align-items:center;gap:0.4em;font-size:0.95em;font-weight:700;color:#d0c8c0;cursor:pointer" },
+      lateCheck, document.createTextNode("Late")
+    );
+    lateRow.addEventListener("mousedown", e => e.preventDefault());
+
     const saveNote = async () => {
       const val = noteInput.value.trim().slice(0, 15);
       await saveProviderNote(provider, val ? { text: val, color: selectedColor } : null);
+      await saveProviderLate(provider, lateCheck.checked);
       editingNote = false;
       wrap.remove();
     };
@@ -1840,7 +1929,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         // This preserves the selected color even without pressing Enter
         const val = noteInput.value.trim().slice(0, 15);
         const hadNote = !!currentNoteObj;
-        if (val || hadNote) {
+        if (val || hadNote || lateCheck.checked) {
           saveNote(); // saveNote sets editingNote=false and removes wrap
         } else {
           editingNote = false; wrap.remove();
@@ -1848,7 +1937,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       }
     }, 200));
 
-    const wrap = el("div", { class: "note-input-wrap" }, noteInput, colorRow);
+    const wrap = el("div", { class: "note-input-wrap" }, noteInput, colorRow, lateRow);
     const roomRow = body.firstChild;
     body.insertBefore(wrap, roomRow.nextSibling);
     setTimeout(() => noteInput.focus(), 20);
@@ -1960,6 +2049,8 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       const srcProvider = (boardData[roomId(srcLoc)] || {}).provider;
       if (!srcProvider) return;
       await assignProvider(loc, srcProvider);
+      // assignProvider skips nb_ sources; clear the slot explicitly
+      if (srcLoc.startsWith("nb_")) await clearProvider(srcLoc);
     });
     // Only occupied cards can be dragged
     if (provider) {
@@ -2871,8 +2962,9 @@ function patchDisplay() {
       if (nameBtn.textContent !== expectedText) nameBtn.textContent = expectedText;
     }
 
-    // ── Update badges (note + requesting + eod status) in room label row ──
+    // ── Update badges (note + late + requesting + eod status) in room label row ──
     const note      = provider ? getProviderNote(provider) : null;
+    const lateBadge = provider ? getProviderLate(provider) : false;
     const eodStatus = getEodTimes()[id] || null;
     const hasEod    = eodStatus === "ok" || eodStatus === "late";
     const cardBody = card.querySelector(".card-body");
@@ -2881,7 +2973,7 @@ function patchDisplay() {
       // Find or create the flex wrapper that holds room-label + badges
       let labelRow = cardBody.querySelector(".room-label")?.parentElement;
 
-      if (note || isReq || hasEod) {
+      if (note || lateBadge || isReq || hasEod) {
         // If labelRow is cardBody itself, we need to wrap the room-label in a flex div
         if (labelRow === cardBody) {
           const roomLabelEl = cardBody.querySelector(".room-label");
@@ -2909,6 +3001,11 @@ function patchDisplay() {
             if (noteBtn) noteBtn.click();
           });
           badges.appendChild(noteBadge);
+        }
+        if (lateBadge) {
+          const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" } }, "Late");
+          lb.addEventListener("click", () => saveProviderLate(provider, false));
+          badges.appendChild(lb);
         }
         if (isReq) badges.appendChild(el("div", { class: "display-req-badge" }, "🔔 requesting"));
         // Update eod status badge
@@ -2956,9 +3053,38 @@ function patchDisplay() {
       if (!existing || existing.querySelector(".provider-input-wrap")) return;
       const nameBtn = existing.querySelector(".provider-name-btn");
       if (!nameBtn) return;
+
+      // Rebuild card when occupied state changes so draggable attribute stays in sync
+      const domWasEmpty = nameBtn.classList.contains("empty");
+      if (domWasEmpty !== !provider) {
+        const tabIdx = existing.getAttribute("data-tab-idx");
+        const newCard = renderNoBreakCard(slot, true, tabIdx !== null ? parseInt(tabIdx) : null);
+        existing.parentNode.replaceChild(newCard, existing);
+        return;
+      }
+
       nameBtn.textContent = provider ? callStatusPrefix(provider) + provider : "Tap to assign";
-      nameBtn.classList.toggle("empty", !provider);
-      existing.classList.toggle("empty", !provider);
+
+      // Update note/late badges
+      const note     = provider ? getProviderNote(provider) : null;
+      const lateFlag = provider ? getProviderLate(provider) : false;
+      const cardBody = existing.querySelector(".card-body");
+      let badges     = cardBody ? cardBody.querySelector(".display-badges") : null;
+      if (note || lateFlag) {
+        if (!badges) {
+          badges = el("div", { class: "display-badges", style: { marginBottom: "0.2em" } });
+          if (cardBody) cardBody.insertBefore(badges, nameBtn);
+        }
+        badges.innerHTML = "";
+        if (note) badges.appendChild(el("div", { class: "display-note-badge note-" + note.color }, note.text));
+        if (lateFlag) {
+          const lb = el("div", { class: "display-note-badge note-blue", style: { cursor:"pointer" } }, "Late");
+          lb.addEventListener("click", () => saveProviderLate(provider, false));
+          badges.appendChild(lb);
+        }
+      } else if (badges) {
+        badges.remove();
+      }
     });
   }
 
@@ -4217,6 +4343,7 @@ function renderPlanPage(fromDisplay = false) {
   let planData = {};        // { [roomId]: { provider, supervisor, empty } }
   let availableList = [];   // ordered array of names
   let planNotes = {};       // { [nameKey]: { text, color } }
+  let planLate  = {};       // { [nameKey]: true }
   let planCallData = {};    // { [posIdx]: name }
   let planPostCallData = {}; // { [posIdx]: name }
   let planHeaderText = "";
@@ -4259,6 +4386,15 @@ function renderPlanPage(fromDisplay = false) {
     await set(r, { ...current, provider: name, note: noteObj || null });
     if (noteObj) planNotes[name] = noteObj;
     else delete planNotes[name];
+  }
+
+  async function savePlanLate(name, isLate) {
+    const r = planHistRef(selectedDate, name);
+    const snap = await get(r);
+    const current = snap.val() || {};
+    await set(r, { ...current, provider: name, late: isLate || null });
+    if (isLate) planLate[name] = true;
+    else delete planLate[name];
   }
 
   async function savePlanRoom(loc, data) {
@@ -4325,6 +4461,7 @@ function renderPlanPage(fromDisplay = false) {
     planData = {};
     availableList = [];
     planNotes = {};
+    planLate  = {};
     planCallData = {};
     planPostCallData = {};
 
@@ -4351,10 +4488,11 @@ function renderPlanPage(fromDisplay = false) {
         if (v && typeof v === "object") planData[k] = v;
       });
 
-      // notes from _hist_ keys
+      // notes and late flag from _hist_ keys
       Object.entries(bval).forEach(([k, v]) => {
-        if (k.startsWith("_hist_") && v && v.provider && v.note) {
-          planNotes[v.provider] = v.note;
+        if (k.startsWith("_hist_") && v && v.provider) {
+          if (v.note) planNotes[v.provider] = v.note;
+          if (v.late) planLate[v.provider]  = true;
         }
       });
 
@@ -4486,11 +4624,12 @@ function renderPlanPage(fromDisplay = false) {
 
         function renderNote() {
           if (noteEl) noteEl.remove();
+          const currentNoteObj = planNotes[name] || null;
+          const currentLate    = !!planLate[name];
           if (editingNote) {
-            const currentNote = planNotes[name] || null;
-            let selectedColor = currentNote ? currentNote.color : "blue";
+            let selectedColor = currentNoteObj ? currentNoteObj.color : "blue";
             const noteInput = el("input", { class: "plan-note-input", type:"text", placeholder:"Short note…", maxlength:"15" });
-            noteInput.value = currentNote ? currentNote.text : "";
+            noteInput.value = currentNoteObj ? currentNoteObj.text : "";
             const NOTE_COLORS = [
               { id:"blue",  cls:"dot-blue"  },
               { id:"amber", cls:"dot-amber" },
@@ -4511,10 +4650,17 @@ function renderPlanPage(fromDisplay = false) {
               });
               colorRow.appendChild(dot);
             });
+            const lateCheck = el("input", { type: "checkbox" });
+            lateCheck.checked = currentLate;
+            const lateRow = el("div", { style: "display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#2d2420;cursor:pointer" },
+              lateCheck, document.createTextNode("Late (12-hr)")
+            );
+            lateRow.addEventListener("mousedown", e => e.preventDefault());
             const saveNote = async () => {
               const val = noteInput.value.trim().slice(0, 15);
               const obj = val ? { text: val, color: selectedColor } : null;
               await savePlanNote(name, obj);
+              await savePlanLate(name, lateCheck.checked);
               editingNote = false;
               rebuildList();
             };
@@ -4523,14 +4669,20 @@ function renderPlanPage(fromDisplay = false) {
               if (e.key === "Escape") { editingNote = false; rebuildList(); }
             });
             noteInput.addEventListener("blur", () => setTimeout(() => { if (editingNote) saveNote(); }, 200));
-            noteEl = el("div", { class: "plan-note-editor" }, noteInput, colorRow);
+            noteEl = el("div", { class: "plan-note-editor" }, noteInput, colorRow, lateRow);
             row.insertBefore(noteEl, dragHandle.nextSibling);
             setTimeout(() => noteInput.focus(), 20);
-          } else if (noteObj) {
-            noteEl = el("span", { class: "plan-note-badge note-" + noteObj.color, onClick: () => { editingNote = true; renderNote(); } }, noteObj.text);
-            row.insertBefore(noteEl, removeBtn);
           } else {
-            noteEl = el("span", { class: "plan-note-add", onClick: () => { editingNote = true; renderNote(); } }, "+ note");
+            const badgeWrap = el("div", { style: "display:flex;gap:4px;align-items:center;flex-shrink:0" });
+            if (currentNoteObj) {
+              badgeWrap.appendChild(el("span", { class: "plan-note-badge note-" + currentNoteObj.color, onClick: () => { editingNote = true; renderNote(); } }, currentNoteObj.text));
+            } else {
+              badgeWrap.appendChild(el("span", { class: "plan-note-add", onClick: () => { editingNote = true; renderNote(); } }, "+ note"));
+            }
+            if (currentLate) {
+              badgeWrap.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: async () => { await savePlanLate(name, false); rebuildList(); } }, "Late"));
+            }
+            noteEl = badgeWrap;
             row.insertBefore(noteEl, removeBtn);
           }
         }
@@ -4893,10 +5045,17 @@ function renderPlanPage(fromDisplay = false) {
           });
           colorRow.appendChild(dot);
         });
+        const lateCheck = el("input", { type: "checkbox" });
+        lateCheck.checked = !!planLate[provider];
+        const lateRow = el("div", { style: "display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#2d2420;cursor:pointer" },
+          lateCheck, document.createTextNode("Late (12-hr)")
+        );
+        lateRow.addEventListener("mousedown", e => e.preventDefault());
         const saveRoomNote = async () => {
           const val = noteInput.value.trim().slice(0, 15);
           const obj = val ? { text: val, color: selectedColor } : null;
           await savePlanNote(provider, obj);
+          await savePlanLate(provider, lateCheck.checked);
           editingRoomNote = false;
           renderProviderArea();
         };
@@ -4905,7 +5064,7 @@ function renderPlanPage(fromDisplay = false) {
           if (e.key === "Escape") { editingRoomNote = false; renderProviderArea(); }
         });
         noteInput.addEventListener("blur", () => setTimeout(() => { if (editingRoomNote) saveRoomNote(); }, 200));
-        providerArea.appendChild(el("div", { class: "plan-note-editor" }, noteInput, colorRow));
+        providerArea.appendChild(el("div", { class: "plan-note-editor" }, noteInput, colorRow, lateRow));
         setTimeout(() => noteInput.focus(), 20);
       } else {
         const nameRow = el("div", { style: { display:"flex", alignItems:"center", gap:"6px", minWidth:"0" } });
@@ -4916,10 +5075,14 @@ function renderPlanPage(fromDisplay = false) {
         nameRow.appendChild(btn);
         if (provider) {
           const noteObj = planNotes[provider] || null;
+          const isLate  = !!planLate[provider];
           if (noteObj) {
             nameRow.appendChild(el("span", { class: "plan-note-badge note-" + noteObj.color, onClick: () => { editingRoomNote = true; renderProviderArea(); } }, noteObj.text));
           } else {
             nameRow.appendChild(el("span", { class: "plan-note-add", onClick: () => { editingRoomNote = true; renderProviderArea(); } }, "+ note"));
+          }
+          if (isLate) {
+            nameRow.appendChild(el("span", { class: "plan-note-badge note-blue", onClick: async () => { await savePlanLate(provider, false); renderProviderArea(); } }, "Late"));
           }
         }
         providerArea.appendChild(nameRow);
@@ -5546,10 +5709,10 @@ function renderPlanPage(fromDisplay = false) {
     }
     writes.push(saveAvailable());
 
-    // 12-hour notes
+    // 12-hour late flag
     for (const name of twelveHour) {
-      if (!mergeMode || !(planNotes[name] || {}).text) {
-        noteWrites.push(savePlanNote(name, { text: "7p", color: "blue" }));
+      if (!mergeMode || !planLate[name]) {
+        noteWrites.push(savePlanLate(name, true));
       }
     }
 
@@ -5703,7 +5866,7 @@ function renderPlanPage(fromDisplay = false) {
       if (d.supervisor) allPlanNames.add(d.supervisor);
     });
     noBreakSlots.forEach(slot => { const d = planData[roomId("nb_" + slot)] || {}; if (d.provider) allPlanNames.add(d.provider); });
-    const twelveHour = [...allPlanNames].filter(n => { const note = planNotes[n]; return note && /^7\s*p(m)?$/i.test(note.text); });
+    const twelveHour = [...allPlanNames].filter(n => planLate[n] || (planNotes[n] && /^7\s*p(m)?$/i.test(planNotes[n].text)));
     const twelveHtml = twelveHour.length ? box("12 Hour Shift", twelveHour.map((n, i) => [String(i + 1), n])) : "";
 
     const leftHtml  = coreHtml + roomsHtml;
@@ -5944,10 +6107,9 @@ function renderPlanPage(fromDisplay = false) {
       const d = planData[roomId("nb_" + slot)] || {};
       if (d.provider) allPlanProviders.add(d.provider);
     });
-    const twelveHourProviders = [...allPlanProviders].filter(name => {
-      const note = planNotes[name];
-      return note && /^7\s*p(m)?$/i.test(note.text);
-    });
+    const twelveHourProviders = [...allPlanProviders].filter(name =>
+      planLate[name] || (planNotes[name] && /^7\s*p(m)?$/i.test(planNotes[name].text))
+    );
     if (twelveHourProviders.length) {
       const rows = twelveHourProviders.map((name, i) => el("div", { class: "print-row" },
         el("div", { class: "print-row-label" }, String(i + 1)),
