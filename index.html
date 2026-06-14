@@ -2240,10 +2240,12 @@ function buildEodChip() {
 
         const providerName = room.provider || "";
         const providerNote = providerName ? getProviderNote(providerName) : null;
+        const providerLate = providerName ? getProviderLate(providerName) : false;
         p.appendChild(el("div", { class: "eod-row" },
           el("div", { class: "eod-room-label", title: loc + (providerName ? " — " + providerName : "") },
             el("span", { class: "eod-room-text" }, loc + (providerName ? " — " + providerName : "")),
-            providerNote ? el("span", { class: "display-note-badge note-" + providerNote.color, style: { fontSize: "0.75em", flexShrink: "0" } }, providerNote.text) : null
+            providerNote ? el("span", { class: "display-note-badge note-" + providerNote.color, style: { fontSize: "0.75em", flexShrink: "0" } }, providerNote.text) : null,
+            providerLate ? el("span", { class: "display-note-badge note-blue", style: { fontSize: "0.75em", flexShrink: "0" } }, "Late") : null
           ),
           el("div", { class: "eod-cb-cell" }, cbOk),
           el("div", { class: "eod-cb-cell" }, cbLate),
@@ -3487,6 +3489,110 @@ function adminSection(storageKey, title, sub, ...body) {
   return el("div", { class: "admin-section" }, titleEl, bodyDiv);
 }
 
+// ─── Tracked-room history viewer/editor (admin) ──────────────────────────────
+// Shows the per-day assignment history for a tracked room and lets you add/edit/
+// remove entries. Adding an entry keeps that provider out of the room in the Plan
+// Tomorrow rotation sort (e.g. a second person who covered the room that day).
+function openRoomHistoryModal(deptCode, loc) {
+  const rid     = roomId(loc);
+  const histRef = ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}`);
+
+  // <input type="date"> gives "YYYY-MM-DD"; roomHistory keys use tsDay()'s "Y-M-D".
+  function dateInputToKey(v) {
+    if (!v) return null;
+    const [y, m, d] = v.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return `${y}-${m}-${d}`;
+  }
+
+  const overlay = el("div", { class: "sched-modal-overlay" });
+  const box     = el("div", { class: "sched-modal-box" });
+  overlay.appendChild(box);
+  function close() { overlay.remove(); }
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+
+  async function rebuild() {
+    box.innerHTML = "";
+    box.appendChild(el("div", { class: "sched-modal-title" }, "Room History — " + loc));
+    box.appendChild(el("div", { class: "sched-modal-sub" }, "Days this room was assigned. The Plan Tomorrow picker sorts these providers to the bottom for a while. Add an entry to keep someone out of this room (e.g. a second person who covered it)."));
+
+    const snap = await get(histRef);
+    const data = snap.val() || {};
+    delete data["_done_"];
+    const entries = Object.entries(data)
+      .filter(([, v]) => v && typeof v === "string")
+      .sort((a, b) => parseDateKey(b[0]) - parseDateKey(a[0]));
+
+    const listWrap = el("div", { style: { maxHeight:"320px", overflowY:"auto", margin:"12px 0", border:"1px solid #f1ede8", borderRadius:"8px" } });
+    if (!entries.length) {
+      listWrap.appendChild(el("div", { style: { padding:"12px", fontSize:"13px", color:"#a39688", fontStyle:"italic" } }, "No history yet."));
+    } else {
+      entries.forEach(([key, name]) => {
+        const rowWrap  = el("div", { style: { display:"flex", alignItems:"center", gap:"8px", padding:"7px 10px", borderBottom:"1px solid #f1ede8" } });
+        const dateSpan = el("span", { style: { fontSize:"12px", color:"#7c6c62", minWidth:"66px", flexShrink:"0" } }, formatHistDate(key));
+        const nameSpan = el("span", { style: { flex:"1", fontSize:"13px", fontWeight:"600", color:"#2d2420" } }, name);
+        let editing = false, inp = null;
+        const editBtn   = el("button", { class: "btn-ghost",  style: { fontSize:"11px", padding:"2px 8px" } }, "Edit");
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"2px 8px" }, onClick: async () => {
+          await remove(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}/${key}`));
+          rebuild();
+        }}, "Remove");
+        editBtn.addEventListener("click", async () => {
+          if (editing) {
+            const val = inp.value.trim();
+            if (val) await set(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}/${key}`), val);
+            rebuild();
+            return;
+          }
+          editing = true;
+          inp = el("input", { class: "admin-add-input", type: "text", value: name, style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+          nameSpan.replaceWith(inp);
+          inp.focus(); inp.select();
+          editBtn.textContent = "Save";
+          inp.addEventListener("keydown", e => { if (e.key === "Enter") editBtn.click(); });
+        });
+        rowWrap.appendChild(dateSpan);
+        rowWrap.appendChild(nameSpan);
+        rowWrap.appendChild(editBtn);
+        rowWrap.appendChild(removeBtn);
+        listWrap.appendChild(rowWrap);
+      });
+    }
+    box.appendChild(listWrap);
+
+    // Add-entry row — default to today (the day someone actually covered the room)
+    const t = new Date();
+    const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    const dateIn  = el("input", { type: "date", class: "admin-add-input", value: todayStr, style: { fontSize:"13px", padding:"4px 8px" } });
+    const datalist = el("datalist", { id: "roomhist-roster" });
+    roster.forEach(r => datalist.appendChild(el("option", { value: r.name })));
+    const nameIn  = el("input", { type: "text", class: "admin-add-input", placeholder: "Provider name…", list: "roomhist-roster", style: { flex:"1", fontSize:"13px", padding:"4px 8px" } });
+    const addBtn  = el("button", { class: "btn-primary", style: { fontSize:"12px", padding:"5px 12px" }, onClick: async () => {
+      const name = nameIn.value.trim();
+      let key    = dateInputToKey(dateIn.value);
+      if (!name || !key) { showToast("Pick a date and enter a name."); return; }
+      // Don't overwrite a different name already on that day — suffix with -N. parseDateKey
+      // and formatHistDate ignore the extra part, so it still reads as the same date.
+      const existing = (await get(histRef)).val() || {};
+      if (existing[key] !== undefined && existing[key] !== name) {
+        let n = 2;
+        while (existing[`${key}-${n}`] !== undefined) n++;
+        key = `${key}-${n}`;
+      }
+      await set(ref(db, `deptAdmin/${deptCode}/roomHistory/${rid}/${key}`), name);
+      nameIn.value = "";
+      rebuild();
+    }}, "Add");
+    box.appendChild(el("div", { style: { display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap", marginBottom:"14px" } }, dateIn, nameIn, addBtn, datalist));
+
+    box.appendChild(el("div", { style: { display:"flex", justifyContent:"flex-end" } },
+      el("button", { class: "btn-ghost", style: { fontSize:"13px" }, onClick: close }, "Close")));
+  }
+
+  document.body.appendChild(overlay);
+  rebuild();
+}
+
 // ─── Admin page ───────────────────────────────────────────────────────────────
 function renderAdminPage(deptCode, fromDisplay = false) {
   const isDept = !!deptCode;
@@ -3699,6 +3805,14 @@ function renderAdminPage(deptCode, fromDisplay = false) {
             ...(isTracked() ? TRACKED_STYLE : {}) },
           title: "Track assignments for rotation fairness",
         }, isTracked() ? "📊 Tracked" : "📊 Track");
+        // History button — only meaningful for tracked rooms
+        const histBtn = el("button", {
+          class: "btn-ghost",
+          style: { fontSize:"11px", padding:"4px 8px", flexShrink:"0", display: isTracked() ? "" : "none" },
+          title: "View / edit this room's tracked assignment history",
+          onClick: () => openRoomHistoryModal(session.deptCode, loc),
+        }, "📋 History");
+
         trackBtn.addEventListener("click", async () => {
           let cur = trackedRooms.includes(loc)
             ? trackedRooms.filter(r => r !== loc)
@@ -3707,6 +3821,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           await saveTrackedRooms(cur);
           trackBtn.textContent = isTracked() ? "📊 Tracked" : "📊 Track";
           Object.assign(trackBtn.style, isTracked() ? TRACKED_STYLE : UNTRACKED_STYLE);
+          histBtn.style.display = isTracked() ? "" : "none";
         });
 
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
@@ -3757,6 +3872,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
 
         rowDiv.appendChild(nameSpan);
         rowDiv.appendChild(trackBtn);
+        rowDiv.appendChild(histBtn);
         rowDiv.appendChild(editBtn);
         rowDiv.appendChild(removeBtn);
         return rowDiv;
@@ -4619,12 +4735,35 @@ function renderPlanPage(fromDisplay = false) {
     col.innerHTML = "";
 
     const section = el("div", { class: "plan-section" });
-    section.appendChild(el("div", { class: "plan-section-title" }, "Working Tomorrow"));
+
+    const countBadge = el("span", { style: { fontSize:"12px", fontWeight:"700", color:"#7c6c62", background:"#f1ede8", borderRadius:"10px", padding:"1px 9px", minWidth:"18px", textAlign:"center" } }, "0");
+    section.appendChild(
+      el("div", { class: "plan-section-title", style: { display:"flex", alignItems:"center", gap:"8px" } },
+        el("span", {}, "Working Tomorrow"), countBadge)
+    );
+
+    // Sort controls
+    const sortRow = el("div", { style: { display:"flex", gap:"6px", marginBottom:"8px" } },
+      el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"3px 12px" }, title: "Sort alphabetically", onClick: async () => {
+        availableList = [...availableList].sort((a, b) => a.localeCompare(b));
+        await saveAvailable();
+        rebuildList();
+      }}, "A–Z"),
+      el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"3px 12px" }, title: "Move late-tagged providers to the bottom", onClick: async () => {
+        const notLate = availableList.filter(n => !planLate[n]);
+        const late    = availableList.filter(n => planLate[n]);
+        availableList = [...notLate, ...late];
+        await saveAvailable();
+        rebuildList();
+      }}, "Late ↓"),
+    );
+    section.appendChild(sortRow);
 
     const listContainer = el("div", {});
     let dragSrc = null;
 
     function rebuildList() {
+      countBadge.textContent = String(availableList.length);
       listContainer.innerHTML = "";
       availableList.forEach((name, idx) => {
         const noteObj = planNotes[name] || null;
