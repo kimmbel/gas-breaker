@@ -5705,10 +5705,14 @@ function renderPlanPage(fromDisplay = false) {
       if (!rosterName) continue;
       const corePos = roleMappings[roleKey];
       if (!corePos || !noBreakSlots.includes(corePos)) continue;
-      const rid = roomId(corePos);
+      // Core positions are stored/read under the "nb_" + slot key everywhere in Plan
+      // Tomorrow (buildPlanRoomCard, getAssignedProviders, print, email). The import must
+      // use the same key or the assignment lands on a phantom room and never displays.
+      const coreLocKey = "nb_" + corePos;
+      const rid = roomId(coreLocKey);
       if (mergeMode && (planData[rid] || {}).provider) continue;
       planData[rid] = { ...(planData[rid] || {}), provider: rosterName };
-      writes.push(savePlanRoom(corePos, planData[rid]));
+      writes.push(savePlanRoom(coreLocKey, planData[rid]));
       coreAssigned.add(rosterName);
     }
 
