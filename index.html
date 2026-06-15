@@ -101,6 +101,12 @@
     /* ── On-Call panel ── */
     .call-panel-wrap { position: relative; }
     .eod-wrap { margin-left: auto; position: relative; }
+    /* Message of the Day chip */
+    .motd-chip { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; font-style: italic; max-width: 38ch; min-width: 0; }
+    .motd-chip.motd-editable { cursor: pointer; }
+    .motd-chip .motd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+    .motd-input { font: inherit; font-style: italic; border: none; background: transparent; outline: none; color: inherit; min-width: 220px; width: 100%; }
+    body.display-mode .motd-chip { background: #2d2200; color: #fbbf24; border: 1px solid #5a4a18; }
     .eod-chip { background: #fef3c7; color: #92400e; cursor: pointer; user-select: none; }
     .eod-chip.has-concern { background: #fde68a; color: #78350f; }
     .eod-panel {
@@ -569,6 +575,8 @@ let providerHistory = {};    // { [nameKey]: { am?, lunch?, pm? } } — persists
 let unsubBoard  = null;
 let unsubConfig = null;
 let unsubDepts  = null;
+let unsubMotd   = null;
+let motd        = "";   // Message of the Day — persists in deptAdmin/{code}/motd
 
 // ─── Firebase refs ────────────────────────────────────────────────────────────
 const tsDay      = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; };
@@ -748,6 +756,7 @@ function schedule1amSnapshot(deptCode) {
 function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
+  if (unsubMotd)   unsubMotd();
   scheduleMidnightReload();
   schedule1amSnapshot(deptCode);
 
@@ -805,6 +814,13 @@ function subscribeToBoard(deptCode) {
       // Non-structural changes (e.g. eodConcernTime) are handled directly
       // by saveConcern — no need to call patchDisplay here and cause jitter
     }
+  });
+
+  // Message of the Day — persists indefinitely (not date-keyed). Live-update the
+  // chip in place on both the phone and coordinator display without a re-render.
+  unsubMotd = onValue(ref(db, `deptAdmin/${deptCode}/motd`), snap => {
+    motd = snap.val() || "";
+    updateMotdDisplay();
   });
 }
 
@@ -2179,6 +2195,62 @@ function showRequestNotification(loc, providerName) {
   const autoTimer = setTimeout(() => { if (notif.parentNode) notif.remove(); }, DURATION);
 }
 
+// ─── Message of the Day chip ──────────────────────────────────────────────────
+// Shown to the right of the On Call badge on both the phone board and coordinator
+// display. Editable only on the coordinator display (click to edit). Persists in
+// deptAdmin/{code}/motd until someone changes it.
+async function saveMotd(text) {
+  if (!session?.deptCode) return;
+  motd = text;
+  await set(ref(db, `deptAdmin/${session.deptCode}/motd`), text || null);
+}
+
+function motdDisplayText(editable) {
+  if (motd) return "📢 " + motd;
+  return editable ? "📢 Message of the day…" : "";
+}
+
+function buildMotd(editable) {
+  const wrap = el("div", { class: "chip motd-chip" + (editable ? " motd-editable" : ""),
+    style: (!editable && !motd) ? { display: "none" } : {} });
+  const textEl = el("span", { class: "motd-text" }, motdDisplayText(editable));
+  wrap.appendChild(textEl);
+
+  if (editable) {
+    wrap.addEventListener("click", () => {
+      if (wrap.querySelector(".motd-input")) return; // already editing
+      const input = el("input", { class: "motd-input", type: "text", value: motd, maxlength: "120", placeholder: "Message of the day…" });
+      wrap.innerHTML = "";
+      wrap.appendChild(input);
+      input.focus(); input.select();
+      let done = false;
+      const finish = async (save) => {
+        if (done) return; done = true;
+        if (save) await saveMotd(input.value.trim());
+        wrap.innerHTML = "";
+        wrap.appendChild(el("span", { class: "motd-text" }, motdDisplayText(true)));
+      };
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter")  { e.preventDefault(); finish(true); }
+        if (e.key === "Escape") { finish(false); }
+      });
+      input.addEventListener("blur", () => finish(true));
+    });
+  }
+  return wrap;
+}
+
+// Live-update any rendered MOTD chip in place (called from the deptAdmin/motd listener).
+function updateMotdDisplay() {
+  document.querySelectorAll(".motd-chip").forEach(chip => {
+    if (chip.querySelector(".motd-input")) return; // don't clobber an active edit
+    const editable = chip.classList.contains("motd-editable");
+    chip.style.display = (!editable && !motd) ? "none" : "";
+    const t = chip.querySelector(".motd-text");
+    if (t) t.textContent = motdDisplayText(editable);
+  });
+}
+
 // ─── End-of-Day status chip (coordinator display only) ───────────────────────
 function buildEodChip() {
   let panelOpen = false;
@@ -2573,6 +2645,7 @@ function renderBoard() {
     makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8", "lunch"),
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
     ...(callChipEl ? [callChipEl] : []),
+    buildMotd(false),
   ];
 
   const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, i));
@@ -2625,6 +2698,8 @@ function renderBoard() {
             requestRechimeTimers.forEach(id => clearInterval(id)); requestRechimeTimers.clear();
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
             if (unsubConfig) { unsubConfig(); unsubConfig = null; }
+            if (unsubMotd)   { unsubMotd();   unsubMotd   = null; }
+            motd = "";
             signOut(auth).finally(() => renderCodeScreen());
           }}, "Leave"),
         ),
@@ -3255,6 +3330,7 @@ function renderDisplay() {
         if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; patchFilter(); });
         return chip;
       }).concat(dCallChipEl ? [dCallChipEl] : [])
+       .concat([buildMotd(true)])
        .concat([buildEodChip()])
        .concat([(() => {
          const adminBtn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Admin");
@@ -5040,7 +5116,17 @@ function renderPlanPage(fromDisplay = false) {
 
     // Main room sections
     const mainSection = el("div", { class: "plan-section" });
-    mainSection.appendChild(el("div", { class: "plan-section-title" }, "Room Assignments"));
+    const needCount = locations.filter(l => !isDivider(l)
+      && !(planData[roomId(l)] || {}).provider
+      && !(planData[roomId(l)] || {}).empty).length;
+    const needBadge = el("span", {
+      style: { fontSize:"12px", fontWeight:"700", color: needCount ? "#b45309" : "#16a34a", background: needCount ? "#fef3c7" : "#f0fdf4", borderRadius:"10px", padding:"1px 9px", minWidth:"18px", textAlign:"center" },
+      title: "Rooms still needing a provider",
+    }, String(needCount));
+    mainSection.appendChild(
+      el("div", { class: "plan-section-title", style: { display:"flex", alignItems:"center", gap:"8px" } },
+        el("span", {}, "Room Assignments"), needBadge)
+    );
 
     let currentDividerLabel = null;
     locations.forEach(loc => {
