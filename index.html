@@ -5924,33 +5924,78 @@ function renderPlanPage(fromDisplay = false) {
       return;
     }
 
+    // Tracked rooms are filled first and by rotation (the provider who has gone the
+    // longest since being in that room — or never), not randomly. Untracked rooms are
+    // then filled randomly from whoever is left.
+    const trackedEmpty   = emptyRooms.filter(l => trackedRooms.includes(l));
+    const untrackedEmpty = emptyRooms.filter(l => !trackedRooms.includes(l));
+
     const count = Math.min(unassigned.length, emptyRooms.length);
+    const trackedNote = trackedEmpty.length
+      ? ` ${Math.min(trackedEmpty.length, unassigned.length)} tracked room${trackedEmpty.length !== 1 ? "s" : ""} filled by rotation (longest out of that room first); the rest at random.`
+      : "";
+
     const overlay = el("div", { class: "confirm-overlay" },
       el("div", { class: "confirm-box" },
         el("div", { class: "confirm-title" }, "Randomize Remaining"),
-        el("div", { class: "confirm-msg" }, `Randomly assign ${count} provider${count !== 1 ? "s" : ""} to ${count} available room${count !== 1 ? "s" : ""}?`),
+        el("div", { class: "confirm-msg" }, `Assign ${count} provider${count !== 1 ? "s" : ""} to ${count} available room${count !== 1 ? "s" : ""}?` + trackedNote),
         el("div", { class: "btn-row" },
           el("button", { class: "btn-primary", style:{ flex:"1", padding:"10px" }, onClick: async () => {
             overlay.remove();
-            // Shuffle unassigned
-            const shuffled = [...unassigned].sort(() => Math.random() - 0.5);
-            const shuffledRooms = [...emptyRooms].sort(() => Math.random() - 0.5);
-            const writes = [];
-            for (let i = 0; i < count; i++) {
-              const loc = shuffledRooms[i];
-              const name = shuffled[i];
-              const current = planData[roomId(loc)] || {};
-              writes.push(savePlanRoom(loc, { ...current, provider: name, supervisor: null, empty: false }));
+
+            // Fetch assignment history for each tracked empty room (rid → { dateKey: name })
+            const histByLoc = {};
+            await Promise.all(trackedEmpty.map(async loc => {
+              const snap = await get(ref(db, `deptAdmin/${deptCode}/roomHistory/${roomId(loc)}`));
+              const h = snap.val() || {};
+              delete h["_done_"];
+              histByLoc[loc] = h;
+            }));
+
+            // Most recent day `name` was in this room, in ms. -Infinity = never → top priority.
+            const lastInRoom = (history, name) => {
+              let best = -Infinity;
+              for (const [k, n] of Object.entries(history)) {
+                if (n === name) { const t = parseDateKey(k); if (t > best) best = t; }
+              }
+              return best;
+            };
+
+            const pool = [...unassigned];
+            const assignments = []; // { loc, name }
+
+            // Tracked rooms first, by longest-since-in-room (random tiebreak among equals)
+            for (const loc of trackedEmpty) {
+              if (!pool.length) break;
+              const history = histByLoc[loc] || {};
+              let bestMs = Infinity;
+              pool.forEach(name => { const ms = lastInRoom(history, name); if (ms < bestMs) bestMs = ms; });
+              const tied = pool.filter(name => lastInRoom(history, name) === bestMs);
+              const chosen = tied[Math.floor(Math.random() * tied.length)];
+              assignments.push({ loc, name: chosen });
+              pool.splice(pool.indexOf(chosen), 1);
             }
+
+            // Untracked rooms: random pairing from whoever's left
+            const shuffledRooms = [...untrackedEmpty].sort(() => Math.random() - 0.5);
+            const shuffledPool  = [...pool].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < shuffledRooms.length && i < shuffledPool.length; i++) {
+              assignments.push({ loc: shuffledRooms[i], name: shuffledPool[i] });
+            }
+
+            const writes = assignments.map(({ loc, name }) => {
+              const current = planData[roomId(loc)] || {};
+              return savePlanRoom(loc, { ...current, provider: name, supervisor: null, empty: false });
+            });
             await Promise.all(writes);
-            // Remove assigned providers from the Working Tomorrow list
-            const assignedNames = new Set(shuffled.slice(0, count));
+
+            const assignedNames = new Set(assignments.map(a => a.name));
             availableList = availableList.filter(n => !assignedNames.has(n));
             await saveAvailable();
             const leftCol = document.querySelector(".plan-col-left");
             if (leftCol) buildLeftColumn(leftCol);
             refreshCenterColumn();
-            showToast(`Assigned ${count} provider${count !== 1 ? "s" : ""}`);
+            showToast(`Assigned ${assignments.length} provider${assignments.length !== 1 ? "s" : ""}`);
           }}, "Assign"),
           el("button", { class: "btn-ghost", style:{ flex:"1" }, onClick: () => overlay.remove() }, "Cancel"),
         ),
