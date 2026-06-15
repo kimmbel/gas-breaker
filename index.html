@@ -101,12 +101,14 @@
     /* ── On-Call panel ── */
     .call-panel-wrap { position: relative; }
     .eod-wrap { margin-left: auto; position: relative; }
-    /* Message of the Day chip */
-    .motd-chip { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; font-style: italic; max-width: 38ch; min-width: 0; }
-    .motd-chip.motd-editable { cursor: pointer; }
-    .motd-chip .motd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-    .motd-input { font: inherit; font-style: italic; border: none; background: transparent; outline: none; color: inherit; min-width: 220px; width: 100%; }
-    body.display-mode .motd-chip { background: #2d2200; color: #fbbf24; border: 1px solid #5a4a18; }
+    /* Message of the Day — full-width line */
+    .motd-line { font-size: 13px; font-style: italic; color: #b45309; margin-top: 3px; line-height: 1.35; overflow-wrap: anywhere; }
+    .motd-line .motd-text { display: block; }
+    .motd-input { font: inherit; font-style: italic; border: 1px solid #b45309; border-radius: 6px; background: #fff; outline: none; color: #2d2420; width: 100%; padding: 2px 8px; box-sizing: border-box; }
+    /* Coordinator display: prominent full-width banner line under the badges */
+    body.display-mode .motd-line { font-size: 1.15em; color: #fbbf24; background: #2d2200; border: 1px solid #5a4a18; border-radius: 10px; padding: 7px 16px; margin: 0 0 8px; }
+    body.display-mode .motd-line.motd-editable { cursor: pointer; }
+    body.display-mode .motd-input { background: #1a1510; color: #fbbf24; border-color: #5a4a18; }
     .eod-chip { background: #fef3c7; color: #92400e; cursor: pointer; user-select: none; }
     .eod-chip.has-concern { background: #fde68a; color: #78350f; }
     .eod-panel {
@@ -2195,10 +2197,10 @@ function showRequestNotification(loc, providerName) {
   const autoTimer = setTimeout(() => { if (notif.parentNode) notif.remove(); }, DURATION);
 }
 
-// ─── Message of the Day chip ──────────────────────────────────────────────────
-// Shown to the right of the On Call badge on both the phone board and coordinator
-// display. Editable only on the coordinator display (click to edit). Persists in
-// deptAdmin/{code}/motd until someone changes it.
+// ─── Message of the Day ───────────────────────────────────────────────────────
+// A full-width line: under the title/date in the phone header (read-only), and as a
+// line under the badges on the coordinator display (editable — click to edit).
+// Persists in deptAdmin/{code}/motd until someone changes it.
 async function saveMotd(text) {
   if (!session?.deptCode) return;
   motd = text;
@@ -2211,24 +2213,24 @@ function motdDisplayText(editable) {
 }
 
 function buildMotd(editable) {
-  const wrap = el("div", { class: "chip motd-chip" + (editable ? " motd-editable" : ""),
-    style: (!editable && !motd) ? { display: "none" } : {} });
-  const textEl = el("span", { class: "motd-text" }, motdDisplayText(editable));
-  wrap.appendChild(textEl);
+  const line = el("div", { class: "motd-line" + (editable ? " motd-editable" : "") });
+  line.appendChild(el("span", { class: "motd-text" }, motdDisplayText(editable)));
+  if (!editable && !motd) line.style.display = "none";
 
   if (editable) {
-    wrap.addEventListener("click", () => {
-      if (wrap.querySelector(".motd-input")) return; // already editing
-      const input = el("input", { class: "motd-input", type: "text", value: motd, maxlength: "120", placeholder: "Message of the day…" });
-      wrap.innerHTML = "";
-      wrap.appendChild(input);
+    line.addEventListener("click", () => {
+      if (line.querySelector(".motd-input")) return; // already editing
+      const input = el("input", { class: "motd-input", type: "text", value: motd, maxlength: "200", placeholder: "Message of the day…" });
+      line.innerHTML = "";
+      line.appendChild(input);
       input.focus(); input.select();
       let done = false;
       const finish = async (save) => {
         if (done) return; done = true;
         if (save) await saveMotd(input.value.trim());
-        wrap.innerHTML = "";
-        wrap.appendChild(el("span", { class: "motd-text" }, motdDisplayText(true)));
+        line.innerHTML = "";
+        line.appendChild(el("span", { class: "motd-text" }, motdDisplayText(true)));
+        if (document.querySelector(".display-outer")) layoutDisplay(true); // height may have changed
       };
       input.addEventListener("keydown", e => {
         if (e.key === "Enter")  { e.preventDefault(); finish(true); }
@@ -2237,18 +2239,20 @@ function buildMotd(editable) {
       input.addEventListener("blur", () => finish(true));
     });
   }
-  return wrap;
+  return line;
 }
 
-// Live-update any rendered MOTD chip in place (called from the deptAdmin/motd listener).
+// Live-update any rendered MOTD line in place (called from the deptAdmin/motd listener).
 function updateMotdDisplay() {
-  document.querySelectorAll(".motd-chip").forEach(chip => {
-    if (chip.querySelector(".motd-input")) return; // don't clobber an active edit
-    const editable = chip.classList.contains("motd-editable");
-    chip.style.display = (!editable && !motd) ? "none" : "";
-    const t = chip.querySelector(".motd-text");
+  document.querySelectorAll(".motd-line").forEach(line => {
+    if (line.querySelector(".motd-input")) return; // don't clobber an active edit
+    const editable = line.classList.contains("motd-editable");
+    line.style.display = (!editable && !motd) ? "none" : "";
+    const t = line.querySelector(".motd-text");
     if (t) t.textContent = motdDisplayText(editable);
   });
+  // On the coordinator display a longer/shorter message changes the layout height
+  if (document.querySelector(".display-outer")) layoutDisplay(true);
 }
 
 // ─── End-of-Day status chip (coordinator display only) ───────────────────────
@@ -2645,7 +2649,6 @@ function renderBoard() {
     makeChip(lunchLeft, "Lunch remaining","#e0f2fe", "#0369a1", "#38bdf8", "lunch"),
     makeChip(pmLeft,    "PM remaining",   "#ede9fe", "#7c3aed", "#a78bfa", "pm"),
     ...(callChipEl ? [callChipEl] : []),
-    buildMotd(false),
   ];
 
   const noBreakCards = noBreakSlots.map((s, i) => renderNoBreakCard(s, false, i));
@@ -2687,6 +2690,7 @@ function renderBoard() {
           el("div", {},
             el("div", { class: "logo-text" }, "Gas Breaker"),
             el("div", { class: "logo-sub"  }, session.deptName + " · " + new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
+            buildMotd(false),
           ),
         ),
         el("div", { class: "header-right" },
@@ -2764,6 +2768,8 @@ function layoutDisplay(forceRemeasure = false) {
   const divider    = document.querySelector(".display-divider");
 
   const summaryH = summary ? summary.offsetHeight : 0;
+  const motdLine = document.querySelector(".display-outer")?.previousElementSibling;
+  const motdH    = (motdLine && motdLine.classList.contains("motd-line")) ? motdLine.offsetHeight + 8 : 0;
   const noBreakH = noBreakRow
     ? noBreakRow.offsetHeight + (divider ? divider.offsetHeight : 0) + 12
     : 0;
@@ -2772,7 +2778,7 @@ function layoutDisplay(forceRemeasure = false) {
     : 16;
   const gapPx = parseFloat(getComputedStyle(wrap).gap) || 8;
 
-  const availH = vh - summaryH - 1 - noBreakH - outerPadV;
+  const availH = vh - summaryH - motdH - 1 - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
   // ── Compute section sizes from DOM (section dividers force extra grid rows) ──
@@ -3330,7 +3336,6 @@ function renderDisplay() {
         if (filterId) chip.addEventListener("click", () => { activeFilter = (activeFilter === filterId) ? null : filterId; patchFilter(); });
         return chip;
       }).concat(dCallChipEl ? [dCallChipEl] : [])
-       .concat([buildMotd(true)])
        .concat([buildEodChip()])
        .concat([(() => {
          const adminBtn = el("div", { class: "chip", style: { marginLeft: "auto", cursor: "pointer", background: "#3d3530", color: "#c9bdb7", border: "1px solid #5a4e48" } }, "Admin");
@@ -3343,6 +3348,7 @@ function renderDisplay() {
          return btn;
        })()])
     ),
+    buildMotd(true),
     el("div", { class: "display-outer" },
       noBreakSlots.length ? el("div", { class: "display-nobreak-row" }, ...noBreakCards) : null,
       noBreakSlots.length ? el("hr", { class: "display-divider" }) : null,
