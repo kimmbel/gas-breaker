@@ -103,6 +103,8 @@
     .eod-wrap { margin-left: auto; position: relative; }
     /* Message of the Day — full-width line */
     .motd-line { font-size: 13px; font-style: italic; color: #b45309; margin-top: 3px; line-height: 1.35; overflow-wrap: anywhere; }
+    /* Phone header: full-width line under the title row, aligned with header content */
+    .header > .motd-line { max-width: 780px; margin: 0 auto; padding: 0 16px 10px; }
     .motd-line .motd-text { display: block; }
     .motd-input { font: inherit; font-style: italic; border: 1px solid #b45309; border-radius: 6px; background: #fff; outline: none; color: #2d2420; width: 100%; padding: 2px 8px; box-sizing: border-box; }
     /* Coordinator display: prominent full-width banner line under the badges */
@@ -2690,7 +2692,6 @@ function renderBoard() {
           el("div", {},
             el("div", { class: "logo-text" }, "Gas Breaker"),
             el("div", { class: "logo-sub"  }, session.deptName + " · " + new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })),
-            buildMotd(false),
           ),
         ),
         el("div", { class: "header-right" },
@@ -2707,7 +2708,8 @@ function renderBoard() {
             signOut(auth).finally(() => renderCodeScreen());
           }}, "Leave"),
         ),
-      )
+      ),
+      buildMotd(false),
     ),
     el("div", { class: "summary-bar" }, ...chips),
     el("main", { class: "main" },
