@@ -1907,6 +1907,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   function openNoteEdit() {
     if (!isDisplay || editingNote) return;
     editingNote = true;
+    // Disable card drag while editing so a click-drag selects note text instead of
+    // dragging the whole card. Restored when the editor closes.
+    card.setAttribute("draggable", "false");
     const existing = body.querySelector(".note-input-wrap");
     if (existing) existing.remove();
 
@@ -1957,10 +1960,11 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       await saveProviderLate(provider, lateCheck.checked);
       editingNote = false;
       wrap.remove();
+      card.setAttribute("draggable", "true");
     };
     noteInput.addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); saveNote(); }
-      if (e.key === "Escape") { editingNote = false; wrap.remove(); }
+      if (e.key === "Escape") { editingNote = false; wrap.remove(); card.setAttribute("draggable", "true"); }
     });
     noteInput.addEventListener("blur", () => setTimeout(() => {
       if (editingNote) {
@@ -1969,9 +1973,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         const val = noteInput.value.trim().slice(0, 15);
         const hadNote = !!currentNoteObj;
         if (val || hadNote || lateCheck.checked) {
-          saveNote(); // saveNote sets editingNote=false and removes wrap
+          saveNote(); // saveNote sets editingNote=false, removes wrap, restores drag
         } else {
-          editingNote = false; wrap.remove();
+          editingNote = false; wrap.remove(); card.setAttribute("draggable", "true");
         }
       }
     }, 200));
@@ -2129,7 +2133,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
 
 // ─── Request notification (for display mode) ──────────────────────────────────
 let shownNotifications    = new Set();
-let requestRechimeTimers  = new Map(); // roomId → intervalId for 3-minute rechimes
+let requestRechimeTimers  = new Map(); // roomId → intervalId for 5-minute rechimes
 
 function checkRequestNotifications() {
   if (!isDisplayMode) return;
@@ -2138,7 +2142,7 @@ function checkRequestNotifications() {
       if (!shownNotifications.has(id)) {
         shownNotifications.add(id);
         showRequestNotification(room.location || id, room.provider);
-        // Set up 3-minute rechime interval until request is cleared
+        // Set up 5-minute rechime interval until request is cleared
         const ivId = setInterval(() => {
           const cur = boardData[id] || {};
           if (cur.requesting && cur.provider) {
@@ -2147,7 +2151,7 @@ function checkRequestNotifications() {
             clearInterval(requestRechimeTimers.get(id));
             requestRechimeTimers.delete(id);
           }
-        }, 3 * 60 * 1000);
+        }, 5 * 60 * 1000);
         requestRechimeTimers.set(id, ivId);
       }
     }
@@ -4786,6 +4790,7 @@ function renderPlanPage(fromDisplay = false) {
 
     const bottomBar = el("div", { class: "plan-bottom-bar" },
       el("button", { class: "btn-primary", style: { fontSize:"13px" }, onClick: printPlan }, "🖨 View Schedule PDF"),
+      el("button", { class: "btn-ghost",   style: { fontSize:"13px" }, onClick: clearSchedule }, "🧹 Clear Schedule"),
       el("div", { style: { flex: "1" } }),
       el("button", { class: "btn-ghost",   style: { fontSize:"13px" }, onClick: showEmailModal }, "📧 Email Plan"),
     );
@@ -6005,6 +6010,38 @@ function renderPlanPage(fromDisplay = false) {
   }
 
   // ─── Randomize remaining ─────────────────────────────────────────────────────
+  async function clearSchedule() {
+    const occupied = locations.filter(l => !isDivider(l) && (planData[roomId(l)] || {}).provider);
+    if (!occupied.length) { showToast("No room assignments to clear."); return; }
+    const n = occupied.length;
+    const overlay = el("div", { class: "confirm-overlay" },
+      el("div", { class: "confirm-box" },
+        el("div", { class: "confirm-title" }, "Clear Schedule"),
+        el("div", { class: "confirm-msg" }, `Move ${n} provider${n !== 1 ? "s" : ""} from their room assignments back to Working Tomorrow? Core positions and call assignments are not affected.`),
+        el("div", { class: "btn-row" },
+          el("button", { class: "btn-primary", style:{ flex:"1", padding:"10px" }, onClick: async () => {
+            overlay.remove();
+            const writes = [];
+            occupied.forEach(loc => {
+              const current = planData[roomId(loc)] || {};
+              const name = current.provider;
+              if (name && !availableList.includes(name)) availableList.push(name);
+              writes.push(savePlanRoom(loc, { ...current, provider: null, supervisor: null }));
+            });
+            await Promise.all(writes);
+            await saveAvailable();
+            const leftCol = document.querySelector(".plan-col-left");
+            if (leftCol) buildLeftColumn(leftCol);
+            refreshCenterColumn();
+            showToast(`Cleared ${n} room assignment${n !== 1 ? "s" : ""}`);
+          }}, "Clear"),
+          el("button", { class: "btn-ghost", style:{ flex:"1" }, onClick: () => overlay.remove() }, "Cancel"),
+        ),
+      )
+    );
+    document.body.appendChild(overlay);
+  }
+
   async function randomizeRemaining() {
     const unassigned = getUnassignedAvailable();
     const emptyRooms = locations.filter(l => !isDivider(l) && !(planData[roomId(l)] || {}).provider && !(planData[roomId(l)] || {}).empty);
@@ -6205,18 +6242,18 @@ function renderPlanPage(fromDisplay = false) {
 </div></body></html>`;
   }
 
-  async function sendPlan(subject, message, epicFile) {
+  async function sendPlan(subject, message, files) {
     const html = buildPlanEmailHtml(message);
     const attachments = [];
 
-    if (epicFile) {
+    for (const f of (files || [])) {
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload  = () => resolve(reader.result.split(",")[1]);
         reader.onerror = reject;
-        reader.readAsDataURL(epicFile);
+        reader.readAsDataURL(f);
       });
-      attachments.push({ filename: epicFile.name, content: base64 });
+      attachments.push({ filename: f.name, content: base64 });
     }
 
     const to      = emailConfig.to;
@@ -6244,8 +6281,9 @@ function renderPlanPage(fromDisplay = false) {
     const dateLabel = formatDateBanner(selectedDate);
     const defaultSubject = (emailConfig.defaultSubject || "OR Schedule — {date}").replace("{date}", dateLabel);
 
-    let epicFile = null;
-    const fileLabel = el("span", { style:{ fontSize:"12px", color:"#a39688", fontStyle:"italic" } }, "No file selected");
+    let file1 = null, file2 = null;
+    const fileLabel1 = el("span", { style:{ fontSize:"12px", color:"#a39688", fontStyle:"italic" } }, "No file selected");
+    const fileLabel2 = el("span", { style:{ fontSize:"12px", color:"#a39688", fontStyle:"italic" } }, "No file selected");
 
     const subjectInput = el("input", {
       type:"text", class:"plan-header-input",
@@ -6263,10 +6301,15 @@ function renderPlanPage(fromDisplay = false) {
     });
     messageArea.value = (emailConfig.defaultBody || "").replace("{date}", dateLabel);
 
-    const fileInput = el("input", { type:"file", accept:".pdf", style:{ display:"none" } });
-    fileInput.addEventListener("change", () => {
-      epicFile = fileInput.files[0] || null;
-      fileLabel.textContent = epicFile ? epicFile.name : "No file selected";
+    const fileInput1 = el("input", { type:"file", style:{ display:"none" } });
+    fileInput1.addEventListener("change", () => {
+      file1 = fileInput1.files[0] || null;
+      fileLabel1.textContent = file1 ? file1.name : "No file selected";
+    });
+    const fileInput2 = el("input", { type:"file", style:{ display:"none" } });
+    fileInput2.addEventListener("change", () => {
+      file2 = fileInput2.files[0] || null;
+      fileLabel2.textContent = file2 ? file2.name : "No file selected";
     });
 
     const sendBtn = el("button", { class:"btn-primary", style:{ fontSize:"13px" } }, "Send");
@@ -6284,10 +6327,18 @@ function renderPlanPage(fromDisplay = false) {
         el("div", { style:{ marginTop:"10px", display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
           el("button", {
             class:"btn-ghost", style:{ fontSize:"12px" },
-            onClick: () => fileInput.click(),
-          }, "📎 Attach Epic PDF"),
-          fileLabel,
-          fileInput,
+            onClick: () => fileInput1.click(),
+          }, "📎 Attachment 1"),
+          fileLabel1,
+          fileInput1,
+        ),
+        el("div", { style:{ marginTop:"6px", display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
+          el("button", {
+            class:"btn-ghost", style:{ fontSize:"12px" },
+            onClick: () => fileInput2.click(),
+          }, "📎 Attachment 2"),
+          fileLabel2,
+          fileInput2,
         ),
         el("div", { style:{ display:"flex", gap:"8px", marginTop:"16px", justifyContent:"flex-end" } },
           cancelBtn,
@@ -6309,7 +6360,7 @@ function renderPlanPage(fromDisplay = false) {
       sendBtn.disabled = true;
       sendBtn.textContent = "Sending…";
       try {
-        await sendPlan(subject, message, epicFile);
+        await sendPlan(subject, message, [file1, file2].filter(Boolean));
         overlay.remove();
         showToast("Email sent ✓");
       } catch(err) {
