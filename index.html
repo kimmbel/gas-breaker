@@ -10,7 +10,10 @@
     html, body { height: 100%; background: #f8f4ef; font-family: 'Nunito', sans-serif; color: #2d2420; -webkit-tap-highlight-color: transparent; }
     body.display-mode { background: #130f0d; min-height: 100vh; font-size: clamp(8px, 1.1vmin, 14px); }
     body.display-mode #app { background: #130f0d; min-height: 100vh; padding-bottom: 0; }
-    body.display-mode { overflow: hidden; }
+    /* Fits to screen via layoutDisplay so normally there's nothing to scroll and no
+       scrollbar shows. In fringe cases (phone / tiny window where cards can't shrink
+       further) content overflows and 'auto' lets you scroll to the rest. */
+    body.display-mode { overflow: auto; }
     body.display-mode .header { background: #1e1a17; border-bottom-color: #3d3530; }
     body.display-mode .logo-text { color: #f5f0eb; }
     body.display-mode .logo-sub  { color: #7c6c62; }
@@ -413,7 +416,7 @@
     .plan-header-input { background: #faf7f4; border: 1.5px solid #e8e0d6; border-radius: 10px; padding: 8px 13px; font-size: 14px; color: #2d2420; outline: none; font-family: inherit; font-weight: 700; width: 100%; margin-bottom: 12px; }
     .plan-header-input:focus { border-color: #b45309; }
     .plan-columns { display: flex; gap: 14px; align-items: flex-start; }
-    .plan-col-left { width: 220px; flex-shrink: 0; position: sticky; top: 60px; align-self: flex-start; }
+    .plan-col-left { width: 300px; flex-shrink: 0; position: sticky; top: 60px; align-self: flex-start; }
     .plan-col-center { flex: 1; min-width: 0; }
     .plan-col-right { width: 220px; flex-shrink: 0; }
     .plan-section { background: #fff; border: 1.5px solid #e8e0d6; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
@@ -563,6 +566,7 @@ let locations     = [...DEFAULT_LOCATIONS];
 let noBreakSlots  = [];   // e.g. ["Breaker 1", "Breaker 2", "Float"]
 let callPositions = [];   // e.g. [{ name: "First Call", callIcon: "📞", postCallIcon: "🌙" }]
 let trackedRooms  = [];   // e.g. ["GI Room", "Bronch Suite"] — rooms tracked for fairness rotation
+let defaultEmptyRooms = []; // rooms that start marked empty in Plan Tomorrow each new day
 
 function normalizeCallPosition(p) {
   if (typeof p === "string") return { name: p, callIcon: "📞", postCallIcon: "🌙" };
@@ -797,6 +801,7 @@ function subscribeToBoard(deptCode) {
     callPositions  = cfg.callPositions  ? Object.values(cfg.callPositions).map(normalizeCallPosition)  : [];
     roster         = cfg.roster         ? Object.values(cfg.roster).map(normalizeRosterEntry).sort((a,b) => a.name.localeCompare(b.name)) : [];
     trackedRooms   = cfg.trackedRooms   ? Object.values(cfg.trackedRooms).filter(Boolean) : [];
+    defaultEmptyRooms = cfg.defaultEmptyRooms ? Object.values(cfg.defaultEmptyRooms).filter(Boolean) : [];
     if (!configInitialized) { configInitialized = true; checkAndMaybeSnapshot(deptCode); }
     // Only re-render if board is showing — not if on admin page
     // For display mode, only do a full rebuild for structural changes (locations,
@@ -832,7 +837,7 @@ function subscribeToBoard(deptCode) {
 function checkAutoUnhold() {
   const now = Date.now();
   Object.entries(boardData).forEach(([rid, room]) => {
-    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_" || rid === "_eodconcern_" || rid === "_available_") return;
+    if (rid.startsWith("_hist_") || rid === "_call_" || rid === "_postcall_" || rid === "_eod_" || rid === "_eodconcern_" || rid === "_available_" || rid === "_emptydefaults_") return;
     const duration = room.holdDuration || HOLD_CLEAR_MS;
     if (room.hold && room.holdAt && (now - room.holdAt) >= duration) {
       writeRoom(rid, r => ({ ...r, hold: false, holdAt: null, holdDuration: null }));
@@ -867,6 +872,11 @@ async function saveCallPositions(positions) {
 async function saveTrackedRooms(rooms) {
   const obj = {}; rooms.forEach((r, i) => { obj[i] = r; });
   await set(ref(db, `config/${session.deptCode}/trackedRooms`), Object.keys(obj).length ? obj : null);
+}
+
+async function saveDefaultEmptyRooms(rooms) {
+  const obj = {}; rooms.forEach((r, i) => { obj[i] = r; });
+  await set(ref(db, `config/${session.deptCode}/defaultEmptyRooms`), Object.keys(obj).length ? obj : null);
 }
 
 async function saveCallAssignment(positionIdx, providerName) {
@@ -2702,7 +2712,7 @@ function renderBoard() {
           el("a", { class: "display-link", href: `?display=1&code=${session.deptCode}`, target: "_blank" }, "Change Display"),
           el("div", { class: "sync-pip" }),
           el("button", { class: "logout-btn", onClick: () => {
-            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; trackedRooms = []; activeFilter = null; providerHistory = {};
+            session = null; boardData = {}; locations = [...DEFAULT_LOCATIONS]; noBreakSlots = []; roster = []; trackedRooms = []; defaultEmptyRooms = []; activeFilter = null; providerHistory = {};
             shownNotifications.clear();
             requestRechimeTimers.forEach(id => clearInterval(id)); requestRechimeTimers.clear();
             if (unsubBoard)  { unsubBoard();  unsubBoard  = null; }
@@ -2784,7 +2794,9 @@ function layoutDisplay(forceRemeasure = false) {
     : 16;
   const gapPx = parseFloat(getComputedStyle(wrap).gap) || 8;
 
-  const availH = vh - summaryH - motdH - 1 - noBreakH - outerPadV;
+  // 6px safety margin absorbs sub-pixel rounding so the fitted layout never triggers
+  // a hairline scrollbar now that the display allows overflow scrolling.
+  const availH = vh - summaryH - motdH - 6 - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
   // ── Compute section sizes from DOM (section dividers force extra grid rows) ──
@@ -3912,13 +3924,34 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           histBtn.style.display = isTracked() ? "" : "none";
         });
 
+        // Default Empty toggle — room starts marked empty in Plan Tomorrow each new day
+        const EMPTY_STYLE = { background:"#eef2ff", color:"#4f46e5", borderColor:"#c7d2fe" };
+        const isDefaultEmpty = () => defaultEmptyRooms.includes(loc);
+        const emptyBtn = el("button", {
+          class: "btn-ghost",
+          style: { fontSize:"11px", padding:"4px 8px", flexShrink:"0", ...(isDefaultEmpty() ? EMPTY_STYLE : {}) },
+          title: "Start this room marked empty in Plan Tomorrow each day",
+        }, isDefaultEmpty() ? "☑ Empty" : "⬜ Empty");
+        emptyBtn.addEventListener("click", async () => {
+          defaultEmptyRooms = defaultEmptyRooms.includes(loc)
+            ? defaultEmptyRooms.filter(r => r !== loc)
+            : [...defaultEmptyRooms, loc];
+          await saveDefaultEmptyRooms(defaultEmptyRooms);
+          emptyBtn.textContent = isDefaultEmpty() ? "☑ Empty" : "⬜ Empty";
+          Object.assign(emptyBtn.style, isDefaultEmpty() ? EMPTY_STYLE : UNTRACKED_STYLE);
+        });
+
         const editBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px" } }, "Edit");
         const removeBtn = el("button", { class: "btn-danger", style: { fontSize:"11px", padding:"4px 8px" }, onClick: async () => {
           locs = locs.filter(l => l !== loc);
-          // Remove from tracked rooms too if present
+          // Remove from tracked / default-empty rooms too if present
           if (trackedRooms.includes(loc)) {
             trackedRooms = trackedRooms.filter(r => r !== loc);
             await saveTrackedRooms(trackedRooms);
+          }
+          if (defaultEmptyRooms.includes(loc)) {
+            defaultEmptyRooms = defaultEmptyRooms.filter(r => r !== loc);
+            await saveDefaultEmptyRooms(defaultEmptyRooms);
           }
           await saveLocations(locs); rebuildFn(locs); showToast(`${loc} removed`);
         }}, "Remove");
@@ -3937,10 +3970,14 @@ function renderAdminPage(deptCode, fromDisplay = false) {
             if (val && val !== loc && !locs.includes(val)) {
               const idx = locs.indexOf(loc);
               if (idx !== -1) {
-                // Update trackedRooms if this room was tracked
+                // Update trackedRooms / defaultEmptyRooms if this room was in them
                 if (trackedRooms.includes(loc)) {
                   trackedRooms = trackedRooms.map(r => r === loc ? val : r);
                   await saveTrackedRooms(trackedRooms);
+                }
+                if (defaultEmptyRooms.includes(loc)) {
+                  defaultEmptyRooms = defaultEmptyRooms.map(r => r === loc ? val : r);
+                  await saveDefaultEmptyRooms(defaultEmptyRooms);
                 }
                 locs[idx] = val; await saveLocations(locs); rebuildFn(locs); showToast(`Renamed to ${val}`); return;
               }
@@ -3961,6 +3998,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         rowDiv.appendChild(nameSpan);
         rowDiv.appendChild(trackBtn);
         rowDiv.appendChild(histBtn);
+        rowDiv.appendChild(emptyBtn);
         rowDiv.appendChild(editBtn);
         rowDiv.appendChild(removeBtn);
         return rowDiv;
@@ -4709,6 +4747,22 @@ function renderPlanPage(fromDisplay = false) {
         if (k.startsWith("_")) return;
         if (v && typeof v === "object") planData[k] = v;
       });
+
+      // Default-empty rooms: mark them empty once per plan date. The _emptydefaults_
+      // marker means it runs a single time, so a later manual un-empty (which removes
+      // the room node) isn't re-defaulted on the next load.
+      if (defaultEmptyRooms.length && !bval._emptydefaults_) {
+        const emptyWrites = [];
+        defaultEmptyRooms.forEach(loc => {
+          const rid = roomId(loc);
+          const d = planData[rid];
+          if (d && (d.provider || d.empty)) return; // already assigned or already empty
+          planData[rid] = { empty: true };
+          emptyWrites.push(set(planRoomRef(dateStr, rid), { empty: true }));
+        });
+        emptyWrites.push(set(ref(db, `boards/${deptCode}/${planDateKey(dateStr)}/_emptydefaults_`), true));
+        await Promise.all(emptyWrites);
+      }
 
       // notes and late flag from _hist_ keys
       Object.entries(bval).forEach(([k, v]) => {
