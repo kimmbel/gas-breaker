@@ -761,6 +761,49 @@ function schedule1amSnapshot(deptCode) {
   setTimeout(() => doHistorySnapshot(deptCode), delay);
 }
 
+// When a provider is placed in a tracked room from the coordinator display, offer to
+// record them in that room's history for today so the rotation keeps them out of it.
+async function maybePromptTrackAssignment(loc, providerName) {
+  if (!isDisplayMode || !providerName || !session?.deptCode) return;
+  if (!trackedRooms.includes(loc)) return;
+  const rid     = roomId(loc);
+  const dateKey = tsDay();
+  const histRef = ref(db, `deptAdmin/${session.deptCode}/roomHistory/${rid}`);
+  let hist;
+  try { hist = (await get(histRef)).val() || {}; } catch { return; }
+
+  // Already recorded for today (any base or -N suffixed key that parses to today)?
+  const todayMs = parseDateKey(dateKey);
+  const alreadyToday = Object.entries(hist).some(([k, n]) =>
+    n === providerName && k !== "_done_" && parseDateKey(k) === todayMs);
+  if (alreadyToday) return;
+
+  const ok = await new Promise(resolve => {
+    const overlay = el("div", { class: "confirm-overlay" },
+      el("div", { class: "confirm-box" },
+        el("div", { class: "confirm-title" }, "Track this assignment?"),
+        el("div", { class: "confirm-msg" }, `Add ${providerName} to ${loc}'s tracked history for today? This keeps them out of ${loc} in the rotation for a while.`),
+        el("div", { class: "btn-row" },
+          el("button", { class: "btn-primary", style:{ flex:"1", padding:"10px" }, onClick: () => { overlay.remove(); resolve(true); } }, "Add to history"),
+          el("button", { class: "btn-ghost",   style:{ flex:"1" }, onClick: () => { overlay.remove(); resolve(false); } }, "No"),
+        ),
+      )
+    );
+    document.body.appendChild(overlay);
+  });
+  if (!ok) return;
+
+  // Don't overwrite a different provider already on today's base key — suffix with -N
+  let key = dateKey;
+  if (hist[key] !== undefined && hist[key] !== providerName) {
+    let n = 2;
+    while (hist[`${key}-${n}`] !== undefined) n++;
+    key = `${key}-${n}`;
+  }
+  await set(ref(db, `deptAdmin/${session.deptCode}/roomHistory/${rid}/${key}`), providerName);
+  showToast(`Added ${providerName} to ${loc} history`);
+}
+
 function subscribeToBoard(deptCode) {
   if (unsubBoard)  unsubBoard();
   if (unsubConfig) unsubConfig();
@@ -1391,6 +1434,7 @@ function buildProviderInput(currentName, loc, card, onDone, onTab, isDisplay = f
         if (isDisplayMode && document.querySelector(".display-outer")) patchDisplay();
         await assignProvider(loc, name);
         onDone();
+        await maybePromptTrackAssignment(loc, name);
       });
       dropdown.appendChild(opt);
     });
@@ -2121,6 +2165,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
       } else {
         await assignProvider(loc, srcProvider);
       }
+      await maybePromptTrackAssignment(loc, srcProvider);
     });
     // Only occupied cards can be dragged
     if (provider) {
@@ -2794,9 +2839,10 @@ function layoutDisplay(forceRemeasure = false) {
     : 16;
   const gapPx = parseFloat(getComputedStyle(wrap).gap) || 8;
 
-  // 6px safety margin absorbs sub-pixel rounding so the fitted layout never triggers
-  // a hairline scrollbar now that the display allows overflow scrolling.
-  const availH = vh - summaryH - motdH - 6 - noBreakH - outerPadV;
+  // Safety margin: some inter-element margins (summary bar, no-break row/divider) aren't
+  // fully counted above, so budget a bit of slack. Keeps the normal fitted layout from
+  // tripping the overflow scrollbar; the display still scrolls in genuine overflow cases.
+  const availH = vh - summaryH - motdH - 24 - noBreakH - outerPadV;
   const availW = wrap.offsetWidth;
 
   // ── Compute section sizes from DOM (section dividers force extra grid rows) ──
