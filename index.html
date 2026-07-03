@@ -2823,6 +2823,11 @@ function layoutDisplay(forceRemeasure = false) {
   }
 
   // ── Full measure pass ──
+  // Temporarily suppress the scroll container's scrollbar so a lingering one from a
+  // previous (smaller) size doesn't shrink the measured width and perpetuate itself
+  // after the window is enlarged again.
+  const prevBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
   const summary    = document.querySelector(".summary-bar");
   const outer      = document.querySelector(".display-outer");
   const noBreakRow = document.querySelector(".display-nobreak-row");
@@ -2944,6 +2949,8 @@ function layoutDisplay(forceRemeasure = false) {
 
   _layoutCache = { cardCount, vw, vh, bestCols, bestCardH, bestCardW, fontSize: bestFontSize };
   _applyLayout(_layoutCache);
+  // Restore overflow (CSS auto): if the computed layout fits, no scrollbar returns.
+  document.body.style.overflow = prevBodyOverflow;
 }
 
 function _applyLayout(cache) {
