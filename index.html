@@ -12,8 +12,11 @@
     body.display-mode #app { background: #130f0d; min-height: 100vh; padding-bottom: 0; }
     /* Fits to screen via layoutDisplay so normally there's nothing to scroll and no
        scrollbar shows. In fringe cases (phone / tiny window where cards can't shrink
-       further) content overflows and 'auto' lets you scroll to the rest. */
-    body.display-mode { overflow: auto; }
+       further) content overflows vertically and 'auto' lets you scroll to the rest.
+       overflow-x is hidden: columns are computed to fit the width, so a horizontal
+       scrollbar would only ever be sub-pixel rounding — and it steals vertical space,
+       reinforcing the overflow. */
+    body.display-mode { overflow-x: hidden; overflow-y: auto; }
     body.display-mode .header { background: #1e1a17; border-bottom-color: #3d3530; }
     body.display-mode .logo-text { color: #f5f0eb; }
     body.display-mode .logo-sub  { color: #7c6c62; }
@@ -2823,11 +2826,15 @@ function layoutDisplay(forceRemeasure = false) {
   }
 
   // ── Full measure pass ──
-  // Temporarily suppress the scroll container's scrollbar so a lingering one from a
-  // previous (smaller) size doesn't shrink the measured width and perpetuate itself
-  // after the window is enlarged again.
+  // Temporarily suppress any scrollbar (on both the viewport <html> and <body>, since
+  // overflow can be propagated to the viewport) so a lingering one from a previous,
+  // smaller size doesn't shrink the measured width and perpetuate itself after the
+  // window is enlarged again.
+  const prevHtmlOverflow = document.documentElement.style.overflow;
   const prevBodyOverflow = document.body.style.overflow;
+  document.documentElement.style.overflow = "hidden";
   document.body.style.overflow = "hidden";
+  void document.documentElement.offsetWidth; // force reflow so the scrollbar is gone before measuring
   const summary    = document.querySelector(".summary-bar");
   const outer      = document.querySelector(".display-outer");
   const noBreakRow = document.querySelector(".display-nobreak-row");
@@ -2949,7 +2956,8 @@ function layoutDisplay(forceRemeasure = false) {
 
   _layoutCache = { cardCount, vw, vh, bestCols, bestCardH, bestCardW, fontSize: bestFontSize };
   _applyLayout(_layoutCache);
-  // Restore overflow (CSS auto): if the computed layout fits, no scrollbar returns.
+  // Restore overflow (CSS): if the computed layout fits, no scrollbar returns.
+  document.documentElement.style.overflow = prevHtmlOverflow;
   document.body.style.overflow = prevBodyOverflow;
 }
 
