@@ -2961,22 +2961,34 @@ function layoutDisplay(forceRemeasure = false) {
   _applyLayout(_layoutCache);
 
   // ── Correction pass ──
-  // The computed layout "fits" in pure CSS px, but the browser renders each explicit
-  // cardH in DEVICE pixels: at fractional OS display scaling (Windows 125%/150%, common
-  // on the coordinator TV) every row rounds up a fraction, and across many rows that
-  // accumulates past the fixed slack above — tripping the overflow scrollbar even though
-  // it fits fine at 100%. Rather than guess a larger fixed margin (which needlessly
-  // shrinks cards on displays that don't need it), measure the real overflow and shave
-  // exactly that much off the card height. Measured while overflow is still suppressed,
-  // so scrollHeight reports true content height without a scrollbar skewing it.
-  void document.documentElement.offsetHeight; // reflow so scrollHeight reflects applied heights
-  const overflow = document.documentElement.scrollHeight - vh;
-  if (overflow > 0 && chosenCardRows > 0) {
-    // +1px cushion covers the final sub-pixel; distribute the shave across the card rows.
-    const shrunkH = bestCardH - Math.ceil((overflow + 1) / chosenCardRows);
-    // Only apply if cards stay usably tall; otherwise it's a genuine can't-fit case and
-    // we let the restored 'auto' overflow provide a scrollbar.
-    if (shrunkH >= MIN_CARD_H) {
+  // The availH budget above can be wrong for two reasons:
+  //   1. Sub-pixel rounding: each explicit cardH renders in DEVICE pixels, so at
+  //      fractional OS display scaling (Windows 125%/150%, common on the coordinator
+  //      TV) every row rounds up a fraction that accumulates past the fixed slack.
+  //   2. Stale chrome measurement: the summary bar, MOTD line and no-break row are all
+  //      sized in `em` (see .summary-bar/.chip/.motd-line display-mode rules), so they
+  //      scale with body font-size. We measured their heights BEFORE _applyLayout set
+  //      this layout's font-size, so if the previous layout used a smaller font (e.g.
+  //      after maximizing from a small, scrolled window) their real heights are larger
+  //      than budgeted and the grid overflows.
+  // Both are impossible to predict up front, so instead of guessing a larger fixed
+  // margin (which needlessly shrinks cards on displays that don't need it) we measure
+  // the ACTUAL rendered overflow — now that the final font-size is applied — and shave
+  // exactly that much off the card height, iterating in case one shave isn't enough.
+  // Measured while overflow is still suppressed so a scrollbar can't skew the numbers;
+  // the scroll container in display mode is <body>, so read the larger of body/html
+  // scrollHeight (documentElement alone can read as the viewport height and miss it).
+  if (chosenCardRows > 0) {
+    for (let i = 0; i < 4; i++) {
+      void document.documentElement.offsetHeight; // reflow so scrollHeight reflects applied heights
+      const contentH = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      const overflow = contentH - vh;
+      if (overflow <= 0) break;
+      // +1px cushion covers the final sub-pixel; distribute the shave across the card rows.
+      const shrunkH = _layoutCache.bestCardH - Math.ceil((overflow + 1) / chosenCardRows);
+      // Stop if cards would get too short; that's a genuine can't-fit case and the
+      // restored 'auto' overflow provides a scrollbar for the remainder.
+      if (shrunkH < MIN_CARD_H) break;
       _layoutCache.bestCardH = shrunkH;
       _applyLayout(_layoutCache);
     }
