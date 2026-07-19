@@ -891,13 +891,90 @@ function checkAutoUnhold() {
   });
 }
 
+// ─── Assignment event log (append-only, for later analysis) ───────────────────
+// Durable audit trail of who was assigned / moved / removed where, plus supervisor,
+// on-call and post-call changes. Written to deptAdmin/{code}/assignmentLog/{dateKey}/…
+// — a path dept users CAN write (unlike config/) and that, unlike boards/, is not
+// wiped at midnight, so the history accumulates. Not surfaced anywhere in the app yet;
+// captured now so we can do something with it later.
+//
+// Only the client that PERFORMS an action logs it (each mutation runs on exactly one
+// device), so events aren't duplicated across the phones/displays all listening.
+// Logging is fire-and-forget: it must never block or break a board write, so any
+// failure is swallowed. A separate top-level write path means it does not re-trigger
+// the board listener.
+function logAssignmentEvent(entry) {
+  try {
+    const code = entry.code || session?.deptCode;
+    if (!code) return;
+    const dateKey = entry.dateKey || tsDay();
+    const row = {
+      ts: Date.now(),
+      action: entry.action || null,        // assign | remove | reassign | move | swap
+      kind: entry.kind || "room",          // room | nobreak | supervisor | call | postcall
+      provider: entry.provider ?? null,
+      prevProvider: entry.prevProvider ?? null,
+      source: entry.source || (isDisplayMode ? "display" : "phone"),
+    };
+    if (entry.room     != null) row.room     = entry.room;      // location name
+    if (entry.position != null) row.position = entry.position;  // call / post-call slot
+    push(ref(db, `deptAdmin/${code}/assignmentLog/${dateKey}`), row).catch(() => {});
+  } catch { /* logging must never break the app */ }
+}
+
+// Log a single room's provider transition (used by drags and assignProvider sub-writes,
+// which capture prev before mutating and know the semantic action). Skips no-ops.
+function logRoomTransition(location, prevProvider, nextProvider, action, extra = {}) {
+  prevProvider = prevProvider || null;
+  nextProvider = nextProvider || null;
+  if (prevProvider === nextProvider) return;
+  logAssignmentEvent({
+    action: action || (!prevProvider ? "assign" : !nextProvider ? "remove" : "reassign"),
+    kind: location.startsWith("nb_") ? "nobreak" : "room",
+    room: location,
+    provider: nextProvider,
+    prevProvider,
+    ...extra,
+  });
+}
+
+// Diff a writeRoom snapshot (accurate server prev) against the value being written and
+// log a provider change — or, if the provider is unchanged, a standalone supervisor
+// change. Provider assigns already carry the traveling supervisor, so we don't log the
+// supervisor separately in that case (avoids a noise row per assignment).
+function logRoomWrite(prevRoom, nextRoom, rid) {
+  const prevP = (prevRoom && prevRoom.provider) || null;
+  const nextP = (nextRoom && nextRoom.provider) || null;
+  const location = (nextRoom && nextRoom.location) || (prevRoom && prevRoom.location) || rid;
+  if (prevP !== nextP) {
+    logRoomTransition(location, prevP, nextP);
+  } else {
+    const prevS = (prevRoom && prevRoom.supervisor) || null;
+    const nextS = (nextRoom && nextRoom.supervisor) || null;
+    if (prevS !== nextS) {
+      logAssignmentEvent({
+        action: !prevS ? "assign" : !nextS ? "remove" : "reassign",
+        kind: "supervisor",
+        room: location,
+        provider: nextS,        // supervisor name goes in provider for a uniform shape
+        prevProvider: prevS,
+      });
+    }
+  }
+}
+
 // ─── Write helpers ────────────────────────────────────────────────────────────
 async function writeRoom(roomId, updater) {
   if (!session?.deptCode) return;
   const r    = ref(db, `boards/${session.deptCode}/${tsDay()}/${roomId}`);
   const snap = await get(r);
   const current = snap.val() || {};
-  await set(r, updater(current));
+  const updated = updater(current);
+  await set(r, updated);
+  // Audit: log provider/supervisor changes (server snapshot = accurate prev, immune to
+  // the optimistic boardData updates callers apply before writeRoom). Ignores writes
+  // that only touch hold/break/request fields (provider & supervisor unchanged).
+  logRoomWrite(current, updated, roomId);
 }
 
 async function saveLocations(locs) {
@@ -927,12 +1004,20 @@ async function saveDefaultEmptyRooms(rooms) {
 
 async function saveCallAssignment(positionIdx, providerName) {
   // Stored under boards/{code}/{date}/_call_/{positionIdx}
+  const prev = getCallAssignments()[positionIdx] || null;
   const r = ref(db, `boards/${session.deptCode}/${tsDay()}/_call_/${positionIdx}`);
   if (providerName) {
     await set(r, providerName);
   } else {
     await remove(r);
   }
+  logAssignmentEvent({
+    kind: "call",
+    position: (callPositions[positionIdx] || {}).name || positionIdx,
+    provider: providerName || null,
+    prevProvider: prev,
+    action: providerName ? (prev ? "reassign" : "assign") : "remove",
+  });
 }
 
 function getCallAssignments() {
@@ -1043,12 +1128,20 @@ function getPostCallAssignments() {
 }
 
 async function savePostCallAssignment(positionIdx, providerName) {
+  const prev = getPostCallAssignments()[positionIdx] || null;
   const r = ref(db, `boards/${session.deptCode}/${tsDay()}/_postcall_/${positionIdx}`);
   if (providerName) {
     await set(r, providerName);
   } else {
     await remove(r);
   }
+  logAssignmentEvent({
+    kind: "postcall",
+    position: (callPositions[positionIdx] || {}).name || positionIdx,
+    provider: providerName || null,
+    prevProvider: prev,
+    action: providerName ? (prev ? "reassign" : "assign") : "remove",
+  });
 }
 
 async function maybeAutoPopulatePostCall() {
@@ -1069,6 +1162,17 @@ async function maybeAutoPopulatePostCall() {
       set(ref(db, "boards/" + session.deptCode + "/" + tsDay() + "/_postcall_/" + i), name)
     );
     await Promise.all(writes);
+    // Audit: post-call auto-populated from yesterday's on-call (system action, not a user)
+    Object.entries(yCall).forEach(([i, name]) => {
+      logAssignmentEvent({
+        kind: "postcall",
+        position: (callPositions[i] || {}).name || i,
+        provider: name,
+        prevProvider: null,
+        action: "assign",
+        source: "auto",
+      });
+    });
   } catch (e) {
     console.warn("Post-call auto-populate failed:", e);
   }
@@ -1283,6 +1387,7 @@ async function assignProvider(loc, name) {
     const displacedBreaks = getProviderHistory(displacedProvider);
     const swapRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const swapSnap = await get(swapRef);
+    const fromLoc = (swapSnap.val()||{}).location || incomingOldId;
     await set(swapRef, {
       ...(swapSnap.val()||{}),
       provider: displacedProvider,
@@ -1290,11 +1395,17 @@ async function assignProvider(loc, name) {
       breaks: displacedBreaks,
       hold: false, holdAt: null, holdDuration: null, requesting: false,
     });
+    // Audit: incoming's old room now holds the displaced provider (the target write is
+    // logged by writeRoom). Together the two rows describe the swap.
+    logRoomTransition(fromLoc, name, displacedProvider, "swap");
   } else if (incomingOldId) {
     // MOVE: just clear the room the provider is leaving
     const oldRef = ref(db, `boards/${session.deptCode}/${tsDay()}/${incomingOldId}`);
     const oldSnap = await get(oldRef);
+    const fromLoc = (oldSnap.val()||{}).location || incomingOldId;
     await set(oldRef, { ...(oldSnap.val()||{}), provider: null, supervisor: null, breaks: {}, hold: false, holdAt: null, holdDuration: null, requesting: false });
+    // Audit: provider vacated their old room (target assign logged by writeRoom).
+    logRoomTransition(fromLoc, name, null, "move");
   } else if (displacedProvider) {
     // DISPLACE into empty: displaced provider has nowhere to go — just clear target
     // (their breaks are already saved in history, they can be reassigned)
@@ -1385,6 +1496,12 @@ async function clearBoard() {
     if (k.startsWith("_hist_")) preserved[k] = v;
   });
   await set(boardRef(session.deptCode), preserved);
+  // Audit: Clear Board is the end-of-day sweep — log a removal for every provider that
+  // was on the board (rooms and no-break slots). Skips internal/aggregate keys.
+  Object.entries(current).forEach(([k, v]) => {
+    if (k.startsWith("_") || !v || typeof v !== "object" || !v.provider) return;
+    logRoomTransition(v.location || k, v.provider, null, "remove");
+  });
 }
 
 // ─── Roster dropdown ──────────────────────────────────────────────────────────
@@ -1756,6 +1873,9 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         if (document.querySelector(".display-outer")) patchDisplay();
         const bPath = `boards/${session.deptCode}/${tsDay()}`;
         await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
+        { const act = tgtProvider ? "swap" : "move";
+          logRoomTransition(srcLoc, srcProvider, tgtProvider, act);
+          logRoomTransition(nbLoc,  tgtProvider, srcProvider, act); }
       } else {
         // OR → nb: move (or swap if the slot is occupied) in a single atomic update.
         // assignProvider does this in two sequential writes (clear the OR source, then
@@ -1773,6 +1893,9 @@ function renderNoBreakCard(slot, isDisplay = false, tabIdx = null) {
         if (document.querySelector(".display-outer")) patchDisplay();
         const bPath = `boards/${session.deptCode}/${tsDay()}`;
         await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
+        { const act = displaced ? "swap" : "move";
+          logRoomTransition(nbLoc,  displaced, srcProvider, act);
+          logRoomTransition(srcLoc, srcProvider, (displaced && displaced !== srcProvider) ? displaced : null, act); }
       }
     });
     // Dragging from the card background (label area) — nameBtn has its own dragstart listener
@@ -2165,6 +2288,9 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         if (document.querySelector(".display-outer")) patchDisplay();
         const bPath = `boards/${session.deptCode}/${tsDay()}`;
         await update(ref(db, bPath), { [srcId]: newSrc, [tgtId]: newTgt });
+        { const act = displaced ? "swap" : "move";
+          logRoomTransition(loc,    displaced, srcProvider, act);
+          logRoomTransition(srcLoc, srcProvider, (displaced && displaced !== srcProvider) ? displaced : null, act); }
       } else {
         await assignProvider(loc, srcProvider);
       }
@@ -4758,6 +4884,7 @@ function renderPlanPage(fromDisplay = false) {
 
   async function savePlanRoom(loc, data) {
     const rid = roomId(loc);
+    const prevProvider = (planData[rid] || {}).provider || null;
     planData[rid] = data;
     if (data && Object.keys(data).some(k => data[k] != null && data[k] !== false)) {
       await set(planRoomRef(selectedDate, rid), data);
@@ -4765,9 +4892,20 @@ function renderPlanPage(fromDisplay = false) {
       await remove(planRoomRef(selectedDate, rid));
       delete planData[rid];
     }
+    // Audit: plan-mode assignment for a future date
+    const nextProvider = (data || {}).provider || null;
+    if (prevProvider !== nextProvider) {
+      logAssignmentEvent({
+        code: deptCode, dateKey: planDateKey(selectedDate), source: "plan",
+        kind: loc.startsWith("nb_") ? "nobreak" : "room",
+        room: loc, provider: nextProvider, prevProvider,
+        action: !prevProvider ? "assign" : !nextProvider ? "remove" : "reassign",
+      });
+    }
   }
 
   async function savePlanCallAssignment(idx, name) {
+    const prev = planCallData[idx] || null;
     if (name) {
       planCallData[idx] = name;
       await set(planCallRef(selectedDate, idx), name);
@@ -4775,9 +4913,16 @@ function renderPlanPage(fromDisplay = false) {
       delete planCallData[idx];
       await remove(planCallRef(selectedDate, idx));
     }
+    logAssignmentEvent({
+      code: deptCode, dateKey: planDateKey(selectedDate), source: "plan", kind: "call",
+      position: (callPositions[idx] || {}).name || idx,
+      provider: name || null, prevProvider: prev,
+      action: name ? (prev ? "reassign" : "assign") : "remove",
+    });
   }
 
   async function savePlanPostCallAssignment(idx, name) {
+    const prev = planPostCallData[idx] || null;
     if (name) {
       planPostCallData[idx] = name;
       await set(planPostCallRef(selectedDate, idx), name);
@@ -4785,6 +4930,12 @@ function renderPlanPage(fromDisplay = false) {
       delete planPostCallData[idx];
       await remove(planPostCallRef(selectedDate, idx));
     }
+    logAssignmentEvent({
+      code: deptCode, dateKey: planDateKey(selectedDate), source: "plan", kind: "postcall",
+      position: (callPositions[idx] || {}).name || idx,
+      provider: name || null, prevProvider: prev,
+      action: name ? (prev ? "reassign" : "assign") : "remove",
+    });
   }
 
   // ── Get assigned providers (from plan room assignments) ──
