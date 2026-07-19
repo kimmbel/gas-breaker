@@ -2954,8 +2954,34 @@ function layoutDisplay(forceRemeasure = false) {
 
   const fontSize = bestFontSize;
 
+  // Card rows in the chosen layout (used by the correction pass below).
+  const chosenCardRows = computeGridRows(bestCols) - numDividerRows;
+
   _layoutCache = { cardCount, vw, vh, bestCols, bestCardH, bestCardW, fontSize: bestFontSize };
   _applyLayout(_layoutCache);
+
+  // ── Correction pass ──
+  // The computed layout "fits" in pure CSS px, but the browser renders each explicit
+  // cardH in DEVICE pixels: at fractional OS display scaling (Windows 125%/150%, common
+  // on the coordinator TV) every row rounds up a fraction, and across many rows that
+  // accumulates past the fixed slack above — tripping the overflow scrollbar even though
+  // it fits fine at 100%. Rather than guess a larger fixed margin (which needlessly
+  // shrinks cards on displays that don't need it), measure the real overflow and shave
+  // exactly that much off the card height. Measured while overflow is still suppressed,
+  // so scrollHeight reports true content height without a scrollbar skewing it.
+  void document.documentElement.offsetHeight; // reflow so scrollHeight reflects applied heights
+  const overflow = document.documentElement.scrollHeight - vh;
+  if (overflow > 0 && chosenCardRows > 0) {
+    // +1px cushion covers the final sub-pixel; distribute the shave across the card rows.
+    const shrunkH = bestCardH - Math.ceil((overflow + 1) / chosenCardRows);
+    // Only apply if cards stay usably tall; otherwise it's a genuine can't-fit case and
+    // we let the restored 'auto' overflow provide a scrollbar.
+    if (shrunkH >= MIN_CARD_H) {
+      _layoutCache.bestCardH = shrunkH;
+      _applyLayout(_layoutCache);
+    }
+  }
+
   // Restore overflow (CSS): if the computed layout fits, no scrollbar returns.
   document.documentElement.style.overflow = prevHtmlOverflow;
   document.body.style.overflow = prevBodyOverflow;
