@@ -38,9 +38,17 @@ config/{code}/
   locations/{idx}    — OR location names (strings, may include __divider__* keys)
   noBreakSlots/{idx} — No-break slot names
   callPositions/{idx}— On-call position names
-  roster/{pushKey}   — Provider roster names
+  roster/{pushKey}   — Provider roster entry: { name, role, note? }
+                       note = persistent provider flag (surgeon/case incompatibility),
+                       shown ONLY on Plan Tomorrow as 🚩 (not board/display/print/email)
   passcode           — Dept login passcode
   eodConcernTime     — DEPRECATED: moved to boards/_eodconcern_
+
+deptAdmin/{code}/
+  dayNotes/{dateKey} — Case/room request note (string) for a specific date.
+                       dateKey = Y-M-D (matches planDateKey/tsDay). Configured in
+                       Admin → Case / Room Requests; pops up on the Plan Tomorrow
+                       screen each time that date is opened.
 
 departments/{code}   — Dept display name
 ```

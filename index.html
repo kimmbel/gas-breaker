@@ -437,6 +437,11 @@
     .plan-note-badge.note-rose  { background: #fce7f3; color: #9d174d; border-color: #f9a8d4; }
     .plan-note-add { font-size: 11px; color: #c4b8ad; cursor: pointer; flex-shrink: 0; padding: 2px 6px; border: 1px dashed #d4ccc6; border-radius: 5px; }
     .plan-note-add:hover { color: #7c6c62; border-color: #a39688; }
+    .provider-flag { font-size: 13px; line-height: 1; cursor: pointer; flex-shrink: 0; padding: 0 2px; user-select: none; filter: saturate(1.4); }
+    .provider-flag:hover { transform: scale(1.15); }
+    .flag-popover { position: fixed; z-index: 9999; max-width: 260px; background: #7f1d1d; color: #fff; font-size: 13px; font-weight: 600; line-height: 1.4; padding: 9px 12px; border-radius: 9px; box-shadow: 0 6px 22px rgba(0,0,0,0.28); }
+    .flag-popover::before { content: ""; position: absolute; width: 10px; height: 10px; background: #7f1d1d; transform: rotate(45deg); }
+    .flag-popover .flag-popover-name { display: block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; opacity: .75; margin-bottom: 3px; }
     .plan-remove-btn { background: none; border: none; color: #d4ccc6; font-size: 14px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
     .plan-remove-btn:hover { color: #dc2626; }
     .plan-add-input-wrap { position: relative; margin-top: 6px; }
@@ -616,14 +621,31 @@ function rosterMatches(entry, query) {
 }
 
 function normalizeRosterEntry(p) {
-  if (typeof p === "string") return { name: p, role: "attending" };
-  return { name: p.name || "", role: p.role || "attending" };
+  if (typeof p === "string") return { name: p, role: "attending", note: "" };
+  return { name: p.name || "", role: p.role || "attending", note: p.note || "" };
 }
 
 function getRosterRole(name) {
   if (!name) return "attending";
   const entry = roster.find(e => e.name === name);
   return entry ? entry.role : "attending";
+}
+
+// Persistent per-provider note (surgeon/case-type incompatibility, etc.). Shown
+// only on the Plan Tomorrow screen as a 🚩 flag; NOT on the board, display,
+// print, or email. Stored on the roster entry in config. (Distinct from
+// getProviderNote(), which returns the per-day operational board note.)
+function getProviderRosterNote(name) {
+  if (!name) return "";
+  const entry = roster.find(e => e.name === name);
+  return entry && entry.note ? entry.note : "";
+}
+
+// Structural signature of the roster (name + role only). Used by the coordinator
+// display listener so editing a provider's note — which the display never shows —
+// does not trigger a full display rebuild.
+function rosterStructKey(list) {
+  return JSON.stringify((list || []).map(e => e.name + "|" + e.role));
 }
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
@@ -633,6 +655,72 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ─── Provider flag popover (Plan Tomorrow only) ──────────────────────────────
+// Shows a provider's persistent note on explicit click of the 🚩 flag. Anchored
+// to the flag element; dismisses on any outside click, scroll, or Escape.
+let _flagPopoverEl = null;
+let _flagAnchor    = null;
+function closeFlagPopover() {
+  if (_flagPopoverEl) { _flagPopoverEl.remove(); _flagPopoverEl = null; }
+  _flagAnchor = null;
+  document.removeEventListener("mousedown", _flagPopoverOutside, true);
+  document.removeEventListener("keydown", _flagPopoverKey, true);
+  window.removeEventListener("scroll", closeFlagPopover, true);
+}
+function _flagPopoverOutside(e) {
+  // Ignore clicks on the anchoring flag itself — its own handler toggles the popover.
+  if (_flagAnchor && (e.target === _flagAnchor || _flagAnchor.contains(e.target))) return;
+  if (_flagPopoverEl && !_flagPopoverEl.contains(e.target)) closeFlagPopover();
+}
+function _flagPopoverKey(e) { if (e.key === "Escape") closeFlagPopover(); }
+function showFlagPopover(anchorEl, name, text) {
+  closeFlagPopover();
+  const pop = el("div", { class: "flag-popover" },
+    el("span", { class: "flag-popover-name" }, name),
+    document.createTextNode(text));
+  document.body.appendChild(pop);
+  _flagPopoverEl = pop;
+  _flagAnchor = anchorEl;
+
+  const a = anchorEl.getBoundingClientRect();
+  const pr = pop.getBoundingClientRect();
+  const margin = 8;
+  // Prefer below the flag; flip above if it would overflow the viewport bottom.
+  let top = a.bottom + 10;
+  let below = true;
+  if (top + pr.height + margin > window.innerHeight) { top = a.top - pr.height - 10; below = false; }
+  let left = a.left + a.width / 2 - pr.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - pr.width - margin));
+  pop.style.top  = Math.max(margin, top) + "px";
+  pop.style.left = left + "px";
+
+  // Position the little arrow to point at the flag.
+  const arrowX = Math.max(12, Math.min(a.left + a.width / 2 - left, pr.width - 12));
+  const before = document.createElement("style");
+  before.textContent = `.flag-popover::before{left:${arrowX - 5}px;${below ? "top:-5px;" : "bottom:-5px;"}}`;
+  pop.appendChild(before);
+
+  // Defer listener attachment so the opening click doesn't immediately close it.
+  setTimeout(() => {
+    document.addEventListener("mousedown", _flagPopoverOutside, true);
+    document.addEventListener("keydown", _flagPopoverKey, true);
+    window.addEventListener("scroll", closeFlagPopover, true);
+  }, 0);
+}
+// Build a clickable 🚩 flag for a provider, or null if they have no note.
+function buildProviderFlag(name) {
+  const note = getProviderRosterNote(name);
+  if (!note) return null;
+  const flag = el("span", { class: "provider-flag", title: "Provider note — click to view" }, "🚩");
+  flag.addEventListener("click", e => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (_flagPopoverEl) { closeFlagPopover(); return; }
+    showFlagPopover(flag, name, note);
+  });
+  return flag;
 }
 
 // ─── Confirm ─────────────────────────────────────────────────────────────────
@@ -859,12 +947,12 @@ function subscribeToBoard(deptCode) {
         JSON.stringify(locations) !== window._lastLocations ||
         JSON.stringify(noBreakSlots) !== window._lastNoBreakSlots ||
         JSON.stringify(callPositions) !== window._lastCallPositions ||
-        JSON.stringify(roster) !== window._lastRoster
+        rosterStructKey(roster) !== window._lastRoster
       );
       window._lastLocations     = JSON.stringify(locations);
       window._lastNoBreakSlots  = JSON.stringify(noBreakSlots);
       window._lastCallPositions = JSON.stringify(callPositions);
-      window._lastRoster        = JSON.stringify(roster);
+      window._lastRoster        = rosterStructKey(roster);
       if (structuralChange) renderDisplay();
       // Non-structural changes (e.g. eodConcernTime) are handled directly
       // by saveConcern — no need to call patchDisplay here and cause jitter
@@ -1178,8 +1266,10 @@ async function maybeAutoPopulatePostCall() {
   }
 }
 
-async function saveRosterEntry(name, role = "attending") {
-  await push(ref(db, `config/${session.deptCode}/roster`), { name, role });
+async function saveRosterEntry(name, role = "attending", note = "") {
+  const entry = { name, role };
+  if (note) entry.note = note;
+  await push(ref(db, `config/${session.deptCode}/roster`), entry);
 }
 
 async function deleteRosterEntry(name) {
@@ -1197,7 +1287,55 @@ async function updateRosterEntryRole(name, role) {
   for (const [k, v] of Object.entries(data)) {
     const entryName = typeof v === "string" ? v : v.name;
     if (entryName === name) {
-      await set(ref(db, `config/${session.deptCode}/roster/${k}`), { name, role });
+      const note = typeof v === "string" ? "" : (v.note || "");
+      const entry = { name, role };
+      if (note) entry.note = note;
+      await set(ref(db, `config/${session.deptCode}/roster/${k}`), entry);
+      break;
+    }
+  }
+}
+
+// ─── Day notes (case/room requests for a specific date) ──────────────────────
+// Configured in Admin; pops up when the coordinator opens Plan Tomorrow for that
+// date. Stored at deptAdmin/{code}/dayNotes/{dateKey}. dateKey matches the board
+// date format (Y-M-D, no leading zeros) used by planDateKey()/tsDay().
+function dayNoteKeyFromInput(v) {
+  if (!v) return null;
+  const [y, m, d] = v.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return `${y}-${m}-${d}`;
+}
+function dayNoteInputFromKey(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function dayNoteKeySortVal(k) {
+  const [y, m, d] = k.split("-").map(Number);
+  return y * 10000 + m * 100 + d;
+}
+function todayKeySortVal() {
+  const d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+async function getDayNote(code, dateKey) {
+  const snap = await get(ref(db, `deptAdmin/${code}/dayNotes/${dateKey}`));
+  return snap.val() || "";
+}
+async function saveDayNote(code, dateKey, text) {
+  await set(ref(db, `deptAdmin/${code}/dayNotes/${dateKey}`), text || null);
+}
+
+async function updateRosterEntryNote(name, note) {
+  const snap = await get(ref(db, `config/${session.deptCode}/roster`));
+  const data = snap.val() || {};
+  for (const [k, v] of Object.entries(data)) {
+    const entryName = typeof v === "string" ? v : v.name;
+    if (entryName === name) {
+      const role = typeof v === "string" ? "attending" : (v.role || "attending");
+      const entry = { name, role };
+      if (note) entry.note = note;
+      await set(ref(db, `config/${session.deptCode}/roster/${k}`), entry);
       break;
     }
   }
@@ -4430,6 +4568,88 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     );
   }
 
+  // ── Case / Room Requests (date-specific day notes) ──
+  function buildDayNotesSection() {
+    const list = el("div", { class: "admin-list" });
+
+    function fmtDate(dateKey) {
+      const [y, m, d] = dateKey.split("-").map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    }
+
+    async function rebuildList() {
+      list.innerHTML = "";
+      let notes = {};
+      try {
+        const snap = await get(ref(db, `deptAdmin/${deptCode}/dayNotes`));
+        notes = snap.val() || {};
+      } catch (e) { /* leave empty */ }
+
+      const today = todayKeySortVal();
+      const keys = Object.keys(notes)
+        .filter(k => notes[k] && dayNoteKeySortVal(k) >= today) // hide past dates
+        .sort((a, b) => dayNoteKeySortVal(a) - dayNoteKeySortVal(b));
+
+      if (!keys.length) {
+        list.appendChild(el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"10px" } }, "No upcoming request notes."));
+        return;
+      }
+
+      keys.forEach(k => {
+        const row = el("div", { class: "admin-list-item", style: { alignItems:"flex-start" } });
+        const info = el("div", { style: { flex:"1", minWidth:"0" } },
+          el("div", { style: { fontSize:"12px", fontWeight:"800", color:"#7c6c62", marginBottom:"2px" } }, fmtDate(k)),
+          el("div", { style: { fontSize:"13px", color:"#2d2420", whiteSpace:"pre-wrap", wordBreak:"break-word" } }, notes[k]),
+        );
+        const editBtn = el("button", { class:"btn-ghost", style:{ fontSize:"11px", padding:"4px 8px" },
+          onClick: () => { dateIn.value = dayNoteInputFromKey(k); textIn.value = notes[k]; textIn.focus(); } }, "Edit");
+        const removeBtn = el("button", { class:"btn-danger", style:{ fontSize:"11px", padding:"4px 8px" },
+          onClick: async () => {
+            try { await saveDayNote(deptCode, k, null); showToast("Note removed"); rebuildList(); }
+            catch (e) { showToast("Save failed — check permissions"); }
+          } }, "Remove");
+        row.append(info, editBtn, removeBtn);
+        list.appendChild(row);
+      });
+    }
+
+    const dateIn = el("input", { class: "admin-add-input", type: "date", style: { flex:"0 0 auto" } });
+    const textIn = el("textarea", {
+      class: "admin-add-input",
+      placeholder: "e.g. Dr. Patel adding a room 3 — need extra hands 0700; two hearts in OR 6",
+      style: { flex:"1", minHeight:"64px", resize:"vertical", fontFamily:"inherit", fontSize:"13px", padding:"7px 10px", boxSizing:"border-box" },
+    });
+
+    async function saveNote() {
+      const key = dayNoteKeyFromInput(dateIn.value);
+      const text = textIn.value.trim();
+      if (!key) { showToast("Pick a date first"); return; }
+      if (!text) { showToast("Enter a note"); return; }
+      try {
+        await saveDayNote(deptCode, key, text);
+        textIn.value = "";
+        showToast("Request note saved");
+        rebuildList();
+      } catch (e) { showToast("Save failed — check permissions"); }
+    }
+
+    const saveBtn = el("button", { class: "btn-primary", onClick: saveNote }, "Save");
+
+    rebuildList();
+
+    return adminSection("day-notes", "Case / Room Requests",
+      "Add a note for a specific date. It pops up on the Plan Tomorrow screen whenever someone opens that date — handy for added rooms, staffing requests, or special cases. Past dates drop off automatically.",
+      list,
+      el("div", { style: { display:"flex", flexDirection:"column", gap:"8px", marginTop:"6px" } },
+        el("div", { style: { display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
+          el("span", { style: { fontSize:"12px", fontWeight:"700", color:"#7c6c62" } }, "Date"),
+          dateIn),
+        textIn,
+        el("div", { style: { display:"flex", justifyContent:"flex-end" } }, saveBtn),
+      ),
+    );
+  }
+
   // ── Roster section ──
   function buildRosterSection() {
     let ros = [...roster];
@@ -4439,9 +4659,55 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       ros,
       () => {},
       (entry, arr, rebuildFn) => {
+        const wrap = el("div", { style: { display:"flex", flexDirection:"column", flex:"1", gap:"6px" } });
         const rowDiv = el("div", { style: { display:"flex", alignItems:"center", flex:"1", gap:"8px" } });
         const nameSpan = el("span", { style: { flex:"1" } }, entry.name);
         let editing = false;
+
+        // ── Provider note (surgeon/case-type incompatibility) ──
+        // Shown on Plan Tomorrow as a 🚩 flag. Editable inline here.
+        const noteArea = el("div", {});
+        let editingNote = false;
+        function renderNoteArea() {
+          noteArea.innerHTML = "";
+          if (!editingNote) return;
+          const noteInput = el("input", {
+            class: "admin-add-input", type: "text", maxlength: "200",
+            placeholder: "e.g. Not with Dr. Lee / no cardiac cases",
+            style: { flex:"1", fontSize:"13px", padding:"4px 8px", boxSizing:"border-box" },
+          });
+          noteInput.value = entry.note || "";
+          const saveBtn   = el("button", { class:"btn-primary", style:{ fontSize:"11px", padding:"4px 10px" } }, "Save");
+          const cancelBtn = el("button", { class:"btn-ghost",   style:{ fontSize:"11px", padding:"4px 10px" } }, "Cancel");
+          async function saveNote() {
+            const val = noteInput.value.trim();
+            try {
+              await updateRosterEntryNote(entry.name, val);
+              entry.note = val;
+              ros = ros.map(r => r.name === entry.name ? { ...r, note: val } : r);
+              editingNote = false;
+              renderNoteArea();
+              updateFlagBtn();
+              showToast(val ? "Note saved" : "Note cleared");
+            } catch(err) { showToast("Error saving note"); }
+          }
+          cancelBtn.addEventListener("click", () => { editingNote = false; renderNoteArea(); });
+          noteInput.addEventListener("keydown", e => {
+            if (e.key === "Enter")  { e.preventDefault(); saveNote(); }
+            if (e.key === "Escape") { editingNote = false; renderNoteArea(); }
+          });
+          noteArea.appendChild(el("div", { style:{ display:"flex", gap:"6px", alignItems:"center" } }, noteInput, saveBtn, cancelBtn));
+          setTimeout(() => noteInput.focus(), 20);
+        }
+
+        const flagBtn = el("button", { class: "btn-ghost", style: { fontSize:"11px", padding:"4px 8px", whiteSpace:"nowrap" },
+          title: "Provider note (shown as a flag on Plan Tomorrow)",
+          onClick: () => { editingNote = !editingNote; renderNoteArea(); } });
+        function updateFlagBtn() {
+          flagBtn.textContent = entry.note ? "🚩 Note" : "＋ Note";
+          flagBtn.style.color = entry.note ? "#dc2626" : "";
+        }
+        updateFlagBtn();
 
         // Role selector
         const roleSelect = document.createElement("select");
@@ -4486,8 +4752,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
             if (val && val !== entry.name && !ros.some(e => e.name === val)) {
               try {
                 await deleteRosterEntry(entry.name);
-                await saveRosterEntry(val, entry.role);
-                ros = ros.filter(e => e.name !== entry.name).concat({ name: val, role: entry.role }).sort((a,b) => a.name.localeCompare(b.name));
+                await saveRosterEntry(val, entry.role, entry.note);
+                ros = ros.filter(e => e.name !== entry.name).concat({ name: val, role: entry.role, note: entry.note }).sort((a,b) => a.name.localeCompare(b.name));
                 rebuildFn([...ros]);
                 showToast(`Renamed to ${val}`);
               } catch(err) { showToast("Error renaming provider"); }
@@ -4502,8 +4768,10 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           input.addEventListener("blur", () => setTimeout(() => { if (editing) saveEdit(); }, 150));
         });
 
-        rowDiv.appendChild(nameSpan); rowDiv.appendChild(roleSelect); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
-        return rowDiv;
+        rowDiv.appendChild(nameSpan); rowDiv.appendChild(roleSelect); rowDiv.appendChild(flagBtn); rowDiv.appendChild(editBtn); rowDiv.appendChild(removeBtn);
+        wrap.appendChild(rowDiv);
+        wrap.appendChild(noteArea);
+        return wrap;
       }
     );
 
@@ -4520,7 +4788,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     nameIn.addEventListener("keydown", e => { if (e.key === "Enter") addName(); });
 
     return adminSection("roster", "Provider Roster",
-      "Names appear as suggestions when assigning a provider. Set role so supervisors can be tracked. Format: Last, First.",
+      "Names appear as suggestions when assigning a provider. Set role so supervisors can be tracked. Format: Last, First. Add a 🚩 Note (e.g. surgeon/case incompatibility) — it shows as a red flag on the Plan Tomorrow screen only.",
       list,
       el("div", { class: "admin-add-row" }, nameIn, el("button", { class: "btn-primary", onClick: addName }, "Add")),
     );
@@ -4590,6 +4858,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       el("div", { style: { fontFamily:"'Libre Baskerville', serif", fontWeight:"700", fontSize:"22px", color:"#2d2420", marginBottom:"4px" } }, "⚙️ " + (isDept ? session.deptName : "Departments")),
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
       isDept ? buildPlanTomorrowSection()         : null,
+      isDept ? buildDayNotesSection()            : null,
       isDept ? buildEmailSection()               : null,
       isDept ? buildScheduleImportSection()       : null,
       isDept ? buildScheduleNameMappingsSection() : null,
@@ -4833,6 +5102,7 @@ function renderPlanPage(fromDisplay = false) {
   let planPostCallData = {}; // { [posIdx]: name }
   let planHeaderText = "";
   let emailConfig    = {};   // { to, fromName, defaultSubject }
+  let dayNoteText    = "";   // case/room request note for selectedDate (admin-configured)
 
   // ── Firebase helpers ──
   function planBoardRef(dateStr) {
@@ -4974,16 +5244,19 @@ function renderPlanPage(fromDisplay = false) {
     planLate  = {};
     planCallData = {};
     planPostCallData = {};
+    dayNoteText = "";
 
     try {
-      const [boardSnap, headerSnap, emailConfigSnap] = await Promise.all([
+      const [boardSnap, headerSnap, emailConfigSnap, dayNoteSnap] = await Promise.all([
         get(planBoardRef(dateStr)),
         get(planHeaderRef()),
         get(ref(db, `deptAdmin/${deptCode}/emailConfig`)),
+        get(ref(db, `deptAdmin/${deptCode}/dayNotes/${planDateKey(dateStr)}`)),
       ]);
 
       planHeaderText = headerSnap.val() || "";
       emailConfig    = emailConfigSnap.val() || {};
+      dayNoteText    = dayNoteSnap.val() || "";
 
       const bval = boardSnap.val() || {};
 
@@ -5048,6 +5321,26 @@ function renderPlanPage(fromDisplay = false) {
   async function render(dateStr) {
     await loadPlanData(dateStr);
     buildUI();
+    if (dayNoteText) showDayNotePopup(selectedDate, dayNoteText);
+  }
+
+  // Case/room request popup — shows every time this date's Plan screen loads.
+  // Dismiss by clicking away, the Got it button, or Escape.
+  function showDayNotePopup(dateStr, text) {
+    const existing = document.getElementById("day-note-popup");
+    if (existing) existing.remove();
+
+    const box = el("div", { class: "sched-modal-box", style: { maxWidth:"440px" } },
+      el("div", { class: "sched-modal-title" }, "📌 Requests for " + formatDateBanner(dateStr)),
+      el("div", { style: { fontSize:"14px", lineHeight:"1.55", color:"#2d2420", whiteSpace:"pre-wrap", wordBreak:"break-word", margin:"6px 0 4px" } }, text),
+      el("div", { style: { display:"flex", justifyContent:"flex-end", marginTop:"14px" } },
+        el("button", { class: "btn-primary", style: { fontSize:"13px" }, onClick: () => overlay.remove() }, "Got it")),
+    );
+    const overlay = el("div", { class: "sched-modal-overlay", id: "day-note-popup" }, box);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    const onKey = e => { if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", onKey); } };
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
   }
 
   function buildUI() {
@@ -5246,6 +5539,8 @@ function renderPlanPage(fromDisplay = false) {
 
         row.appendChild(dragHandle);
         row.appendChild(nameEl);
+        const provFlag = buildProviderFlag(name);
+        if (provFlag) row.appendChild(provFlag);
         row.appendChild(removeBtn);
 
         // Drag-and-drop reorder
@@ -5633,6 +5928,8 @@ function renderPlanPage(fromDisplay = false) {
           onClick: () => { editingProvider = true; renderProviderArea(); }
         }, provider || "Assign provider…");
         nameRow.appendChild(btn);
+        const roomFlag = buildProviderFlag(provider);
+        if (roomFlag) nameRow.appendChild(roomFlag);
         if (provider) {
           const noteObj = planNotes[provider] || null;
           const isLate  = !!planLate[provider];
@@ -6549,31 +6846,96 @@ function renderPlanPage(fromDisplay = false) {
   async function sendPlan(subject, message, files) {
     const html = buildPlanEmailHtml(message);
     const attachments = [];
+    let rawBytes = 0;
 
     for (const f of (files || [])) {
+      rawBytes += f.size || 0;
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload  = () => resolve(reader.result.split(",")[1]);
-        reader.onerror = reject;
+        reader.onerror = () => reject(new Error(`Couldn't read the attachment "${f.name}".`));
         reader.readAsDataURL(f);
       });
       attachments.push({ filename: f.name, content: base64 });
     }
 
+    // The serverless endpoint (Vercel) rejects request bodies larger than ~4.5 MB,
+    // and base64 encoding inflates files by ~33%. Catch this here with a clear
+    // message instead of letting it surface as an opaque network/413 failure.
+    const MAX_RAW = 3.3 * 1024 * 1024;
+    if (rawBytes > MAX_RAW) {
+      throw new Error(
+        `Attachments total ${(rawBytes / 1024 / 1024).toFixed(1)} MB — the email service accepts about 3 MB total. ` +
+        `Please attach a smaller file (or fewer files).`
+      );
+    }
+
     const to      = emailConfig.to;
     const fromName = emailConfig.fromName || "";
+    const body     = JSON.stringify({ to, fromName, subject, html, attachments });
 
-    const resp = await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to, fromName, subject, html, attachments }),
-    });
+    // One retry: intermittent failures here are almost always a cold-start or a
+    // transient network blip (the "cancel and retry" that has always worked).
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000); // 30s guard
+      try {
+        const resp = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${resp.status}`);
+        if (resp.ok) return true;
+
+        // Read the error body defensively — it may be JSON (our API) or HTML
+        // (a platform-level 413/502/504 page).
+        let detail = "";
+        const ct = resp.headers.get("content-type") || "";
+        if (ct.includes("application/json")) {
+          const j = await resp.json().catch(() => ({}));
+          detail = j.error || "";
+        } else {
+          const t = await resp.text().catch(() => "");
+          detail = (t || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+        }
+
+        if (resp.status === 413) {
+          throw new Error("The attachment is too large for the server to accept. Please attach a smaller file.");
+        }
+        if (resp.status === 429) {
+          throw new Error("The email service is rate-limiting requests. Wait a few seconds and try again.");
+        }
+        // Retry once on server-side (5xx) errors; surface 4xx immediately.
+        if (resp.status >= 500 && attempt < 2) {
+          lastErr = new Error(detail || `Server error (HTTP ${resp.status}).`);
+          await new Promise(r => setTimeout(r, 900));
+          continue;
+        }
+        throw new Error(detail || `Email failed (HTTP ${resp.status} ${resp.statusText || ""}).`.trim());
+      } catch (err) {
+        clearTimeout(timer);
+        // AbortError (timeout) and TypeError (network/CORS/DNS) are transient —
+        // retry once, then report in plain language.
+        const transient = err.name === "AbortError" || err instanceof TypeError;
+        if (transient && attempt < 2) {
+          lastErr = err;
+          await new Promise(r => setTimeout(r, 900));
+          continue;
+        }
+        if (err.name === "AbortError") {
+          throw new Error("The request timed out after 30s. Check your connection and try again.");
+        }
+        if (err instanceof TypeError) {
+          throw new Error("Couldn't reach the email server (network error). Please try again.");
+        }
+        throw err; // already a clear message
+      }
     }
-    return true;
+    throw lastErr || new Error("Email failed after a retry. Please try again.");
   }
 
   function showEmailModal() {
