@@ -49,6 +49,10 @@ deptAdmin/{code}/
                        dateKey = Y-M-D (matches planDateKey/tsDay). Configured in
                        Admin → Case / Room Requests; pops up on the Plan Tomorrow
                        screen each time that date is opened.
+  motd               — Message of the day: { text, date } (date = tsDay() when set).
+                       Auto-clears once date != today (any client load/reload after
+                       midnight clears it). Legacy plain-string values migrated on
+                       load. See normalizeMotd() + the motd listener.
 
 departments/{code}   — Dept display name
 ```

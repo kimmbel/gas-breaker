@@ -959,12 +959,39 @@ function subscribeToBoard(deptCode) {
     }
   });
 
-  // Message of the Day — persists indefinitely (not date-keyed). Live-update the
-  // chip in place on both the phone and coordinator display without a re-render.
+  // Message of the Day — stored as { text, date } and cleared once the day rolls
+  // over (like the board). Any client that loads/reloads after midnight (the
+  // midnight reload timer, or a fresh morning open) clears a stale message, so it
+  // never shows past its day. Legacy plain-string values are migrated to today's
+  // date so they expire the next midnight. Live-update the chip in place.
   unsubMotd = onValue(ref(db, `deptAdmin/${deptCode}/motd`), snap => {
-    motd = snap.val() || "";
+    const m = normalizeMotd(snap.val());
+    if (m && m.text) {
+      const today = tsDay();
+      if (m.date && m.date !== today) {
+        // Stale — belongs to a previous day. Clear it.
+        motd = "";
+        set(ref(db, `deptAdmin/${deptCode}/motd`), null).catch(() => {});
+      } else if (!m.date) {
+        // Legacy string with no date: adopt today's so it expires next midnight.
+        motd = m.text;
+        set(ref(db, `deptAdmin/${deptCode}/motd`), { text: m.text, date: today }).catch(() => {});
+      } else {
+        motd = m.text;
+      }
+    } else {
+      motd = "";
+    }
     updateMotdDisplay();
   });
+}
+
+// Normalize a raw deptAdmin/{code}/motd value to { text, date } | null.
+// Supports the legacy plain-string form (date null → migrated on next load).
+function normalizeMotd(val) {
+  if (!val) return null;
+  if (typeof val === "string") return { text: val, date: null };
+  return { text: val.text || "", date: val.date || null };
 }
 
 // ─── Auto-unhold check ────────────────────────────────────────────────────────
@@ -2528,11 +2555,12 @@ function showRequestNotification(loc, providerName) {
 // ─── Message of the Day ───────────────────────────────────────────────────────
 // A full-width line: under the title/date in the phone header (read-only), and as a
 // line under the badges on the coordinator display (editable — click to edit).
-// Persists in deptAdmin/{code}/motd until someone changes it.
+// Stored as { text, date } so it auto-clears when the day rolls over (see the
+// deptAdmin/{code}/motd listener). Cleared when text is empty.
 async function saveMotd(text) {
   if (!session?.deptCode) return;
   motd = text;
-  await set(ref(db, `deptAdmin/${session.deptCode}/motd`), text || null);
+  await set(ref(db, `deptAdmin/${session.deptCode}/motd`), text ? { text, date: tsDay() } : null);
 }
 
 function motdDisplayText(editable) {
@@ -4081,7 +4109,15 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         row.appendChild(handle);
         const content = renderItem(item, arr, (a) => rebuild(a ?? arr));
         row.appendChild(content);
-        row.addEventListener("dragstart", e => { dragSrc = i; setTimeout(() => row.classList.add("dragging"), 0); e.dataTransfer.effectAllowed = "move"; });
+        // Let text be selected inside inputs/textareas: a draggable ancestor
+        // otherwise hijacks the mouse-drag to move the row. Disable dragging while
+        // a field in this row has focus, and ignore drags that begin on a field.
+        row.addEventListener("focusin",  e => { if (e.target.closest("input, textarea, select")) row.setAttribute("draggable", "false"); });
+        row.addEventListener("focusout", () => row.setAttribute("draggable", "true"));
+        row.addEventListener("dragstart", e => {
+          if (e.target.closest("input, textarea, select")) { e.preventDefault(); return; }
+          dragSrc = i; setTimeout(() => row.classList.add("dragging"), 0); e.dataTransfer.effectAllowed = "move";
+        });
         row.addEventListener("dragend",   () => row.classList.remove("dragging"));
         row.addEventListener("dragover",  e => { e.preventDefault(); row.classList.add("drag-over"); });
         row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
@@ -4571,6 +4607,8 @@ function renderAdminPage(deptCode, fromDisplay = false) {
   // ── Case / Room Requests (date-specific day notes) ──
   function buildDayNotesSection() {
     const list = el("div", { class: "admin-list" });
+    let currentNotes = {};   // latest fetched { dateKey: text } — used for overwrite checks
+    let editingKey   = null; // date key currently loaded via Edit (skip replace-confirm)
 
     function fmtDate(dateKey) {
       const [y, m, d] = dateKey.split("-").map(Number);
@@ -4584,6 +4622,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         const snap = await get(ref(db, `deptAdmin/${deptCode}/dayNotes`));
         notes = snap.val() || {};
       } catch (e) { /* leave empty */ }
+      currentNotes = notes;
 
       const today = todayKeySortVal();
       const keys = Object.keys(notes)
@@ -4591,7 +4630,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
         .sort((a, b) => dayNoteKeySortVal(a) - dayNoteKeySortVal(b));
 
       if (!keys.length) {
-        list.appendChild(el("div", { style: { color:"#a39688", fontSize:"13px", marginBottom:"10px" } }, "No upcoming request notes."));
+        list.appendChild(el("div", { style: { color:"#a39688", fontSize:"13px" } }, "No upcoming request notes."));
         return;
       }
 
@@ -4602,7 +4641,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
           el("div", { style: { fontSize:"13px", color:"#2d2420", whiteSpace:"pre-wrap", wordBreak:"break-word" } }, notes[k]),
         );
         const editBtn = el("button", { class:"btn-ghost", style:{ fontSize:"11px", padding:"4px 8px" },
-          onClick: () => { dateIn.value = dayNoteInputFromKey(k); textIn.value = notes[k]; textIn.focus(); } }, "Edit");
+          onClick: () => { editingKey = k; dateIn.value = dayNoteInputFromKey(k); textIn.value = notes[k]; textIn.focus(); } }, "Edit");
         const removeBtn = el("button", { class:"btn-danger", style:{ fontSize:"11px", padding:"4px 8px" },
           onClick: async () => {
             try { await saveDayNote(deptCode, k, null); showToast("Note removed"); rebuildList(); }
@@ -4614,39 +4653,56 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
 
     const dateIn = el("input", { class: "admin-add-input", type: "date", style: { flex:"0 0 auto" } });
+    // Manually changing the date means we're no longer editing the row that was loaded.
+    dateIn.addEventListener("change", () => { editingKey = null; });
     const textIn = el("textarea", {
       class: "admin-add-input",
       placeholder: "e.g. Dr. Patel adding a room 3 — need extra hands 0700; two hearts in OR 6",
       style: { flex:"1", minHeight:"64px", resize:"vertical", fontFamily:"inherit", fontSize:"13px", padding:"7px 10px", boxSizing:"border-box" },
     });
 
-    async function saveNote() {
-      const key = dayNoteKeyFromInput(dateIn.value);
-      const text = textIn.value.trim();
-      if (!key) { showToast("Pick a date first"); return; }
-      if (!text) { showToast("Enter a note"); return; }
+    async function doSave(key, text) {
       try {
         await saveDayNote(deptCode, key, text);
-        textIn.value = "";
+        textIn.value = ""; editingKey = null;
         showToast("Request note saved");
         rebuildList();
       } catch (e) { showToast("Save failed — check permissions"); }
     }
 
+    function saveNote() {
+      const key = dayNoteKeyFromInput(dateIn.value);
+      const text = textIn.value.trim();
+      if (!key) { showToast("Pick a date first"); return; }
+      if (!text) { showToast("Enter a note"); return; }
+      const existing = currentNotes[key];
+      // Warn before clobbering an existing request — unless it was loaded via Edit.
+      if (existing && key !== editingKey) {
+        showConfirm("Replace existing request?",
+          `${fmtDate(key)} already has a request: “${existing}”. Replace it with your new note?`,
+          () => doSave(key, text));
+        return;
+      }
+      doSave(key, text);
+    }
+
     const saveBtn = el("button", { class: "btn-primary", onClick: saveNote }, "Save");
+
+    const inputBlock = el("div", { style: { display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" } },
+      el("div", { style: { display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
+        el("span", { style: { fontSize:"12px", fontWeight:"700", color:"#7c6c62" } }, "Date"),
+        dateIn),
+      textIn,
+      el("div", { style: { display:"flex", justifyContent:"flex-end" } }, saveBtn),
+    );
 
     rebuildList();
 
     return adminSection("day-notes", "Case / Room Requests",
       "Add a note for a specific date. It pops up on the Plan Tomorrow screen whenever someone opens that date — handy for added rooms, staffing requests, or special cases. Past dates drop off automatically.",
+      inputBlock,
+      el("div", { style: { fontSize:"12px", fontWeight:"700", color:"#7c6c62", margin:"2px 0 6px" } }, "Upcoming requests"),
       list,
-      el("div", { style: { display:"flex", flexDirection:"column", gap:"8px", marginTop:"6px" } },
-        el("div", { style: { display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" } },
-          el("span", { style: { fontSize:"12px", fontWeight:"700", color:"#7c6c62" } }, "Date"),
-          dateIn),
-        textIn,
-        el("div", { style: { display:"flex", justifyContent:"flex-end" } }, saveBtn),
-      ),
     );
   }
 
@@ -4691,6 +4747,7 @@ function renderAdminPage(deptCode, fromDisplay = false) {
               showToast(val ? "Note saved" : "Note cleared");
             } catch(err) { showToast("Error saving note"); }
           }
+          saveBtn.addEventListener("click", saveNote);
           cancelBtn.addEventListener("click", () => { editingNote = false; renderNoteArea(); });
           noteInput.addEventListener("keydown", e => {
             if (e.key === "Enter")  { e.preventDefault(); saveNote(); }
