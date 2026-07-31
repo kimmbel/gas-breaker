@@ -4653,8 +4653,37 @@ function renderAdminPage(deptCode, fromDisplay = false) {
     }
 
     const dateIn = el("input", { class: "admin-add-input", type: "date", style: { flex:"0 0 auto" } });
-    // Manually changing the date means we're no longer editing the row that was loaded.
-    dateIn.addEventListener("change", () => { editingKey = null; });
+
+    // Offer to load an existing request when the chosen date already has one.
+    function offerEditExisting(key) {
+      const existing = currentNotes[key];
+      if (!existing) return;
+      const overlay = el("div", { class: "confirm-overlay" },
+        el("div", { class: "confirm-box" },
+          el("div", { class: "confirm-title" }, "A request already exists"),
+          el("div", { class: "confirm-msg" },
+            `${fmtDate(key)} already has a request: “${existing}”. Consider editing the existing note instead of replacing it.`),
+          el("div", { class: "btn-row" },
+            el("button", { class: "btn-primary", style: { flex:"1", padding:"10px" }, onClick: () => {
+              overlay.remove();
+              editingKey = key;
+              textIn.value = existing;
+              textIn.focus();
+            } }, "Edit existing"),
+            el("button", { class: "btn-ghost", style: { flex:"1" }, onClick: () => overlay.remove() }, "Create new anyway"),
+          ),
+        )
+      );
+      document.body.appendChild(overlay);
+    }
+
+    // Manually changing the date means we're no longer editing the row that was
+    // loaded; then warn if the newly-chosen date already has a request.
+    dateIn.addEventListener("change", () => {
+      editingKey = null;
+      const key = dayNoteKeyFromInput(dateIn.value);
+      if (key && currentNotes[key]) offerEditExisting(key);
+    });
     const textIn = el("textarea", {
       class: "admin-add-input",
       placeholder: "e.g. Dr. Patel adding a room 3 — need extra hands 0700; two hearts in OR 6",
