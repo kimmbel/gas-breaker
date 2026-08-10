@@ -6559,8 +6559,10 @@ function renderPlanPage(fromDisplay = false) {
 
     const allNames = new Set();
     Object.values(roles).forEach(n               => n && allNames.add(n));
+    (dayShifts.eightHourDay  || []).forEach(n    => n && allNames.add(n));
     (dayShifts.tenHourDay    || []).forEach(n    => n && allNames.add(n));
     (dayShifts.twelveHourDay || []).forEach(n    => n && allNames.add(n));
+    (dayShifts.orientation   || []).forEach(n    => n && allNames.add(n));
     Object.values(nightCalls).forEach(n          => n && allNames.add(n));
     Object.values(postCall).forEach(n            => n && allNames.add(n));
 
@@ -6643,9 +6645,11 @@ function renderPlanPage(fromDisplay = false) {
 
     // Working Tomorrow list
     const rolePeople  = Object.values(roles).map(n          => n && resolved[n]).filter(Boolean);
+    const eightHour   = (dayShifts.eightHourDay  || []).map(n => n && resolved[n]).filter(Boolean);
     const tenHour     = (dayShifts.tenHourDay    || []).map(n => n && resolved[n]).filter(Boolean);
     const twelveHour  = (dayShifts.twelveHourDay || []).map(n => n && resolved[n]).filter(Boolean);
-    const allWorking  = new Set([...rolePeople, ...tenHour, ...twelveHour]);
+    const orientation = (dayShifts.orientation   || []).map(n => n && resolved[n]).filter(Boolean);
+    const allWorking  = new Set([...rolePeople, ...eightHour, ...tenHour, ...twelveHour, ...orientation]);
     coreAssigned.forEach(n => allWorking.delete(n));
 
     if (mergeMode) {
@@ -6662,6 +6666,15 @@ function renderPlanPage(fromDisplay = false) {
         noteWrites.push(savePlanLate(name, true));
       }
     }
+
+    // 8-hour and orientation → amber note tag ("8 hour" / "Orienting").
+    // Only tag people who don't already have a note, so a manual note is never
+    // clobbered (applies in both overwrite and merge mode; re-import is idempotent).
+    const tagNote = (name, text) => {
+      if (!planNotes[name]) noteWrites.push(savePlanNote(name, { text, color: "amber" }));
+    };
+    eightHour.forEach(n => tagNote(n, "8 hour"));
+    orientation.forEach(n => tagNote(n, "Orienting"));
 
     // Night calls
     nightCallKeys.forEach((key, idx) => {
