@@ -375,7 +375,7 @@
     .display-card .requesting-banner { background: #064e3b; color: #34d399; border-color: #059669; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .display-req-badge { display: inline-block; background: #064e3b; color: #34d399; border: 1px solid #059669; border-radius: 0.4em; font-size: 0.85em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; }
     /* Note badge — color variants */
-    .display-note-badge { display: inline-block; border-radius: 0.4em; font-size: 1.1em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; max-width: 8em; overflow: hidden; text-overflow: ellipsis; border: 1px solid; }
+    .display-note-badge { display: inline-block; border-radius: 0.4em; font-size: 1.1em; font-weight: 800; padding: 0.15em 0.5em; white-space: nowrap; flex-shrink: 0; max-width: 12em; overflow: hidden; text-overflow: ellipsis; border: 1px solid; }
     .display-note-badge.note-amber { background: #431407; color: #fb923c; border-color: #9a3412; }
     .display-note-badge.note-blue  { background: #0f2744; color: #60a5fa; border-color: #1d4ed8; }
     .display-note-badge.note-green { background: #052e16; color: #4ade80; border-color: #15803d; }
@@ -2102,7 +2102,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
   const effectiveWarn = effectiveHold && (holdDuration - holdAge) <= holdWarnMs;
 
   // Hold countdown label — shown inside the button itself
-  let holdBtnLabel = "Hold";
+  let holdBtnLabel = "Wait";
   if (effectiveHold && holdAt) {
     const remaining = Math.max(0, holdDuration - holdAge);
     const mins = Math.ceil(remaining / 60000);
@@ -2148,7 +2148,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         } else if (showingDurationPicker) {
           // Cancel picker — restore request/note buttons
           showingDurationPicker = false;
-          holdBtn.textContent = "Hold";
+          holdBtn.textContent = "Wait";
           holdBtn.className = "side-btn";
           durationPicker.style.display = "none";
           if (reqBtn)  reqBtn.style.display  = "";
@@ -2156,7 +2156,7 @@ function renderCard(loc, isDisplay = false, tabIdx = null) {
         } else {
           // Show duration picker — hide request/note to keep layout clean
           showingDurationPicker = true;
-          holdBtn.textContent = "Hold?";
+          holdBtn.textContent = "Wait?";
           holdBtn.className = "side-btn hold-on";
           durationPicker.style.display = "flex";
           if (reqBtn)  reqBtn.style.display  = "none";
@@ -3466,9 +3466,9 @@ function patchDisplay() {
       holdBtn.textContent = (effectiveWarn ? "⚠️ " : "✋ ") + mins + "m";
       holdBtn.className   = "side-btn " + (effectiveWarn ? "hold-warn" : "hold-on");
     } else if (holdBtn && provider && !effectiveHold) {
-      // Only reset to "Hold" if it's not currently showing the duration picker
-      if (holdBtn.textContent !== "Hold?") {
-        holdBtn.textContent = "Hold";
+      // Only reset to "Wait" if it's not currently showing the duration picker
+      if (holdBtn.textContent !== "Wait?") {
+        holdBtn.textContent = "Wait";
         holdBtn.className   = "side-btn";
       }
     }
@@ -4945,13 +4945,14 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       el("div", { style: { fontSize:"13px", color:"#a39688", marginBottom:"20px" } }, isDept ? "Department settings" : "Manage all departments"),
       isDept ? buildPlanTomorrowSection()         : null,
       isDept ? buildDayNotesSection()            : null,
+      isDept ? buildRosterSection()        : null,
+      isDept ? buildLocSection()           : buildDeptSection(),
+      isDept ? buildDevNotesSection()            : null,
       isDept ? buildEmailSection()               : null,
       isDept ? buildScheduleImportSection()       : null,
       isDept ? buildScheduleNameMappingsSection() : null,
-      isDept ? buildLocSection()           : buildDeptSection(),
       isDept ? buildNoBreakSection()       : buildAdminPasscodeSection(),
       isDept ? buildCallPositionsSection() : null,
-      isDept ? buildRosterSection()        : null,
       isDept ? buildClearSection()         : null,
       fromDisplay ? buildDeptAdminPasscodeSection() : null,
     ),
@@ -5143,6 +5144,64 @@ function renderAdminPage(deptCode, fromDisplay = false) {
       container,
     );
   }
+
+  // ── Bug / Feature Request list ───────────────────────────────────────────────
+  function buildDevNotesSection() {
+    const container = el("div");
+
+    async function reload() {
+      const snap = await get(ref(db, `deptAdmin/${deptCode}/devNotes`));
+      const notes = snap.val() || {};
+      const entries = Object.entries(notes).sort((a, b) => (b[1].date || 0) - (a[1].date || 0));
+      container.innerHTML = "";
+      if (!entries.length) {
+        container.appendChild(el("div", { style: { fontSize: "13px", color: "#a39688", fontStyle: "italic", padding: "8px 0" } }, "Nothing on the list yet."));
+        return;
+      }
+      entries.forEach(([key, entry]) => {
+        const row = el("div", { style: { display: "flex", alignItems: "flex-start", gap: "8px", padding: "6px 0", borderBottom: "1px solid #f1ede8" } });
+        const cb = el("input", { type: "checkbox", style: { marginTop: "3px", flexShrink: "0" } });
+        cb.checked = !!entry.done;
+        const textSpan = el("div", {
+          style: { flex: "1", fontSize: "13px", color: entry.done ? "#a39688" : "#2d2420", textDecoration: entry.done ? "line-through" : "none" },
+        },
+          entry.text,
+          el("div", { style: { fontSize: "11px", color: "#c4b8ad", marginTop: "2px", textDecoration: "none" } },
+            new Date(entry.date).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })),
+        );
+        cb.addEventListener("change", async () => {
+          await set(ref(db, `deptAdmin/${deptCode}/devNotes/${key}`), { ...entry, done: cb.checked });
+          reload();
+        });
+        const removeBtn = el("button", { class: "btn-danger", style: { fontSize: "11px", padding: "2px 8px", flexShrink: "0" }, onClick: async () => {
+          await remove(ref(db, `deptAdmin/${deptCode}/devNotes/${key}`));
+          reload();
+        }}, "✕");
+        row.appendChild(cb);
+        row.appendChild(textSpan);
+        row.appendChild(removeBtn);
+        container.appendChild(row);
+      });
+    }
+
+    reload();
+
+    const textIn = el("input", { class: "admin-add-input", type: "text", placeholder: "e.g. Coordinator display should show…", style: { flex: "1" } });
+    async function addNote() {
+      const val = textIn.value.trim();
+      if (!val) return;
+      await push(ref(db, `deptAdmin/${deptCode}/devNotes`), { text: val, date: Date.now(), done: false });
+      textIn.value = "";
+      reload();
+    }
+    textIn.addEventListener("keydown", e => { if (e.key === "Enter") addNote(); });
+
+    return adminSection("dev-notes", "Bug / Feature Request",
+      "Jot down anything you want fixed or added — readable from any device, so it doesn't just live in your phone's notes.",
+      container,
+      el("div", { class: "admin-add-row" }, textIn, el("button", { class: "btn-primary", onClick: addNote }, "Add")),
+    );
+  }
 }
 
 // ─── Plan Tomorrow ────────────────────────────────────────────────────────────
@@ -5189,6 +5248,32 @@ function renderPlanPage(fromDisplay = false) {
   let planHeaderText = "";
   let emailConfig    = {};   // { to, fromName, defaultSubject }
   let dayNoteText    = "";   // case/room request note for selectedDate (admin-configured)
+
+  // Call/post-call icon prefix for tomorrow's plan — mirrors callStatusPrefix() but
+  // reads planCallData/planPostCallData (tomorrow's assignments) instead of today's
+  // live board, so the icon shows while picking who to assign to a room.
+  function planCallPrefix(name) {
+    if (!name) return "";
+    const callEntry = Object.entries(planCallData).find(([, n]) => n === name);
+    const postEntry  = Object.entries(planPostCallData).find(([, n]) => n === name);
+    if (callEntry) {
+      const pos  = callPositions[parseInt(callEntry[0])];
+      const icon = pos ? (pos.callIcon ?? "📞") : "📞";
+      if (icon) return icon + " ";
+      if (postEntry) {
+        const ppos  = callPositions[parseInt(postEntry[0])];
+        const picon = ppos ? (ppos.postCallIcon ?? "🌙") : "🌙";
+        if (picon) return picon + " ";
+      }
+      return "";
+    }
+    if (postEntry) {
+      const pos  = callPositions[parseInt(postEntry[0])];
+      const icon = pos ? (pos.postCallIcon ?? "🌙") : "🌙";
+      return icon ? icon + " " : "";
+    }
+    return "";
+  }
 
   // ── Firebase helpers ──
   function planBoardRef(dateStr) {
@@ -5545,7 +5630,7 @@ function renderPlanPage(fromDisplay = false) {
 
         // Drag handle + name
         const dragHandle = el("span", { class: "drag-handle", style: { fontSize:"14px" } }, "⠿");
-        const nameEl = el("span", { class: "plan-provider-name" }, name);
+        const nameEl = el("span", { class: "plan-provider-name" }, planCallPrefix(name) + name);
 
         // Note badge / add note
         let noteEl;
@@ -6012,7 +6097,7 @@ function renderPlanPage(fromDisplay = false) {
         const btn = el("button", {
           class: "plan-room-provider-btn" + (!provider ? " empty" : ""),
           onClick: () => { editingProvider = true; renderProviderArea(); }
-        }, provider || "Assign provider…");
+        }, provider ? planCallPrefix(provider) + provider : "Assign provider…");
         nameRow.appendChild(btn);
         const roomFlag = buildProviderFlag(provider);
         if (roomFlag) nameRow.appendChild(roomFlag);
@@ -6122,7 +6207,7 @@ function renderPlanPage(fromDisplay = false) {
 
         filtered.slice(0, 16).forEach(entry => {
           const lastDate = (isTracked && roomHistory) ? getLastAssigned(entry.name) : null;
-          const label = lastDate ? entry.name + " — " + formatHistDate(lastDate) : entry.name;
+          const label = planCallPrefix(entry.name) + (lastDate ? entry.name + " — " + formatHistDate(lastDate) : entry.name);
           const opt = el("button", { class: "roster-option", type: "button", "data-name": entry.name }, label);
           opt.addEventListener("mousedown", async ev => {
             ev.preventDefault();
@@ -6285,7 +6370,17 @@ function renderPlanPage(fromDisplay = false) {
       cb.checked = isEmpty;
       cb.addEventListener("change", async () => {
         const current = planData[rid] || {};
+        const wasProvider = current.provider || null;
         await savePlanRoom(locKey, { ...current, empty: cb.checked, provider: cb.checked ? null : current.provider, supervisor: cb.checked ? null : current.supervisor });
+        // Marking a filled room empty displaces its provider — return them to Working
+        // Tomorrow instead of dropping them (this checkbox only shows for !isNoBreak
+        // rooms, so no core-position exclusion needed here).
+        if (cb.checked && wasProvider && !availableList.includes(wasProvider)) {
+          availableList = [...availableList, wasProvider];
+          await saveAvailable();
+          const leftCol = document.querySelector(".plan-col-left");
+          if (leftCol) buildLeftColumn(leftCol);
+        }
         refreshCenterColumn();
       });
       emptyWrap.appendChild(el("label", { class: "plan-empty-label" }, "Empty"));
@@ -6336,6 +6431,14 @@ function renderPlanPage(fromDisplay = false) {
     const getData = () => isPostCall ? planPostCallData : planCallData;
     const saveData = isPostCall ? savePlanPostCallAssignment : savePlanCallAssignment;
 
+    // Call/post-call icons appear on the Working Tomorrow list and room cards —
+    // refresh those columns so the icon shows immediately after a change here.
+    function refreshCallIcons() {
+      refreshCenterColumn();
+      const leftCol = document.querySelector(".plan-col-left");
+      if (leftCol) buildLeftColumn(leftCol);
+    }
+
     function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
 
     function renderCell() {
@@ -6373,6 +6476,7 @@ function renderPlanPage(fromDisplay = false) {
               ev.preventDefault(); closeDropdown();
               await saveData(posIdx, null);
               renderCell();
+              refreshCallIcons();
             });
             dd.appendChild(clearOpt);
           }
@@ -6382,6 +6486,7 @@ function renderPlanPage(fromDisplay = false) {
               ev.preventDefault(); closeDropdown();
               await saveData(posIdx, en.name);
               renderCell();
+              refreshCallIcons();
             });
             dd.appendChild(opt);
           });
@@ -6416,6 +6521,7 @@ function renderPlanPage(fromDisplay = false) {
             if (selected) { await saveData(posIdx, selected); }
             closeDropdown();
             renderCell();
+            refreshCallIcons();
             // Advance to the next call position in this section
             const section = row.closest(".plan-section");
             if (section) {
@@ -6637,10 +6743,17 @@ function renderPlanPage(fromDisplay = false) {
       // use the same key or the assignment lands on a phantom room and never displays.
       const coreLocKey = "nb_" + corePos;
       const rid = roomId(coreLocKey);
+      // Always mark this person core-assigned, even when the merge-skip below leaves
+      // their existing room write untouched — otherwise a re-import adds them to the
+      // Working Tomorrow list as if unassigned, duplicating them.
+      coreAssigned.add(rosterName);
+      // Core positions are always 12h/late, no exceptions — tag regardless of
+      // merge/overwrite so the flag already shows if this person is later pulled
+      // into a regular room during the day.
+      noteWrites.push(savePlanLate(rosterName, true));
       if (mergeMode && (planData[rid] || {}).provider) continue;
       planData[rid] = { ...(planData[rid] || {}), provider: rosterName };
       writes.push(savePlanRoom(coreLocKey, planData[rid]));
-      coreAssigned.add(rosterName);
     }
 
     // Working Tomorrow list
