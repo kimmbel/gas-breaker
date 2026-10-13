@@ -7032,8 +7032,9 @@ function renderPlanPage(fromDisplay = false) {
       if (d.provider) allPlanNames.add(d.provider);
       if (d.supervisor) allPlanNames.add(d.supervisor);
     });
-    noBreakSlots.forEach(slot => { const d = planData[roomId("nb_" + slot)] || {}; if (d.provider) allPlanNames.add(d.provider); });
-    const twelveHour = [...allPlanNames].filter(n => planLate[n] || (planNotes[n] && /^7\s*p(m)?$/i.test(planNotes[n].text)));
+    // Core positions are always tagged late — exclude them so this list only shows true 12h shifts
+    const coreNames = new Set(noBreakSlots.map(slot => (planData[roomId("nb_" + slot)] || {}).provider).filter(Boolean));
+    const twelveHour = [...allPlanNames].filter(n => !coreNames.has(n) && (planLate[n] || (planNotes[n] && /^7\s*p(m)?$/i.test(planNotes[n].text))));
     const twelveHtml = twelveHour.length ? box("12 Hour Shift", twelveHour.map((n, i) => [String(i + 1), n])) : "";
 
     const leftHtml  = coreHtml + roomsHtml;
@@ -7349,12 +7350,11 @@ function renderPlanPage(fromDisplay = false) {
       if (d.provider) allPlanProviders.add(d.provider);
       if (d.supervisor) allPlanProviders.add(d.supervisor);
     });
-    noBreakSlots.forEach(slot => {
-      const d = planData[roomId("nb_" + slot)] || {};
-      if (d.provider) allPlanProviders.add(d.provider);
-    });
+    // Core positions are always tagged late — exclude them so this list only shows true 12h shifts
+    const coreProviders = new Set(noBreakSlots.map(slot => (planData[roomId("nb_" + slot)] || {}).provider).filter(Boolean));
     const twelveHourProviders = [...allPlanProviders].filter(name =>
-      planLate[name] || (planNotes[name] && /^7\s*p(m)?$/i.test(planNotes[name].text))
+      !coreProviders.has(name) &&
+      (planLate[name] || (planNotes[name] && /^7\s*p(m)?$/i.test(planNotes[name].text)))
     );
     if (twelveHourProviders.length) {
       const rows = twelveHourProviders.map((name, i) => el("div", { class: "print-row" },
