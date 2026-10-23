@@ -6679,10 +6679,38 @@ function renderPlanPage(fromDisplay = false) {
     });
   }
 
+  // TEST ONLY: on non-prod hosts, `?sampleschedule` in the URL makes Import from
+  // Schedule use a fake payload in the current daily_schedule format (role arrays, CRNA
+  // lists) built from the roster, since the test DB never receives the hospital feed.
+  // Two made-up CRNA names are included so the unmatched-name popup can be exercised.
+  function buildSampleSchedule() {
+    const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+    const atts = shuffle(roster.filter(e => e.role === "attending").map(e => e.name));
+    const anes = shuffle(roster.filter(e => e.role !== "attending").map(e => e.name));
+    const take = n => atts.splice(0, n);
+    const anesHalf = Math.ceil(anes.length / 2);
+    return {
+      date: selectedDate,
+      roles: { ac: take(1), obCSection: take(2), obLaborDeck: take(1), traumaDay: take(1) },
+      dayShifts: {
+        eightHourDay:   take(1),
+        orientation:    take(1),
+        twelveHourDay:  take(3),
+        tenHourCrna:    [...anes.slice(0, anesHalf), "Testcrna, Alpha"],
+        twelveHourCrna: [...anes.slice(anesHalf),    "Testcrna, Bravo"],
+        tenHourDay:     take(atts.length),
+      },
+      nightCalls: {}, postCall: {},
+    };
+  }
+
   async function importFromSchedule() {
     try {
-    const schedSnap = await get(ref(db, `daily_schedule/${selectedDate}`));
-    const sched = schedSnap.val();
+    const useSample = !isProd && new URLSearchParams(window.location.search).has("sampleschedule");
+    const sched = useSample
+      ? buildSampleSchedule()
+      : (await get(ref(db, `daily_schedule/${selectedDate}`))).val();
+    if (useSample) showToast("TEST: using a sample schedule, not the real feed");
     if (!sched) { showToast("No schedule found for " + selectedDate + "."); return; }
 
     const hasData = availableList.length > 0
