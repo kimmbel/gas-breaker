@@ -5342,7 +5342,10 @@ function renderPlanPage(fromDisplay = false) {
   async function savePlanRoom(loc, data) {
     const rid = roomId(loc);
     const prevProvider = (planData[rid] || {}).provider || null;
+    const prevSup = (planData[rid] || {}).supervisor || null;
     planData[rid] = data;
+    const nextSup = (data || {}).supervisor || null;
+    if (prevSup !== nextSup) syncSupervisorAvailability(prevSup, nextSup);
     if (data && Object.keys(data).some(k => data[k] != null && data[k] !== false)) {
       await set(planRoomRef(selectedDate, rid), data);
     } else {
@@ -5408,6 +5411,35 @@ function renderPlanPage(fromDisplay = false) {
       if (d.provider) assigned.add(d.provider);
     });
     return assigned;
+  }
+
+  // Attendings currently supervising at least one room → count of rooms
+  function getSupervisorCounts() {
+    const counts = {};
+    Object.values(planData).forEach(d => { if (d && d.supervisor) counts[d.supervisor] = (counts[d.supervisor] || 0) + 1; });
+    return counts;
+  }
+
+  // A supervising attending can't be placed in a room, so they leave Working Tomorrow
+  // as soon as they supervise anyone. When they stop supervising everyone (and aren't
+  // in a room or core slot), they go back to Working Tomorrow so they aren't lost.
+  // Called from savePlanRoom, so every path that changes a supervisor is covered.
+  function syncSupervisorAvailability(prevSup, nextSup) {
+    let changed = false;
+    if (nextSup && availableList.includes(nextSup)) {
+      availableList = availableList.filter(n => n !== nextSup);
+      changed = true;
+    }
+    if (prevSup && !getSupervisorCounts()[prevSup] && !getAssignedProviders().has(prevSup)
+        && !availableList.includes(prevSup)) {
+      availableList = [...availableList, prevSup];
+      changed = true;
+    }
+    if (changed) {
+      saveAvailable();
+      const leftCol = document.querySelector(".plan-col-left");
+      if (leftCol) buildLeftColumn(leftCol);
+    }
   }
 
   function getUnassignedAvailable() {
@@ -6334,9 +6366,14 @@ function renderPlanPage(fromDisplay = false) {
       let dropdown = null;
       let hiIdx = -1;
 
+      // Supervisors can come from Working Tomorrow, the core positions, or attendings
+      // already supervising other rooms (who have left Working Tomorrow). Attendings
+      // placed in a regular OR room aren't offered.
       const attendings = roster.filter(e => e.role === "attending");
+      const supCounts  = getSupervisorCounts();
+      const coreNames  = new Set(noBreakSlots.map(s => (planData[roomId("nb_" + s)] || {}).provider).filter(Boolean));
       const planAttendingPool = availableList.length > 0
-        ? attendings.filter(e => availableList.includes(e.name))
+        ? attendings.filter(e => availableList.includes(e.name) || coreNames.has(e.name) || supCounts[e.name])
         : attendings;
 
       function closeDropdown() { if (dropdown) { dropdown.remove(); dropdown = null; } }
@@ -6350,17 +6387,21 @@ function renderPlanPage(fromDisplay = false) {
             ev.preventDefault(); closeDropdown();
             editingSupervisor = false;
             await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: null });
-            renderProviderArea();
+            refreshCenterColumn();
           });
           dropdown.appendChild(clearOpt);
         }
         filtered.slice(0,12).forEach(entry => {
-          const opt = el("button", { class:"roster-option", type:"button" }, entry.name);
+          const tags = [];
+          if (coreNames.has(entry.name)) tags.push("core");
+          if (supCounts[entry.name]) tags.push(`supervising ${supCounts[entry.name]}`);
+          const label = entry.name + (tags.length ? ` — ${tags.join(", ")}` : "");
+          const opt = el("button", { class:"roster-option", type:"button", "data-name": entry.name }, label);
           opt.addEventListener("mousedown", async ev => {
             ev.preventDefault(); closeDropdown();
             editingSupervisor = false;
             await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: entry.name });
-            renderProviderArea();
+            refreshCenterColumn();
           });
           dropdown.appendChild(opt);
         });
@@ -6379,7 +6420,7 @@ function renderPlanPage(fromDisplay = false) {
         if (e.key === "Enter" || e.key === "Tab") {
           e.preventDefault();
           let selected = null;
-          if (hiIdx>=0&&opts[hiIdx]) selected=opts[hiIdx].textContent.trim();
+          if (hiIdx>=0&&opts[hiIdx]) selected=opts[hiIdx].dataset.name;
           else if (input.value.trim()) {
             const m = planAttendingPool.filter(en => rosterMatches(en, input.value.trim()));
             if (m.length) selected=m[0].name;
@@ -6387,7 +6428,7 @@ function renderPlanPage(fromDisplay = false) {
           if (selected) {
             closeDropdown(); editingSupervisor=false;
             await savePlanRoom(locKey, { ...(planData[rid]||{}), supervisor: selected });
-            renderProviderArea();
+            refreshCenterColumn();
           } else {
             closeDropdown(); editingSupervisor=false; renderProviderArea();
           }
@@ -6850,6 +6891,8 @@ function renderPlanPage(fromDisplay = false) {
     const allWorking  = new Set([...rolePeople, ...eightHour, ...tenHour, ...twelveHour,
                                  ...tenHourCrna, ...twelveHourCrna, ...orientation]);
     coreAssigned.forEach(n => allWorking.delete(n));
+    // Attendings already supervising a room stay out of Working Tomorrow
+    Object.keys(getSupervisorCounts()).forEach(n => allWorking.delete(n));
 
     if (mergeMode) {
       const existingSet = new Set(availableList);
