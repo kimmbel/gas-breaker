@@ -631,6 +631,22 @@ function getRosterRole(name) {
   return entry ? entry.role : "attending";
 }
 
+// Anyone who isn't an attending (anesthetists/CRNAs, and residents for now) sits in the
+// bottom group of Working Tomorrow and is placed first by Randomize Remaining.
+function isAnesthetistGroup(name) {
+  return getRosterRole(name) !== "attending";
+}
+
+// daily_schedule lists: roles and dayShifts arrive as arrays, but older days stored
+// roles as a single string, and Firebase may hand back an array as an object (or drop
+// an empty one entirely). Normalize all of those to a clean array of names.
+const SCHED_SHIFT_KEYS = ["eightHourDay", "tenHourDay", "twelveHourDay", "tenHourCrna", "twelveHourCrna", "orientation"];
+function schedList(v) {
+  if (!v) return [];
+  if (typeof v === "string") return [v];
+  return (Array.isArray(v) ? v : Object.values(v)).filter(n => typeof n === "string" && n);
+}
+
 // Persistent per-provider note (surgeon/case-type incompatibility, etc.). Shown
 // only on the Plan Tomorrow screen as a 🚩 flag; NOT on the board, display,
 // print, or email. Stored on the roster entry in config. (Distinct from
@@ -5622,7 +5638,8 @@ function renderPlanPage(fromDisplay = false) {
     function rebuildList() {
       countBadge.textContent = String(availableList.length);
       listContainer.innerHTML = "";
-      availableList.forEach((name, idx) => {
+      // idx always indexes availableList (storage order); rows are just rendered grouped.
+      const renderRow = ({ name, idx }) => {
         const noteObj = planNotes[name] || null;
         const row = el("div", { class: "plan-provider-row" });
         row.setAttribute("draggable", "true");
@@ -5722,11 +5739,16 @@ function renderPlanPage(fromDisplay = false) {
           setTimeout(() => row.classList.add("dragging"), 0);
         });
         row.addEventListener("dragend", () => {
+          dragSrc = null;
           row.classList.remove("dragging");
           document.querySelectorAll(".plan-provider-row.drag-over").forEach(r => r.classList.remove("drag-over"));
         });
+        // Attendings and anesthetists can only be reordered within their own group
+        const crossGroup = () => dragSrc !== null && availableList[dragSrc] !== undefined
+          && isAnesthetistGroup(availableList[dragSrc]) !== isAnesthetistGroup(name);
         row.addEventListener("dragover", e => {
           e.preventDefault();
+          if (crossGroup()) { e.dataTransfer.dropEffect = "none"; return; }
           e.dataTransfer.dropEffect = "move";
           row.classList.add("drag-over");
         });
@@ -5737,6 +5759,7 @@ function renderPlanPage(fromDisplay = false) {
           e.preventDefault();
           row.classList.remove("drag-over");
           const data = e.dataTransfer.getData("text/plain");
+          if (crossGroup()) { e.stopPropagation(); dragSrc = null; return; }
           if (data.startsWith("available:") && dragSrc !== null && dragSrc !== idx) {
             const newList = [...availableList];
             const [moved] = newList.splice(dragSrc, 1);
@@ -5750,7 +5773,23 @@ function renderPlanPage(fromDisplay = false) {
 
         renderNote();
         listContainer.appendChild(row);
-      });
+      };
+
+      // Attendings on top, anesthetists (CRNAs) below a divider. Headers only appear
+      // once there's at least one anesthetist, so an all-attending day looks as before.
+      const indexed   = availableList.map((name, idx) => ({ name, idx }));
+      const attGroup  = indexed.filter(e => !isAnesthetistGroup(e.name));
+      const anesGroup = indexed.filter(e => isAnesthetistGroup(e.name));
+      const groupHeader = (label, first) => el("div", { style: {
+        fontSize:"11px", fontWeight:"700", color:"#a39688", letterSpacing:"0.05em", textTransform:"uppercase",
+        padding:"4px 0 3px", margin: first ? "0 0 4px" : "10px 0 4px", borderBottom:"1px solid #e8e1d9",
+      } }, label);
+      if (anesGroup.length) listContainer.appendChild(groupHeader(`Attendings (${attGroup.length})`, true));
+      attGroup.forEach(renderRow);
+      if (anesGroup.length) {
+        listContainer.appendChild(groupHeader(`Anesthetists (${anesGroup.length})`, false));
+        anesGroup.forEach(renderRow);
+      }
 
       // Add input row
       const addWrap = buildAvailableAddInput();
@@ -6573,7 +6612,7 @@ function renderPlanPage(fromDisplay = false) {
     });
   }
 
-  function showResolutionModal(names) {
+  function showResolutionModal(names, crnaNames = new Set()) {
     return new Promise(resolve => {
       const overlay = el("div", { class: "sched-modal-overlay" });
       const box = el("div", { class: "sched-modal-box" });
@@ -6588,7 +6627,7 @@ function renderPlanPage(fromDisplay = false) {
 
       names.forEach(name => {
         const row = el("div", { class: "sched-name-row" });
-        row.appendChild(el("div", { class: "sched-schedule-name" }, `"${name}"`));
+        row.appendChild(el("div", { class: "sched-schedule-name" }, `"${name}"` + (crnaNames.has(name) ? " (CRNA)" : "")));
 
         const sel = el("select", { class: "sched-map-select" });
         sel.appendChild(el("option", { value: "" }, "— choose —"));
@@ -6664,13 +6703,12 @@ function renderPlanPage(fromDisplay = false) {
     const postCall   = sched.postCall   || {};
 
     const allNames = new Set();
-    Object.values(roles).forEach(n               => n && allNames.add(n));
-    (dayShifts.eightHourDay  || []).forEach(n    => n && allNames.add(n));
-    (dayShifts.tenHourDay    || []).forEach(n    => n && allNames.add(n));
-    (dayShifts.twelveHourDay || []).forEach(n    => n && allNames.add(n));
-    (dayShifts.orientation   || []).forEach(n    => n && allNames.add(n));
+    Object.values(roles).forEach(v               => schedList(v).forEach(n => allNames.add(n)));
+    SCHED_SHIFT_KEYS.forEach(k                   => schedList(dayShifts[k]).forEach(n => allNames.add(n)));
     Object.values(nightCalls).forEach(n          => n && allNames.add(n));
     Object.values(postCall).forEach(n            => n && allNames.add(n));
+    // Names from the CRNA lists — added to the roster as anesthetists, not attendings
+    const crnaNames = new Set([...schedList(dayShifts.tenHourCrna), ...schedList(dayShifts.twelveHourCrna)]);
 
     const mappingsSnap = await get(ref(db, `deptAdmin/${deptCode}/scheduleMappings`));
     const savedMappings = mappingsSnap.val() || {};
@@ -6691,15 +6729,16 @@ function renderPlanPage(fromDisplay = false) {
     }
 
     if (needsResolution.length) {
-      const userRes = await showResolutionModal(needsResolution);
+      const userRes = await showResolutionModal(needsResolution, crnaNames);
       if (userRes === null) return;
 
       const mappingWrites = [];
       for (const [schedName, res] of Object.entries(userRes)) {
         resolved[schedName] = res.rosterName;
         if (res.addToRoster && res.rosterName) {
-          await saveRosterEntry(res.rosterName);
-          roster.push({ name: res.rosterName, role: "attending" });
+          const newRole = crnaNames.has(schedName) ? "anesthetist" : "attending";
+          await saveRosterEntry(res.rosterName, newRole);
+          roster.push({ name: res.rosterName, role: newRole });
           roster.sort((a, b) => a.name.localeCompare(b.name));
         }
         if (res.remember && res.rosterName) {
@@ -6731,8 +6770,23 @@ function renderPlanPage(fromDisplay = false) {
     const noteWrites = [];
     const coreAssigned = new Set();
 
+    // Roles are lists (e.g. two OB C-Section people). The first person takes the core
+    // slot; anyone after that goes to Working Tomorrow, flagged late (core positions
+    // are always 12h). Extra OB C-Section people also get an amber "2nd OB" note.
+    const roleExtras = [];   // resolved names beyond the first in a role
+    const secondOB   = [];
+    for (const [roleKey, val] of Object.entries(roles)) {
+      schedList(val).slice(1).forEach(n => {
+        const rn = resolved[n];
+        if (!rn) return;
+        roleExtras.push(rn);
+        if (roleKey === "obCSection") secondOB.push(rn);
+      });
+    }
+
     // Core positions (roles → noBreakSlots via roleMappings)
-    for (const [roleKey, schedName] of Object.entries(roles)) {
+    for (const [roleKey, val] of Object.entries(roles)) {
+      const schedName = schedList(val)[0];
       if (!schedName) continue;
       const rosterName = resolved[schedName];
       if (!rosterName) continue;
@@ -6757,12 +6811,16 @@ function renderPlanPage(fromDisplay = false) {
     }
 
     // Working Tomorrow list
-    const rolePeople  = Object.values(roles).map(n          => n && resolved[n]).filter(Boolean);
-    const eightHour   = (dayShifts.eightHourDay  || []).map(n => n && resolved[n]).filter(Boolean);
-    const tenHour     = (dayShifts.tenHourDay    || []).map(n => n && resolved[n]).filter(Boolean);
-    const twelveHour  = (dayShifts.twelveHourDay || []).map(n => n && resolved[n]).filter(Boolean);
-    const orientation = (dayShifts.orientation   || []).map(n => n && resolved[n]).filter(Boolean);
-    const allWorking  = new Set([...rolePeople, ...eightHour, ...tenHour, ...twelveHour, ...orientation]);
+    const resolveList = v => schedList(v).map(n => resolved[n]).filter(Boolean);
+    const rolePeople     = Object.values(roles).flatMap(resolveList);
+    const eightHour      = resolveList(dayShifts.eightHourDay);
+    const tenHour        = resolveList(dayShifts.tenHourDay);
+    const twelveHour     = resolveList(dayShifts.twelveHourDay);
+    const tenHourCrna    = resolveList(dayShifts.tenHourCrna);
+    const twelveHourCrna = resolveList(dayShifts.twelveHourCrna);
+    const orientation    = resolveList(dayShifts.orientation);
+    const allWorking  = new Set([...rolePeople, ...eightHour, ...tenHour, ...twelveHour,
+                                 ...tenHourCrna, ...twelveHourCrna, ...orientation]);
     coreAssigned.forEach(n => allWorking.delete(n));
 
     if (mergeMode) {
@@ -6773,19 +6831,25 @@ function renderPlanPage(fromDisplay = false) {
     }
     writes.push(saveAvailable());
 
-    // 12-hour late flag
-    for (const name of twelveHour) {
+    // 12-hour late flag (MDs, CRNAs, and extra role people like the 2nd OB)
+    for (const name of new Set([...twelveHour, ...twelveHourCrna, ...roleExtras])) {
       if (!mergeMode || !planLate[name]) {
         noteWrites.push(savePlanLate(name, true));
       }
     }
 
-    // 8-hour and orientation → amber note tag ("8 hour" / "Orienting").
+    // 2nd OB, 8-hour and orientation → amber note tag ("2nd OB" / "8 hour" / "Orienting").
     // Only tag people who don't already have a note, so a manual note is never
     // clobbered (applies in both overwrite and merge mode; re-import is idempotent).
+    // `tagged` guards against two tags racing for one person (planNotes only updates
+    // after the async write), first tag wins.
+    const tagged = new Set();
     const tagNote = (name, text) => {
-      if (!planNotes[name]) noteWrites.push(savePlanNote(name, { text, color: "amber" }));
+      if (planNotes[name] || tagged.has(name)) return;
+      tagged.add(name);
+      noteWrites.push(savePlanNote(name, { text, color: "amber" }));
     };
+    secondOB.forEach(n => tagNote(n, "2nd OB"));
     eightHour.forEach(n => tagNote(n, "8 hour"));
     orientation.forEach(n => tagNote(n, "Orienting"));
 
@@ -6878,11 +6942,14 @@ function renderPlanPage(fromDisplay = false) {
     const trackedNote = trackedEmpty.length
       ? ` ${Math.min(trackedEmpty.length, unassigned.length)} tracked room${trackedEmpty.length !== 1 ? "s" : ""} filled by rotation (longest out of that room first); the rest at random.`
       : "";
+    const anesNote = unassigned.length > emptyRooms.length && unassigned.some(isAnesthetistGroup)
+      ? " Anesthetists are placed first."
+      : "";
 
     const overlay = el("div", { class: "confirm-overlay" },
       el("div", { class: "confirm-box" },
         el("div", { class: "confirm-title" }, "Randomize Remaining"),
-        el("div", { class: "confirm-msg" }, `Assign ${count} provider${count !== 1 ? "s" : ""} to ${count} available room${count !== 1 ? "s" : ""}?` + trackedNote),
+        el("div", { class: "confirm-msg" }, `Assign ${count} provider${count !== 1 ? "s" : ""} to ${count} available room${count !== 1 ? "s" : ""}?` + trackedNote + anesNote),
         el("div", { class: "btn-row" },
           el("button", { class: "btn-primary", style:{ flex:"1", padding:"10px" }, onClick: async () => {
             overlay.remove();
@@ -6905,7 +6972,13 @@ function renderPlanPage(fromDisplay = false) {
               return best;
             };
 
-            const pool = [...unassigned];
+            // Anesthetists (CRNAs) get rooms before attendings: when there are more people
+            // than rooms, the pool is filled with anesthetists first and attendings only
+            // take whatever rooms are left. Within each group, who makes the cut is random.
+            const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+            const anesPool = shuffle(unassigned.filter(isAnesthetistGroup));
+            const attPool  = shuffle(unassigned.filter(n => !isAnesthetistGroup(n)));
+            const pool = [...anesPool, ...attPool].slice(0, emptyRooms.length);
             const assignments = []; // { loc, name }
 
             // Tracked rooms first, by longest-since-in-room (random tiebreak among equals)
